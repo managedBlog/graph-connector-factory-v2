@@ -1,0 +1,70 @@
+{
+  "swagger": "2.0",
+  "info": {
+    "title": "Graph Connector Factory - MCP Agent",
+    "description": "MCP (Model Context Protocol) agent connector for Graph Connector Factory. Enables AI-powered conversational interaction for researching Microsoft Graph API endpoints and generating custom connectors. Uses the MCP Streamable protocol.",
+    "version": "1.0",
+    "contact": {
+      "name": "Graph Connector Factory",
+      "url": "https://github.com/managedBlog/graph-connector-factory-v2"
+    }
+  },
+  "host": "__SERVER_HOST__",
+  "basePath": "/",
+  "schemes": [
+    "https"
+  ],
+  "consumes": [
+    "application/json"
+  ],
+  "produces": [
+    "application/json"
+  ],
+  "paths": {
+    "/mcp": {
+      "post": {
+        "operationId": "mcpPost",
+        "summary": "MCP Agent Endpoint",
+        "description": "Send a JSON-RPC 2.0 message to the MCP agent. Supports tool calls, prompts, and resource access via the MCP Streamable protocol.",
+        "x-ms-agentic-protocol": "mcp-streamable-1.0",
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "type": "object"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "MCP response",
+            "schema": {
+              "type": "object"
+            }
+          }
+        }
+      }
+    }
+  },
+  "definitions": {},
+  "securityDefinitions": {
+    "oauth2-auth": {
+      "type": "oauth2",
+      "flow": "accessCode",
+      "tokenUrl": "https://login.microsoftonline.com/common/oauth2/v2.0/token",
+      "authorizationUrl": "https://login.microsoftonline.com/common/oauth2/v2.0/authorize",
+      "scopes": {
+        "__OAUTH_SCOPE__": "__OAUTH_SCOPE__"
+      }
+    }
+  },
+  "security": [
+    {
+      "oauth2-auth": [
+        "__OAUTH_SCOPE__"
+      ]
+    }
+  ]
+}

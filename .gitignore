@@ -6,3 +6,5 @@ config/config.json
 .env
 output/
 cache/
+artifacts/connectors/prepared/
+artifacts/fic-*.json

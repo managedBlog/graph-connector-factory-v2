@@ -1,0 +1,38 @@
+{
+  "properties": {
+    "connectionParameters": {
+      "token": {
+        "type": "oauthSetting",
+        "oAuthSettings": {
+          "identityProvider": "aad",
+          "clientId": "__OAUTH_CLIENT_ID__",
+          "scopes": "__OAUTH_SCOPE__",
+          "redirectMode": "GlobalPerConnector",
+          "redirectUrl": "https://global.consent.azure-apim.net/redirect",
+          "properties": {
+            "IsFirstParty": "False",
+            "AzureActiveDirectoryResourceId": "__OAUTH_RESOURCE_URI__"
+          },
+          "customParameters": {
+            "tenantId": {
+              "value": "__TENANT_ID__"
+            },
+            "resourceUri": {
+              "value": "__OAUTH_RESOURCE_URI__"
+            },
+            "loginUri": {
+              "value": "https://login.microsoftonline.com"
+            },
+            "loginUriAAD": {
+              "value": "https://login.microsoftonline.com"
+            }
+          }
+        }
+      }
+    },
+    "iconBrandColor": "#007ee5",
+    "capabilities": [],
+    "publisher": "Graph Connector Factory",
+    "stackOwner": "Graph Connector Factory"
+  }
+}
