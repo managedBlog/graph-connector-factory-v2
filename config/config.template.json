@@ -1,0 +1,86 @@
+{
+  "configVersion": "1.0.0",
+  "id": "graph-connector-factory",
+  "description": "Graph Connector Factory — unified MCP server for Copilot Studio.",
+
+  "server": {
+    "authMode": "authenticated",
+    "port": 3001,
+    "allowUnauthenticatedHealth": true,
+    "tokenValidation": {
+      "tenantId": "<YOUR_ENTRA_TENANT_ID>",
+      "allowedAudience": "api://<YOUR_API_APP_CLIENT_ID>",
+      "clockSkewSeconds": 300
+    }
+  },
+
+  "graphResearch": {
+    "defaultVersion": "v1.0",
+    "csdlCacheTtlHours": 24,
+    "autoFlatten": true,
+    "maxOperationsPerConnector": 256
+  },
+
+  "powerPlatform": {
+    "apiUrl": "https://api.powerapps.com",
+    "apiVersion": "2024-01-01",
+    "powerAppsApiUrl": "https://api.powerapps.com",
+    "powerAppsApiVersion": "2024-01-01",
+    "flowApiUrl": "https://api.flow.microsoft.com",
+    "flowApiVersion": "2016-11-01",
+    "defaultEnvironmentId": "<YOUR_POWER_PLATFORM_ENVIRONMENT_ID>",
+    "auth": {
+      "method": "clientCredential",
+      "tenantId": "<YOUR_ENTRA_TENANT_ID>",
+      "clientId": "<YOUR_API_APP_CLIENT_ID>",
+      "scope": "https://service.powerapps.com/.default",
+      "keyVaultUrl": "<YOUR_KEY_VAULT_URL_OR_REMOVE>",
+      "keyVaultSecretName": "<YOUR_SECRET_NAME_OR_REMOVE>"
+    },
+    "defaultShareUser": "<YOUR_EMAIL_OR_REMOVE>"
+  },
+
+  "graphApi": {
+    "baseUrl": "https://graph.microsoft.com",
+    "apiVersion": "v1.0",
+    "auth": {
+      "method": "clientCredential",
+      "tenantId": "<YOUR_ENTRA_TENANT_ID>",
+      "clientId": "<YOUR_API_APP_CLIENT_ID>",
+      "scope": "https://graph.microsoft.com/.default",
+      "keyVaultUrl": "<YOUR_KEY_VAULT_URL_OR_REMOVE>",
+      "keyVaultSecretName": "<YOUR_SECRET_NAME_OR_REMOVE>"
+    }
+  },
+
+  "deploy": {
+    "defaultAuthType": "FederatedIdentity",
+    "oauthTenantId": "<YOUR_ENTRA_TENANT_ID>",
+    "oauthResourceUri": "https://graph.microsoft.com",
+    "defaultAppRegistrationStrategy": "single",
+    "namingPrefix": ""
+  },
+
+  "policies": {
+    "riskTolerance": "cautious",
+    "allowDelete": false,
+    "secrets": {
+      "inlineSecretsAllowed": false
+    },
+    "autonomy": {
+      "allowAutoApprove": false,
+      "defaultMode": "confirm"
+    }
+  },
+
+  "output": {
+    "dir": "./output",
+    "ttlMinutes": 60,
+    "gist": {
+      "enabled": true,
+      "token": "<YOUR_GITHUB_PAT_OR_REMOVE>"
+    }
+  },
+
+  "modes": []
+}

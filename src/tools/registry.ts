@@ -33,6 +33,15 @@ import type {
 import { getOperationsForEndpoint, MetadataProviderConfig } from "./graph/graphMetadata";
 import { generateConnector, GenerateConnectorOptions } from "./graph/connectorGenerator";
 
+// Connector deploy (CDA) imports
+import { invokeTool as invokeConnectorTool, toolRegistry as connectorToolRegistry } from "./connector/tools";
+
+// App registration (ARA) imports
+import { invokeTool as invokeAppregTool, toolRegistry as appregToolRegistry } from "./appreg/tools";
+
+// Deploy pipeline (direct function calls — replaces A2A orchestrator)
+import { executeDeployPipeline, retryAppRegistration } from "./deploy/pipeline";
+
 // ─── Hash naming utilities ─────────────────────────────────────────────────
 
 const HASH_SUFFIX_RE = /_[0-9a-f]{4}$/;
@@ -66,10 +75,26 @@ const generatedSwaggerCache = new Map<string, { swagger: string; gistRawUrl?: st
  * Combines graph research, connector deploy, and app registration tools.
  */
 export function listAllTools(): AvailableTool[] {
+  // Build CDA tool schemas from the registry
+  const connectorTools: AvailableTool[] = Object.values(connectorToolRegistry).map((tool) => ({
+    name: tool.name,
+    description: tool.description,
+    inputSchema: tool.inputSchema as Record<string, unknown>,
+  }));
+
+  // Build ARA tool schemas from the registry (exclude setAutonomyMode — already in CDA)
+  const appregTools: AvailableTool[] = Object.values(appregToolRegistry)
+    .filter((tool) => tool.name !== "setAutonomyMode")
+    .map((tool) => ({
+      name: tool.name,
+      description: tool.description,
+      inputSchema: tool.inputSchema as Record<string, unknown>,
+    }));
+
   return [
     ...graphToolDefinitions,
-    // CDA and ARA tools are exposed via their own invokeTool dispatchers.
-    // We expose their schemas here for MCP discovery.
+    ...connectorTools,
+    ...appregTools,
   ];
 }
 
@@ -187,14 +212,23 @@ export async function invokeTool(
       return await invokeGraphTool(toolName, input, config);
     }
 
-    // For connector_* and appreg_* tools, we'll delegate to their
-    // respective invokeTool functions once we wire up config adapters.
-    // For now, return a clear "not yet wired" message.
-    if (toolName.startsWith("connector_") || toolName.startsWith("appreg_")) {
+    if (toolName.startsWith("connector_") || toolName === "setAutonomyMode") {
+      const cdaResult = await invokeConnectorTool(toolName, input, config);
       return {
-        ok: false,
+        ok: cdaResult.ok,
         toolName,
-        error: `Tool ${toolName} routing not yet wired. This will use direct function calls in the unified server.`,
+        result: cdaResult.result,
+        ...(cdaResult.error != null ? { error: cdaResult.error } : {}),
+      };
+    }
+
+    if (toolName.startsWith("appreg_")) {
+      const araResult = await invokeAppregTool(toolName, input, config);
+      return {
+        ok: araResult.ok,
+        toolName,
+        result: araResult.result,
+        ...(araResult.error != null ? { error: araResult.error } : {}),
       };
     }
 
@@ -419,13 +453,12 @@ async function invokeGraphTool(
         }
       }
 
-      // Deploy pipeline will be wired in pipeline.ts
-      // For now, return a placeholder indicating the tool is ready but pipeline isn't connected
-      return {
-        ok: false,
-        toolName,
-        error: "Deploy pipeline direct calls not yet wired. Coming in next phase.",
-      };
+      const pipelineResult = await executeDeployPipeline(
+        { ...typedInput, swagger, swaggerUrl },
+        config,
+      );
+
+      return { ok: pipelineResult.status !== "failed", toolName, result: pipelineResult };
     }
 
     case "graph_setDesignContext": {
@@ -439,11 +472,21 @@ async function invokeGraphTool(
     }
 
     case "graph_completeAppRegistration": {
-      return {
-        ok: false,
-        toolName,
-        error: "App registration retry not yet wired in unified server.",
-      };
+      const typedInput = input as Record<string, unknown>;
+      const retryResult = await retryAppRegistration(
+        {
+          connectorId: typedInput["connectorId"] as string,
+          baseName: typedInput["baseName"] as string | undefined,
+          federatedIdentitySubject: typedInput["federatedIdentitySubject"] as string | undefined,
+          federatedIdentityIssuer: typedInput["federatedIdentityIssuer"] as string | undefined,
+          federatedIdentityAudience: typedInput["federatedIdentityAudience"] as string | undefined,
+          redirectUri: typedInput["redirectUri"] as string | undefined,
+          clientId: typedInput["clientId"] as string | undefined,
+          graphApiScopes: typedInput["graphApiScopes"] as string[] | undefined,
+        },
+        config,
+      );
+      return { ok: retryResult.configured, toolName, result: retryResult };
     }
 
     default:

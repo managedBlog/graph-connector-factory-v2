@@ -2,29 +2,211 @@
  * Unified HTTP server for Graph Connector Factory.
  *
  * Single Express instance serving:
- *   POST /mcp          — MCP JSON-RPC 2.0 endpoint (AI chat)
- *   GET  /health       — Health check
- *   REST endpoints     — Connector action endpoints for Copilot Studio topics
+ *   POST /mcp                    — MCP JSON-RPC 2.0 endpoint (AI chat)
+ *   DELETE /mcp                  — Session termination
+ *   GET  /health                 — Health check
+ *   GET  /                       — Discovery / landing page
+ *   GET  /api/graph/operations   — List operations with session tracking
+ *   GET  /api/graph/session/endpoints — Explored endpoints
+ *   GET  /api/graph/session/context   — Design context (complex hydration)
+ *   GET  /api/graph/environments — List Power Platform environments
+ *   GET  /api/graph/namecheck    — Pre-flight name collision check
+ *   POST /api/graph/connector    — Generate connector + gist publish
+ *   POST /api/graph/connector/batch — Batch generate
+ *   POST /api/graph/deploy       — Deploy with response flattening
+ *   POST /api/graph/deploy/batch — Batch deploy
+ *   GET  /download/:id/:filename — Serve generated files
+ *   POST /api/graph/test/batch-echo — Test endpoint
  */
 
+import * as fs from "fs";
+import * as path from "path";
+import { randomUUID } from "crypto";
 import express from "express";
 import type { AgentConfig } from "../config/types";
 import { runWithRequestContext, validateToken, updateCallerIdentity } from "../auth";
 import type { TokenValidationConfig } from "../auth";
 import { createMcpTransportAdapter, McpAdapter } from "./mcpAdapter";
-import { invokeTool, listAllTools } from "../tools/registry";
+import { invokeTool, listAllTools, stripHashSuffix, appendHashSuffix } from "../tools/registry";
 import { listPrompts, getPrompt } from "../prompts";
-import { log, logError, logDebug } from "../logging/logger";
+import { log, logError } from "../logging/logger";
 import { initialisePolicyState } from "../policies";
+import { publishToGist, getGitHubToken } from "../output/gistPublisher";
+import { invokeTool as invokeConnectorTool } from "../tools/connector/tools";
+import { invokeTool as invokeAppregTool } from "../tools/appreg/tools";
+import { executeDeployPipeline } from "../tools/deploy/pipeline";
+import type { DeployPipelineInput } from "../tools/deploy/pipeline";
+import type { EnrichedOperation } from "../tools/graph/types";
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+/** Content-Type mapping for generated connector files. */
+function contentTypeForFile(filename: string): string {
+  if (filename.endsWith(".yaml") || filename.endsWith(".yml")) return "text/yaml";
+  return "application/json";
+}
+
+/** Delete a directory and its contents (sync). */
+function rmDirSync(dirPath: string): void {
+  try {
+    fs.rmSync(dirPath, { recursive: true, force: true });
+  } catch {
+    // best-effort cleanup
+  }
+}
+
+/** Sweep the output root and delete folders older than the TTL. */
+function sweepExpiredOutputs(outputRoot: string, ttlMs: number): void {
+  if (!fs.existsSync(outputRoot)) return;
+  const now = Date.now();
+  let entries: fs.Dirent[];
+  try {
+    entries = fs.readdirSync(outputRoot, { withFileTypes: true });
+  } catch {
+    return;
+  }
+  for (const entry of entries) {
+    if (!entry.isDirectory() || entry.name === ".gitkeep") continue;
+    const folderPath = path.join(outputRoot, entry.name);
+    try {
+      const stat = fs.statSync(folderPath);
+      if (now - stat.mtimeMs > ttlMs) {
+        rmDirSync(folderPath);
+        log(`Cleanup: removed expired output ${entry.name}`);
+      }
+    } catch {
+      // skip entries that can't be stat'd
+    }
+  }
+}
+
+/**
+ * Generate a human-readable fallback baseName from endpoint paths.
+ * Examples:
+ *   ["/users"] → "Users Connector"
+ *   ["/users", "/groups"] → "Users and Groups Connector"
+ */
+function generateFallbackBaseName(endpoints: string[]): string | null {
+  if (!endpoints.length) return null;
+  const segments = endpoints.map((ep) => {
+    const parts = ep.replace(/^\/+/, "").split("/").filter(Boolean);
+    const last = parts[parts.length - 1] ?? "";
+    return last
+      .replace(/([a-z])([A-Z])/g, "$1 $2")
+      .replace(/[_-]/g, " ")
+      .split(" ")
+      .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+      .join(" ");
+  }).filter(Boolean);
+  if (!segments.length) return null;
+  const unique = [...new Set(segments)];
+
+  const parents = endpoints.map((ep) => {
+    const parts = ep.replace(/^\/+/, "").split("/").filter(Boolean);
+    return parts.length > 1 ? parts[parts.length - 2] : null;
+  }).filter((p): p is string => p !== null);
+  const uniqueParents = [...new Set(parents)];
+
+  let name: string;
+  if (unique.length === 1) {
+    name = `${unique[0]!} Connector`;
+  } else if (unique.length === 2) {
+    name = `${unique[0]!} and ${unique[1]!} Connector`;
+  } else if (uniqueParents.length === 1 && uniqueParents[0]) {
+    const parentName = uniqueParents[0]
+      .replace(/([a-z])([A-Z])/g, "$1 $2")
+      .replace(/[_-]/g, " ")
+      .split(" ")
+      .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+      .join(" ");
+    name = `${parentName} Connector`;
+  } else {
+    name = `${unique.slice(0, 3).join(", ")} Connector`;
+  }
+  return name;
+}
+
+/** Match operationIds to a connector group's baseName. */
+function matchGroupBaseName(
+  groups: Array<Record<string, unknown>>,
+  operationIds: string[],
+): string | null {
+  if (groups.length === 0 || operationIds.length === 0) return null;
+  const incomingSet = new Set(operationIds);
+  for (const group of groups) {
+    const ops = Array.isArray(group["operations"])
+      ? group["operations"] as Array<Record<string, unknown>>
+      : [];
+    const groupOpIds = ops.map((op) => String(op["operationId"] ?? "")).filter(Boolean);
+    if (groupOpIds.length === 0) continue;
+    const overlap = groupOpIds.filter((id) => incomingSet.has(id));
+    if (overlap.length > 0) {
+      const name = typeof group["baseName"] === "string" ? (group["baseName"] as string).trim() : "";
+      if (name) return name;
+    }
+  }
+  return null;
+}
+
+/** 403 response for deploy-related endpoints in noauth mode. */
+function writeDeployProfileRequired(
+  res: express.Response,
+): void {
+  res.status(403).json({
+    error: "Deploy operations require authenticated mode.",
+    code: "DEPLOY_AUTH_PROFILE_REQUIRED",
+    remediation: [
+      "Switch Graph Connector Factory profile to auth.mode=authenticated.",
+      "Use research-only endpoints in noauth mode: /api/graph/operations and /api/graph/connector.",
+    ],
+  });
+}
+
+// ─── Session types ────────────────────────────────────────────────────────────
+
+interface SessionContextEntry {
+  endpoints: string[];
+  lastActivity: number;
+  designContext?: Record<string, unknown>;
+}
+
+type SessionKeySource = "oid" | "sub" | "userObjectId" | "conversation" | "mcpSessionId" | "none";
+
+interface SessionKeyResolution {
+  key: string | undefined;
+  source: SessionKeySource;
+  oidKey: string | undefined;
+  subKey: string | undefined;
+  userObjectId: string | undefined;
+  conversationKey: string | undefined;
+  mcpSessionId: string | undefined;
+}
+
+interface DecodedTokenClaims {
+  oidKey: string | undefined;
+  subKey: string | undefined;
+}
+
+// ─── Options ──────────────────────────────────────────────────────────────────
 
 export interface HttpHostOptions {
   readonly config: AgentConfig;
   readonly port?: number;
+  /** Output TTL in minutes (default: 15). */
+  readonly outputTtlMinutes?: number;
 }
+
+// ─── Server entry point ──────────────────────────────────────────────────────
 
 export function startHttpServer(options: HttpHostOptions): void {
   const { config } = options;
   const port = options.port ?? config.server.port ?? 3001;
+  const outputRoot = path.resolve(config.output?.dir ?? path.join(process.cwd(), "output"));
+  const ttlMinutes = options.outputTtlMinutes ?? config.output?.ttlMinutes ?? 15;
+  const ttlMs = ttlMinutes * 60 * 1000;
+
+  // Ensure output root exists
+  fs.mkdirSync(outputRoot, { recursive: true });
 
   // Initialize policy state
   initialisePolicyState(config.policies);
@@ -42,11 +224,18 @@ export function startHttpServer(options: HttpHostOptions): void {
   const app = express();
   app.use(express.json({ limit: "10mb" }));
 
-  // CORS
+  // ─── CORS ─────────────────────────────────────────────────────────────
+
   app.use((_req, res, next) => {
     res.header("Access-Control-Allow-Origin", "*");
     res.header("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS");
-    res.header("Access-Control-Allow-Headers", "Content-Type, Authorization, Mcp-Session-Id");
+    res.header(
+      "Access-Control-Allow-Headers",
+      "Content-Type, Accept, Mcp-Session-Id, Authorization, " +
+      "x-ms-conversation-id, x-ms-conversationid, x-ms-client-session-id, " +
+      "x-conversation-id, conversationid",
+    );
+    res.header("Access-Control-Expose-Headers", "Mcp-Session-Id");
     if (_req.method === "OPTIONS") {
       res.sendStatus(204);
       return;
@@ -54,14 +243,15 @@ export function startHttpServer(options: HttpHostOptions): void {
     next();
   });
 
-  // Auth middleware
+  // ─── Auth middleware ───────────────────────────────────────────────────
+
   const authMiddleware = async (
     req: express.Request,
     res: express.Response,
-    next: express.NextFunction
+    next: express.NextFunction,
   ): Promise<void> => {
     const authHeader = req.headers["authorization"];
-    const bearerToken = authHeader?.startsWith("Bearer ")
+    const bearerToken = typeof authHeader === "string" && authHeader.startsWith("Bearer ")
       ? authHeader.slice(7)
       : undefined;
 
@@ -82,7 +272,6 @@ export function startHttpServer(options: HttpHostOptions): void {
         return;
       }
 
-      // Run in request context with validated identity
       runWithRequestContext({ bearerToken, caller: result.identity }, () => {
         if (result.identity) {
           updateCallerIdentity(result.identity);
@@ -100,6 +289,215 @@ export function startHttpServer(options: HttpHostOptions): void {
 
   app.use(authMiddleware);
 
+  // ─── Session management ────────────────────────────────────────────────
+
+  const sessions = new Map<string, { id: string; createdAt: number }>();
+  const SESSION_TTL_MS = 30 * 60 * 1000;
+  const sessionContext = new Map<string, SessionContextEntry>();
+  const sessionAliases = new Map<string, string>();
+
+  function normalizeSessionKey(value: unknown): string | undefined {
+    if (typeof value !== "string") return undefined;
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : undefined;
+  }
+
+  function looksLikeUuid(value: string): boolean {
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+  }
+
+  function extractTokenClaims(authHeader: string | undefined): DecodedTokenClaims | undefined {
+    if (!authHeader?.startsWith("Bearer ")) return undefined;
+    try {
+      const parts = authHeader.slice(7).split(".");
+      const payload = parts[1];
+      if (!payload) return undefined;
+      const decoded = JSON.parse(
+        Buffer.from(payload, "base64url").toString("utf8"),
+      ) as Record<string, unknown>;
+      const oidRaw = decoded["oid"];
+      const subRaw = decoded["sub"];
+      const oidKey = typeof oidRaw === "string" && oidRaw.trim().length > 0 ? oidRaw.trim() : undefined;
+      const subKey = typeof subRaw === "string" && subRaw.trim().length > 0 ? subRaw.trim() : undefined;
+      if (!oidKey && !subKey) return undefined;
+      return { oidKey, subKey };
+    } catch {
+      return undefined;
+    }
+  }
+
+  function extractConversationSessionKey(
+    req: { get: (name: string) => string | undefined },
+  ): string | undefined {
+    const candidates = [
+      "x-ms-conversation-id",
+      "x-ms-conversationid",
+      "x-ms-client-session-id",
+      "x-conversation-id",
+      "conversationid",
+    ];
+    for (const header of candidates) {
+      const value = req.get(header)?.trim();
+      if (value) return `conv:${value}`;
+    }
+    return undefined;
+  }
+
+  function resolveSessionKeyForRequest(
+    req: { get: (name: string) => string | undefined },
+    opts?: { userObjectId?: unknown; mcpSessionId?: string | undefined },
+  ): SessionKeyResolution {
+    const tokenClaims = extractTokenClaims(req.get("authorization"));
+    const oidKey = tokenClaims?.oidKey;
+    const subKey = tokenClaims?.subKey;
+    const userObjectId = normalizeSessionKey(opts?.userObjectId);
+    const conversationKey = extractConversationSessionKey(req);
+    const mcpSessionId = normalizeSessionKey(opts?.mcpSessionId ?? req.get("Mcp-Session-Id"));
+
+    if (oidKey) return { key: oidKey, source: "oid", oidKey, subKey, userObjectId, conversationKey, mcpSessionId };
+    if (subKey) return { key: subKey, source: "sub", oidKey, subKey, userObjectId, conversationKey, mcpSessionId };
+    if (userObjectId) return { key: userObjectId, source: "userObjectId", oidKey, subKey, userObjectId, conversationKey, mcpSessionId };
+    if (conversationKey) return { key: conversationKey, source: "conversation", oidKey, subKey, userObjectId, conversationKey, mcpSessionId };
+    if (mcpSessionId) return { key: mcpSessionId, source: "mcpSessionId", oidKey, subKey, userObjectId, conversationKey, mcpSessionId };
+    return { key: undefined, source: "none", oidKey, subKey, userObjectId, conversationKey, mcpSessionId };
+  }
+
+  function resolveContextKey(sessionKey: string): { key: string; ctx: SessionContextEntry } | undefined {
+    const direct = sessionContext.get(sessionKey);
+    if (direct) return { key: sessionKey, ctx: direct };
+    const alias = sessionAliases.get(sessionKey);
+    if (!alias) return undefined;
+    const aliased = sessionContext.get(alias);
+    if (!aliased) return undefined;
+    return { key: alias, ctx: aliased };
+  }
+
+  function trackEndpointForSession(sessionId: string, endpoint: string): void {
+    const ctx = sessionContext.get(sessionId);
+    if (ctx) {
+      if (!ctx.endpoints.includes(endpoint)) {
+        ctx.endpoints.push(endpoint);
+      }
+      ctx.lastActivity = Date.now();
+    } else {
+      sessionContext.set(sessionId, { endpoints: [endpoint], lastActivity: Date.now() });
+    }
+    const total = sessionContext.get(sessionId)!.endpoints.length;
+    log(`[Session ${sessionId.slice(0, 8)}] Tracked endpoint: ${endpoint} (total: ${total})`);
+  }
+
+  function registerAliases(
+    tracking: SessionKeyResolution,
+    canonicalKey: string,
+    mcpSessionId?: string,
+  ): void {
+    if (mcpSessionId && mcpSessionId !== canonicalKey) {
+      sessionAliases.set(mcpSessionId, canonicalKey);
+    }
+    if (tracking.conversationKey && tracking.conversationKey !== canonicalKey) {
+      sessionAliases.set(tracking.conversationKey, canonicalKey);
+    }
+    if (tracking.mcpSessionId && tracking.mcpSessionId !== canonicalKey) {
+      sessionAliases.set(tracking.mcpSessionId, canonicalKey);
+    }
+  }
+
+  function updateDesignContextForSession(sessionId: string, partial: Record<string, unknown>): void {
+    const mergeConnectorGroups = (
+      existingGroups: Array<Record<string, unknown>>,
+      incomingGroups: Array<Record<string, unknown>>,
+    ): Array<Record<string, unknown>> => {
+      return incomingGroups.map((incoming, index) => {
+        const incomingId = typeof incoming["id"] === "string" ? incoming["id"] : null;
+        const existing = incomingId
+          ? existingGroups.find((g) => g["id"] === incomingId)
+          : existingGroups[index];
+        if (!existing) return incoming;
+        const merged: Record<string, unknown> = { ...existing, ...incoming };
+        const incomingEndpoints = incoming["endpoints"];
+        if (!Array.isArray(incomingEndpoints) || incomingEndpoints.length === 0) {
+          const existingEndpoints = existing["endpoints"];
+          if (Array.isArray(existingEndpoints) && existingEndpoints.length > 0) {
+            merged["endpoints"] = existingEndpoints;
+          }
+        }
+        return merged;
+      });
+    };
+
+    const ctx = sessionContext.get(sessionId);
+    if (ctx) {
+      const next = { ...(ctx.designContext ?? {}), ...partial };
+      const incomingGroups = partial["connectorGroups"];
+      const existingGroups = ctx.designContext?.["connectorGroups"];
+      if (Array.isArray(incomingGroups) && Array.isArray(existingGroups)) {
+        next["connectorGroups"] = mergeConnectorGroups(
+          existingGroups as Array<Record<string, unknown>>,
+          incomingGroups as Array<Record<string, unknown>>,
+        );
+      }
+      ctx.designContext = next;
+      ctx.lastActivity = Date.now();
+    } else {
+      sessionContext.set(sessionId, { endpoints: [], lastActivity: Date.now(), designContext: partial });
+    }
+    log(`[Session ${sessionId.slice(0, 8)}] Design context updated: ${Object.keys(partial).join(", ")}`);
+  }
+
+  function createSession(): { id: string; createdAt: number } {
+    const session = { id: randomUUID(), createdAt: Date.now() };
+    sessions.set(session.id, session);
+    return session;
+  }
+
+  function sweepExpiredSessions(): void {
+    const now = Date.now();
+    for (const [id, session] of sessions) {
+      if (now - session.createdAt > SESSION_TTL_MS) {
+        sessions.delete(id);
+        sessionContext.delete(id);
+        log(`Session expired: ${id}`);
+      }
+    }
+    for (const [id, ctx] of sessionContext) {
+      if (now - ctx.lastActivity > SESSION_TTL_MS) {
+        sessionContext.delete(id);
+        log(`Session context expired (sliding TTL): ${id}`);
+      }
+    }
+    for (const [aliasKey, canonicalKey] of sessionAliases) {
+      const aliasIsMcpSession = looksLikeUuid(aliasKey);
+      if ((aliasIsMcpSession && !sessions.has(aliasKey)) || !sessionContext.has(canonicalKey)) {
+        sessionAliases.delete(aliasKey);
+      }
+    }
+  }
+
+  // ─── Root — discovery / landing page ──────────────────────────────────
+
+  app.get("/", (_req, res) => {
+    res.json({
+      server: "graph-connector-factory",
+      version: "1.0.0-alpha.1",
+      transport: "streamable-http",
+      endpoints: {
+        mcp: "POST /mcp",
+        health: "GET /health",
+        listOperations: "GET /api/graph/operations?endpoint=/users",
+        sessionEndpoints: "GET /api/graph/session/endpoints",
+        sessionContext: "GET /api/graph/session/context",
+        generateConnector: "POST /api/graph/connector",
+        batchGenerate: "POST /api/graph/connector/batch",
+        deployPipeline: "POST /api/graph/deploy",
+        batchDeploy: "POST /api/graph/deploy/batch",
+        environments: "GET /api/graph/environments",
+        namecheck: "GET /api/graph/namecheck?names=MyConnector&environmentId=...",
+        batchEcho: "POST /api/graph/test/batch-echo",
+        download: "GET /download/:id/:filename",
+      },
+    });
+  });
+
   // ─── Health ────────────────────────────────────────────────────────────
 
   app.get("/health", (_req, res) => {
@@ -114,7 +512,143 @@ export function startHttpServer(options: HttpHostOptions): void {
 
   app.post("/mcp", async (req, res) => {
     try {
+      const rpcReq = req.body as Record<string, unknown> | undefined;
+      const method = rpcReq?.["method"] as string | undefined;
+
+      // Session handling: initialize creates a new session
+      let sessionId: string | undefined;
+      if (method === "initialize") {
+        const session = createSession();
+        sessionId = session.id;
+        log(`New MCP session: ${session.id}`);
+      } else {
+        sessionId = req.get("Mcp-Session-Id") ?? undefined;
+        if (sessionId && !sessions.has(sessionId)) {
+          res.status(404).json({
+            jsonrpc: "2.0",
+            id: rpcReq?.["id"] ?? null,
+            error: { code: -32600, message: "Session not found. Send an 'initialize' request first." },
+          });
+          return;
+        }
+      }
+
       const response = await adapter.handleUnknownRequest(req.body);
+
+      // Post-processing interceptors for tools/call
+      if (
+        rpcReq?.["method"] === "tools/call" &&
+        typeof response === "object" &&
+        response !== null
+      ) {
+        const rpcRes = response as {
+          result?: { content?: Array<{ type: string; text: string }>; isError?: boolean };
+        };
+        const params = rpcReq["params"] as Record<string, unknown> | undefined;
+        const toolName = params?.["name"] as string | undefined;
+
+        // ── graph_generateConnector interceptor: write files + publish gist ──
+        if (
+          toolName === "graph_generateConnector" &&
+          rpcRes.result?.content?.[0]?.type === "text" &&
+          !rpcRes.result.isError
+        ) {
+          try {
+            const toolResult = JSON.parse(rpcRes.result.content[0].text) as Record<string, unknown>;
+            const connectorFiles = toolResult["connectorFiles"] as
+              ReadonlyArray<{ filename: string; content: string }> | undefined;
+
+            if (connectorFiles && connectorFiles.length > 0) {
+              const generationId = randomUUID();
+              const genDir = path.join(outputRoot, generationId);
+              fs.mkdirSync(genDir, { recursive: true });
+
+              const protocol = req.get("x-forwarded-proto") ?? req.protocol;
+              const host = req.get("x-forwarded-host") ?? req.get("host") ?? `localhost:${port}`;
+              const baseUrl = `${protocol}://${host}`;
+
+              const downloadUrls: string[] = [];
+              for (const file of connectorFiles) {
+                const filePath = path.join(genDir, file.filename);
+                fs.writeFileSync(filePath, file.content, "utf-8");
+                downloadUrls.push(`${baseUrl}/download/${generationId}/${file.filename}`);
+              }
+
+              log(`[MCP] Generated ${connectorFiles.length} file(s) → output/${generationId}/ (TTL: ${ttlMinutes}m)`);
+
+              let gistUrl: string | undefined;
+              let gistRawUrls: Record<string, string> | undefined;
+              const ghToken = getGitHubToken();
+              if (ghToken) {
+                const args = params?.["arguments"] as Record<string, unknown> | undefined;
+                const connectorName = (args?.["connectorName"] ?? args?.["baseName"] ?? "Graph Connector") as string;
+                const version = (args?.["version"] ?? "v1.0") as string;
+                const gistResult = await publishToGist(
+                  connectorFiles,
+                  `${connectorName} — Power Platform custom connector (${version})`,
+                  false,
+                  ghToken,
+                );
+                if (gistResult) {
+                  gistUrl = gistResult.gistUrl;
+                  gistRawUrls = gistResult.rawUrls;
+                }
+              }
+
+              toolResult["downloadUrls"] = downloadUrls;
+              if (gistUrl) toolResult["gistUrl"] = gistUrl;
+              if (gistRawUrls) toolResult["gistRawUrls"] = gistRawUrls;
+
+              rpcRes.result.content[0] = {
+                type: "text",
+                text: JSON.stringify(toolResult, null, 2),
+              };
+            }
+          } catch (parseErr) {
+            logError(`[MCP] Failed to augment connector response: ${parseErr instanceof Error ? parseErr.message : String(parseErr)}`);
+          }
+        }
+
+        // ── graph_listOperations interceptor: track endpoints ──
+        if (toolName === "graph_listOperations" && !rpcRes.result?.isError) {
+          const args = params?.["arguments"] as Record<string, unknown> | undefined;
+          const tracking = resolveSessionKeyForRequest(req, {
+            userObjectId: args?.["userObjectId"],
+            mcpSessionId: sessionId,
+          });
+          const trackingKey = tracking.key;
+          const singleEndpoint = args?.["endpoint"] as string | undefined;
+          const multiEndpoints = args?.["endpoints"] as string[] | undefined;
+          const allEndpoints = multiEndpoints ?? (singleEndpoint ? [singleEndpoint] : []);
+          if (allEndpoints.length > 0 && trackingKey) {
+            registerAliases(tracking, trackingKey, sessionId);
+            for (const ep of allEndpoints) {
+              trackEndpointForSession(trackingKey, ep);
+            }
+          } else if (allEndpoints.length > 0) {
+            log(`[WARN] [Session tracking] graph_listOperations could not resolve stable key; endpoints not tracked`);
+          }
+        }
+
+        // ── graph_setDesignContext interceptor: persist context ──
+        if (toolName === "graph_setDesignContext" && !rpcRes.result?.isError) {
+          const args = (params?.["arguments"] as Record<string, unknown>) ?? {};
+          const tracking = resolveSessionKeyForRequest(req, {
+            userObjectId: args["userObjectId"],
+            mcpSessionId: sessionId,
+          });
+          if (!tracking.key) {
+            log(`[WARN] [Session context] graph_setDesignContext succeeded but no stable session key resolved`);
+          } else {
+            registerAliases(tracking, tracking.key, sessionId);
+            updateDesignContextForSession(tracking.key, args);
+          }
+        }
+      } // end tools/call intercept
+
+      if (sessionId) {
+        res.setHeader("Mcp-Session-Id", sessionId);
+      }
       res.json(response);
     } catch (err) {
       logError(`MCP error: ${err instanceof Error ? err.message : String(err)}`);
@@ -126,32 +660,991 @@ export function startHttpServer(options: HttpHostOptions): void {
     }
   });
 
-  // ─── REST endpoints (for Copilot Studio topic connector actions) ──────
+  // ─── DELETE /mcp — Session termination ─────────────────────────────────
 
-  // TODO: Port REST endpoints from GRS httpHost.ts in Session 2
-  // These include:
-  //   GET  /api/graph/operations
-  //   GET  /api/graph/session/context
-  //   GET  /api/graph/session/endpoints
-  //   GET  /api/graph/environments
-  //   GET  /api/graph/namecheck
-  //   POST /api/graph/connector
-  //   POST /api/graph/connector/batch
-  //   POST /api/graph/deploy
-  //   POST /api/graph/deploy/batch
-  //   GET  /download/:id/:filename
-
-  // Placeholder for REST endpoints
-  app.get("/api/graph/operations", (_req, res) => {
-    res.status(501).json({ error: "REST endpoints coming in Session 2." });
+  app.delete("/mcp", (req, res) => {
+    const sessionId = req.get("Mcp-Session-Id");
+    if (!sessionId) {
+      res.status(400).json({ error: "Mcp-Session-Id header is required." });
+      return;
+    }
+    if (sessions.delete(sessionId)) {
+      sessionContext.delete(sessionId);
+      log(`Session terminated: ${sessionId}`);
+      res.status(204).end();
+    } else {
+      res.status(404).json({ error: "Session not found." });
+    }
   });
+
+  // ─── REST: List operations ─────────────────────────────────────────────
+
+  app.get("/api/graph/operations", async (req, res) => {
+    try {
+      const endpointParam = req.query["endpoint"] as string | undefined;
+      const version = (req.query["version"] as string | undefined) ?? "v1.0";
+      if (!endpointParam) {
+        res.status(400).json({ error: "Missing required query parameter: endpoint" });
+        return;
+      }
+
+      const endpoints = endpointParam.split(",").map((e) => e.trim()).filter(Boolean);
+
+      // Track endpoints in session context
+      const userObjectIdParam = req.query["userObjectId"] as string | undefined;
+      const tracking = resolveSessionKeyForRequest(req, { userObjectId: userObjectIdParam });
+      const restSessionId = tracking.key;
+      if (restSessionId) {
+        registerAliases(tracking, restSessionId);
+        for (const ep of endpoints) {
+          trackEndpointForSession(restSessionId, ep);
+        }
+      } else {
+        log(`[WARN] [Session tracking] Skipped endpoint tracking (no stable key). Endpoints=${JSON.stringify(endpoints)}`);
+      }
+
+      // Use the unified invokeTool from registry (preserves operations cache)
+      const toolInput = endpoints.length === 1
+        ? { endpoint: endpoints[0]!, version }
+        : { endpoints, version };
+      const toolResult = await invokeTool("graph_listOperations", toolInput, config);
+
+      if (!toolResult.ok) {
+        res.status(500).json({ error: toolResult.error ?? "graph_listOperations failed" });
+        return;
+      }
+
+      const resultData = toolResult.result as Record<string, unknown>;
+      const allOperations = Array.isArray(resultData["operations"]) ? resultData["operations"] : [];
+      const warnings = Array.isArray(resultData["warnings"]) ? resultData["warnings"] : [];
+
+      res.json({
+        endpoint: endpointParam,
+        version,
+        operations: allOperations,
+        totalEndpoints: endpoints.length,
+        ...(warnings.length > 0 ? { warnings } : {}),
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      res.status(500).json({ error: message });
+    }
+  });
+
+  // ─── REST: Session endpoints ───────────────────────────────────────────
+
+  app.get("/api/graph/session/endpoints", (req, res) => {
+    const userObjectIdParam = req.query["userObjectId"] as string | undefined;
+    const tracking = resolveSessionKeyForRequest(req, { userObjectId: userObjectIdParam });
+    const sessionId = tracking.key;
+
+    if (sessionId) {
+      registerAliases(tracking, sessionId);
+      const resolved = resolveContextKey(sessionId);
+      const endpoints = resolved?.ctx.endpoints ?? [];
+      const latestEndpoint = endpoints.length > 0 ? endpoints[endpoints.length - 1]! : null;
+      const endpointPath = endpoints.length > 1 ? endpoints.join(",") : (latestEndpoint ?? null);
+      const resolvedKey = resolved?.key ?? sessionId;
+      log(`[${tracking.source}:${sessionId.slice(0, 8)}] GET session/endpoints (resolved=${resolvedKey.slice(0, 8)}) → [${endpoints.join(", ")}]`);
+      res.json({ endpoints, endpointCount: endpoints.length, latestEndpoint, endpointPath });
+      return;
+    }
+
+    log(`GET session/endpoints — no session key available`);
+    res.json({ endpoints: [], endpointCount: 0, latestEndpoint: null, endpointPath: null });
+  });
+
+  // ─── REST: Session context (most complex endpoint) ─────────────────────
+
+  app.get("/api/graph/session/context", async (req, res) => {
+    log(`[Session context] GET /api/graph/session/context — userObjectId=${req.query["userObjectId"] ?? "(none)"}`);
+    const userObjectIdParam = req.query["userObjectId"] as string | undefined;
+    const tracking = resolveSessionKeyForRequest(req, { userObjectId: userObjectIdParam });
+    const sessionId = tracking.key;
+
+    let ctx: SessionContextEntry | undefined;
+
+    if (sessionId) {
+      registerAliases(tracking, sessionId);
+      const resolved = resolveContextKey(sessionId);
+      ctx = resolved?.ctx;
+      if (!ctx) {
+        log(`[Session context] Key "${sessionId.slice(0, 8)}" not found — returning empty context`);
+      } else if (resolved?.key && resolved.key !== sessionId) {
+        log(`[Session context] Alias resolved "${sessionId.slice(0, 8)}" -> "${resolved.key.slice(0, 8)}"`);
+      }
+    } else {
+      log(`[WARN] [Session context] No session key available — returning empty context`);
+    }
+
+    const legacyEndpoints = ctx?.endpoints ?? [];
+    const designContext = ctx?.designContext ?? {};
+    const hasDesignContext = Object.keys(designContext).length > 0;
+
+    // Prefer endpoints from designContext, fall back to connectorGroups, then legacy tracking
+    const topLevelDesignEndpoints = Array.isArray(designContext["endpoints"])
+      ? (designContext["endpoints"] as string[])
+      : [];
+    const groupedDesignEndpoints = Array.isArray(designContext["connectorGroups"])
+      ? (designContext["connectorGroups"] as Array<Record<string, unknown>>)
+          .flatMap((group) => (Array.isArray(group["endpoints"]) ? group["endpoints"] as string[] : []))
+      : [];
+    const designEndpoints = topLevelDesignEndpoints.length > 0
+      ? topLevelDesignEndpoints
+      : [...new Set(groupedDesignEndpoints.filter((ep) => typeof ep === "string" && ep.trim().length > 0))];
+    const endpoints = designEndpoints.length > 0 ? designEndpoints : legacyEndpoints;
+    const latestEndpoint = endpoints.length > 0 ? endpoints[endpoints.length - 1]! : null;
+    const endpointPath = endpoints.length > 1 ? endpoints.join(",") : (latestEndpoint ?? null);
+
+    // baseName: prefer AI-provided, else generate fallback
+    const aiBaseName = typeof designContext["baseName"] === "string" && (designContext["baseName"] as string).trim()
+      ? designContext["baseName"] as string
+      : null;
+    let baseName = aiBaseName ?? generateFallbackBaseName(endpoints);
+    const baseNameSource: "ai" | "generated" | null = aiBaseName ? "ai" : (baseName ? "generated" : null);
+
+    // Apply naming prefix (dedup if already present)
+    const namingPrefix = config.deploy?.namingPrefix?.trim();
+    if (namingPrefix && baseName && !baseName.toLowerCase().startsWith(namingPrefix.toLowerCase())) {
+      baseName = `${namingPrefix} ${baseName}`;
+    }
+
+    // Inject default environmentId from config if not set during research
+    const environmentId = (typeof designContext["environmentId"] === "string" && (designContext["environmentId"] as string).trim())
+      ? designContext["environmentId"] as string
+      : config.powerPlatform.defaultEnvironmentId ?? null;
+
+    // Serialize connectorGroups
+    const connectorGroups = Array.isArray(designContext["connectorGroups"])
+      ? designContext["connectorGroups"] as Array<Record<string, unknown>>
+      : [];
+
+    // Apply naming prefix to each group's baseName
+    if (namingPrefix && connectorGroups.length > 0) {
+      for (const group of connectorGroups) {
+        const gName = typeof group["baseName"] === "string" ? (group["baseName"] as string).trim() : "";
+        if (gName && !gName.toLowerCase().startsWith(namingPrefix.toLowerCase())) {
+          group["baseName"] = `${namingPrefix} ${gName}`;
+        }
+      }
+    }
+
+    log(`[Session context] connectorGroups length=${connectorGroups.length}`);
+
+    // ── Hydrate connector groups with enriched operations ──
+    const targetVersion = (typeof designContext["targetVersion"] === "string" && (designContext["targetVersion"] as string).trim())
+      ? designContext["targetVersion"] as string
+      : "v1.0";
+
+    if (connectorGroups.length > 0) {
+      const allGroupEndpoints = [...new Set(
+        connectorGroups.flatMap((g) => Array.isArray(g["endpoints"]) ? g["endpoints"] as string[] : []),
+      )];
+      const hydrationEndpoints = allGroupEndpoints.length > 0 ? allGroupEndpoints : designEndpoints;
+
+      if (hydrationEndpoints.length > 0) {
+        try {
+          const batchResult = await invokeTool(
+            "graph_listOperations",
+            { endpoints: hydrationEndpoints, version: targetVersion },
+            config,
+          );
+          const batchData = (batchResult.ok ? batchResult.result : {}) as Record<string, unknown>;
+          const allOps = Array.isArray(batchData["operations"])
+            ? batchData["operations"] as Array<Record<string, unknown>>
+            : [];
+
+          // Build lookup: path → EnrichedOperation[]
+          const opsByPath = new Map<string, EnrichedOperation[]>();
+          for (const op of allOps) {
+            const opPath = typeof op["path"] === "string" ? op["path"] : "";
+            if (!opPath) continue;
+            const enriched: EnrichedOperation = {
+              operationId: String(op["operationId"] ?? ""),
+              summary: String(op["summary"] ?? ""),
+              description: String(op["description"] ?? ""),
+              method: String(op["method"] ?? ""),
+              path: opPath,
+              scope: Array.isArray(op["requiredScopes"]) && (op["requiredScopes"] as string[]).length > 0
+                ? String((op["requiredScopes"] as string[])[0])
+                : "",
+              params: Array.isArray(op["parameters"])
+                ? (op["parameters"] as Array<Record<string, unknown>>)
+                    .filter((p) => p["in"] === "query")
+                    .map((p) => String(p["name"] ?? ""))
+                    .join(", ")
+                : "",
+              returns: typeof op["responseSummary"] === "string" ? op["responseSummary"] as string : "",
+            };
+            const existing = opsByPath.get(opPath);
+            if (existing) existing.push(enriched);
+            else opsByPath.set(opPath, [enriched]);
+          }
+
+          // Attach operations to each connector group
+          for (const group of connectorGroups) {
+            const groupEndpoints = Array.isArray(group["endpoints"]) && (group["endpoints"] as string[]).length > 0
+              ? group["endpoints"] as string[]
+              : designEndpoints;
+            const groupOpsRaw: EnrichedOperation[] = [];
+            for (const ep of groupEndpoints) {
+              for (const [opPath, ops] of opsByPath) {
+                if (opPath === ep || opPath.startsWith(ep + "/") || opPath.startsWith(ep + "/{")) {
+                  groupOpsRaw.push(...ops);
+                }
+              }
+            }
+            // Deduplicate by operationId
+            const seenOps = new Set<string>();
+            const groupOps = groupOpsRaw.filter((op) => {
+              if (seenOps.has(op.operationId)) return false;
+              seenOps.add(op.operationId);
+              return true;
+            });
+            // Filter by operationPattern
+            const pattern = typeof group["operationPattern"] === "string"
+              ? (group["operationPattern"] as string).toLowerCase()
+              : "";
+            if (pattern.includes("read")) {
+              group["operations"] = groupOps.filter((op) => op.method.toUpperCase() === "GET");
+            } else if (pattern === "actions") {
+              group["operations"] = groupOps.filter((op) => op.method.toUpperCase() === "POST");
+            } else if (pattern === "crud") {
+              group["operations"] = groupOps.filter((op) => {
+                for (const ep of groupEndpoints) {
+                  if (op.path === ep) return true;
+                  if (op.path.startsWith(ep + "/")) {
+                    const remainder = op.path.slice(ep.length + 1);
+                    if (!remainder.includes("/")) return true;
+                  }
+                }
+                return false;
+              });
+            } else {
+              group["operations"] = groupOps;
+            }
+          }
+          log(`[Session context] Hydrated ${allOps.length} operations across ${connectorGroups.length} groups`);
+        } catch (hydrateErr) {
+          logError(`[Session context] Operation hydration failed: ${hydrateErr instanceof Error ? hydrateErr.message : String(hydrateErr)}`);
+        }
+      }
+    }
+
+    // Split connector groups into per-group JSON strings (max 3)
+    const stripGroup = (g: Record<string, unknown>) => ({
+      baseName: g["baseName"] ?? "",
+      operations: Array.isArray(g["operations"])
+        ? (g["operations"] as Array<Record<string, unknown>>).map((op) => ({
+            operationId: op["operationId"],
+            method: op["method"],
+            summary: op["summary"],
+            description: op["description"] ?? "",
+            path: op["path"] ?? "",
+            scope: op["scope"] ?? "",
+            params: op["params"] ?? "",
+            returns: op["returns"] ?? "",
+          }))
+        : [],
+    });
+    const group1Json = connectorGroups.length >= 1 ? JSON.stringify(stripGroup(connectorGroups[0]!)) : "";
+    const group2Json = connectorGroups.length >= 2 ? JSON.stringify(stripGroup(connectorGroups[1]!)) : "";
+    const group3Json = connectorGroups.length >= 3 ? JSON.stringify(stripGroup(connectorGroups[2]!)) : "";
+
+    const connectorCount = typeof designContext["connectorCount"] === "number"
+      ? designContext["connectorCount"] as number
+      : 0;
+
+    const authType = typeof designContext["authType"] === "string" ? designContext["authType"] as string : null;
+    const appRegistrationStrategy = typeof designContext["appRegistrationStrategy"] === "string"
+      ? designContext["appRegistrationStrategy"] as string : null;
+    const notes = typeof designContext["notes"] === "string" ? designContext["notes"] as string : null;
+
+    const responsePayload = {
+      endpoints,
+      endpointCount: endpoints.length,
+      latestEndpoint,
+      endpointPath,
+      hasDesignContext,
+      baseName,
+      baseNameSource,
+      environmentId,
+      authType,
+      connectorCount,
+      appRegistrationStrategy,
+      targetVersion,
+      notes,
+      connectorGroupsJson: "",
+      group1Json,
+      group2Json,
+      group3Json,
+      maxOperations: config.graphResearch.maxOperationsPerConnector ?? 256,
+    };
+    log(`[Session context] Response: hasDesignContext=${responsePayload.hasDesignContext}, connectorCount=${responsePayload.connectorCount}, g1Len=${group1Json.length}`);
+    res.json(responsePayload);
+  });
+
+  // ─── REST: List environments (direct function call) ────────────────────
+
+  app.get("/api/graph/environments", async (_req, res) => {
+    try {
+      if (config.server.authMode === "noauth") {
+        writeDeployProfileRequired(res);
+        return;
+      }
+
+      const result = await invokeConnectorTool("connector_listEnvironments", {}, config);
+      if (!result.ok) {
+        const errMsg = result.error ?? "connector_listEnvironments failed";
+        const credentialIssue = /(clientsecret|client_secret|key vault|managed identity|execution\.?method|apponly)/i.test(errMsg);
+        const errorCode = credentialIssue ? "CDA_CREDENTIAL_PREREQUISITE" : "ENVIRONMENT_LIST_FAILED";
+        logError(`[Environments REST] ${errorCode}: ${errMsg}`);
+        res.status(credentialIssue ? 424 : 500).json({
+          error: credentialIssue
+            ? "Environment listing failed: appOnly credential prerequisites are not configured."
+            : "Environment listing failed.",
+          code: errorCode,
+          details: errMsg,
+        });
+        return;
+      }
+
+      res.json(result.result);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      logError(`[Environments REST] Transport failure: ${message}`);
+      res.status(500).json({
+        error: "Environment listing failed.",
+        code: "ENVIRONMENT_LIST_ERROR",
+        details: message,
+      });
+    }
+  });
+
+  // ─── REST: Name check (direct function calls) ─────────────────────────
+
+  app.get("/api/graph/namecheck", async (req, res) => {
+    try {
+      if (config.server.authMode === "noauth") {
+        writeDeployProfileRequired(res);
+        return;
+      }
+
+      const environmentId = (req.query["environmentId"] as string | undefined)?.trim() || undefined;
+      const namesParam = req.query["names"] as string | undefined;
+      if (!namesParam) {
+        res.status(400).json({ error: "The 'names' query parameter is required." });
+        return;
+      }
+      const names = namesParam.split(",").map((n: string) => n.trim()).filter(Boolean);
+      if (names.length === 0) {
+        res.json({ results: [] });
+        return;
+      }
+      if (!environmentId) {
+        res.status(400).json({ error: "The 'environmentId' query parameter is required." });
+        return;
+      }
+
+      // ── Connector name check via direct CDA call ──
+      let existingConnectors: Array<Record<string, unknown>> = [];
+      try {
+        const listResult = await invokeConnectorTool("connector_list", { environmentId }, config);
+        if (listResult.ok && listResult.result) {
+          const parsed = listResult.result as Record<string, unknown>;
+          existingConnectors = (parsed["connectors"] ?? []) as Array<Record<string, unknown>>;
+        }
+      } catch (err) {
+        logError(`[Namecheck] connector_list failed (non-fatal): ${err instanceof Error ? err.message : String(err)}`);
+      }
+
+      // ── App registration name check via direct ARA call ──
+      const appRegMatches = new Map<string, string>();
+      for (const name of names) {
+        const appRegName = `${stripHashSuffix(name)} - Connector`;
+        try {
+          const araResult = await invokeAppregTool("appreg_get", { displayName: appRegName }, config);
+          if (araResult.ok && araResult.result) {
+            const araData = araResult.result as Record<string, unknown>;
+            const count = (araData["count"] as number) ?? 0;
+            if (count > 0) {
+              appRegMatches.set(name, appRegName);
+            }
+          }
+        } catch {
+          // Non-fatal: skip app reg check for this name
+        }
+      }
+
+      // ── Build results with cross-collision check ──
+      const usedNames = new Set<string>();
+      const results = names.map((name) => {
+        const baseForCheck = stripHashSuffix(name).toLowerCase();
+
+        const wouldProduceNames = new Set<string>();
+        wouldProduceNames.add(baseForCheck);
+        wouldProduceNames.add(`${baseForCheck} - connector`);
+        for (const sfx of ["read", "write", "crud", "actions", "management"]) {
+          wouldProduceNames.add(`${baseForCheck} - ${sfx} connector`);
+          wouldProduceNames.add(`${baseForCheck} - ${sfx}`);
+        }
+
+        const connectorMatch = existingConnectors.find((c) => {
+          const dn = ((c["displayName"] as string | undefined) ?? "").toLowerCase();
+          if (wouldProduceNames.has(dn)) return true;
+          if (dn.startsWith(baseForCheck + "_")) return true;
+          return false;
+        });
+        const connectorConflict = !!connectorMatch;
+        const crossCollision = usedNames.has(baseForCheck);
+        usedNames.add(baseForCheck);
+
+        const appRegConflict = appRegMatches.has(name);
+        const needsSuggestion = connectorConflict || crossCollision;
+        const suggestedName = needsSuggestion ? appendHashSuffix(name) : undefined;
+
+        return {
+          name,
+          connectorConflict,
+          connectorMatch: connectorConflict ? (connectorMatch?.["displayName"] as string ?? null) : null,
+          crossCollision,
+          appRegConflict,
+          appRegMatch: appRegConflict ? (appRegMatches.get(name) ?? null) : null,
+          suggestedName: suggestedName ?? null,
+          suggestedAppRegName: suggestedName ? `${suggestedName} - Connector` : null,
+        };
+      });
+
+      const conflictCount = results.filter((r) => r.connectorConflict || r.crossCollision).length;
+      res.json({
+        resultsJson: JSON.stringify(results),
+        hasConflicts: conflictCount > 0,
+        conflictCount,
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      logError(`[Namecheck] Failed: ${message}`);
+      res.status(500).json({ error: message, results: [] });
+    }
+  });
+
+  // ─── REST: Generate connector ──────────────────────────────────────────
+
+  app.post("/api/graph/connector", async (req, res) => {
+    try {
+      const body = req.body as Record<string, unknown>;
+      log(
+        `[Generate REST] Incoming: baseName="${String(body["baseName"] ?? "(none)")}", ` +
+        `operationIdsType=${Array.isArray(body["operationIds"]) ? "array" : typeof body["operationIds"]}`,
+      );
+
+      // Normalise operationIds: accept comma-separated string
+      if (typeof body["operationIds"] === "string") {
+        body["operationIds"] = (body["operationIds"] as string)
+          .split(",")
+          .map((s: string) => s.trim())
+          .filter(Boolean);
+      }
+
+      if (!body["baseName"]) {
+        log(`[Generate REST] [WARN] No baseName in request body — connector will use default name`);
+      }
+
+      const result = await invokeTool("graph_generateConnector", body, config);
+      if (!result.ok) {
+        res.status(500).json({ error: result.error ?? "graph_generateConnector failed" });
+        return;
+      }
+
+      const resultData = result.result as Record<string, unknown>;
+      const connectorFiles = resultData["connectorFiles"] as
+        ReadonlyArray<{ filename: string; content: string }> | undefined;
+
+      const downloadUrls: string[] = [];
+      if (connectorFiles && connectorFiles.length > 0) {
+        const generationId = randomUUID();
+        const genDir = path.join(outputRoot, generationId);
+        fs.mkdirSync(genDir, { recursive: true });
+
+        const protocol = req.get("x-forwarded-proto") ?? req.protocol;
+        const host = req.get("x-forwarded-host") ?? req.get("host") ?? `localhost:${port}`;
+        const baseUrl = `${protocol}://${host}`;
+
+        for (const file of connectorFiles) {
+          const filePath = path.join(genDir, file.filename);
+          fs.writeFileSync(filePath, file.content, "utf-8");
+          downloadUrls.push(`${baseUrl}/download/${generationId}/${file.filename}`);
+        }
+        log(`Generated ${connectorFiles.length} file(s) → output/${generationId}/ (TTL: ${ttlMinutes}m)`);
+      }
+
+      // Publish to GitHub Gist
+      let gistUrl: string | undefined;
+      let gistRawUrls: Record<string, string> | undefined;
+      const ghToken = getGitHubToken();
+      if (ghToken && connectorFiles && connectorFiles.length > 0) {
+        const connectorName = (body["connectorName"] ?? body["baseName"] ?? "Generated Connector") as string;
+        const version = (body["version"] ?? "v1.0") as string;
+        const gistResult = await publishToGist(
+          connectorFiles,
+          `${connectorName} — Power Platform custom connector (${version})`,
+          false,
+          ghToken,
+        );
+        if (gistResult) {
+          gistUrl = gistResult.gistUrl;
+          gistRawUrls = gistResult.rawUrls;
+        }
+      }
+
+      let swaggerRawUrl: string | undefined;
+      if (gistRawUrls) {
+        const rawUrlValues = Object.values(gistRawUrls);
+        if (rawUrlValues.length > 0) swaggerRawUrl = rawUrlValues[0];
+      }
+
+      res.json({ ...resultData, downloadUrls, gistUrl, gistRawUrls, swaggerRawUrl });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      res.status(500).json({ error: message });
+    }
+  });
+
+  // ─── REST: Batch generate ──────────────────────────────────────────────
+
+  app.post("/api/graph/connector/batch", async (req, res) => {
+    try {
+      const body = req.body as Record<string, unknown>;
+      const groupsJson = body["groupsJson"] as string | undefined;
+      const version = (body["version"] as string) ?? "v1.0";
+
+      log(`[BatchGenerate] groupsJson type=${typeof groupsJson}, version=${version}`);
+
+      if (!groupsJson || typeof groupsJson !== "string") {
+        res.status(400).json({ error: "groupsJson is required and must be a JSON string." });
+        return;
+      }
+
+      let groups: Array<{ baseName: string; ops: string }>;
+      try {
+        groups = JSON.parse(groupsJson) as Array<{ baseName: string; ops: string }>;
+      } catch (parseErr) {
+        const msg = parseErr instanceof Error ? parseErr.message : String(parseErr);
+        res.status(400).json({ error: `Failed to parse groupsJson: ${msg}` });
+        return;
+      }
+
+      if (!Array.isArray(groups) || groups.length === 0) {
+        res.status(400).json({ error: "groupsJson must be a non-empty array of {baseName, ops} objects." });
+        return;
+      }
+
+      log(`[BatchGenerate] Parsed ${groups.length} group(s)`);
+
+      const results: Array<{
+        baseName: string;
+        gistUrl: string;
+        swaggerRawUrl: string;
+        totalOperations: number;
+        status: string;
+        warnings: string[];
+        error?: string;
+      }> = [];
+
+      for (const group of groups) {
+        const groupBaseName = group.baseName?.trim();
+        const operationIds = group.ops
+          ? group.ops.split(",").map((s: string) => s.trim()).filter(Boolean)
+          : [];
+
+        if (!groupBaseName) {
+          results.push({
+            baseName: "(unnamed)", gistUrl: "", swaggerRawUrl: "",
+            totalOperations: 0, status: "error", warnings: [],
+            error: "baseName is required for each group",
+          });
+          continue;
+        }
+
+        if (operationIds.length === 0) {
+          results.push({
+            baseName: groupBaseName, gistUrl: "", swaggerRawUrl: "",
+            totalOperations: 0, status: "error", warnings: [],
+            error: "ops (comma-separated operation IDs) is required",
+          });
+          continue;
+        }
+
+        log(`[BatchGenerate] Generating group "${groupBaseName}": ${operationIds.length} ops`);
+
+        try {
+          const genResult = await invokeTool(
+            "graph_generateConnector",
+            { baseName: groupBaseName, operationIds, version },
+            config,
+          );
+
+          if (!genResult.ok) {
+            results.push({
+              baseName: groupBaseName, gistUrl: "", swaggerRawUrl: "",
+              totalOperations: 0, status: "error", warnings: [],
+              error: genResult.error ?? "generation failed",
+            });
+            continue;
+          }
+
+          const genData = genResult.result as Record<string, unknown>;
+          const connectorFiles = genData["connectorFiles"] as
+            ReadonlyArray<{ filename: string; content: string }> | undefined;
+
+          let gistUrl = "";
+          let swaggerRawUrl = "";
+          const ghToken = getGitHubToken();
+          if (ghToken && connectorFiles && connectorFiles.length > 0) {
+            const gistResult = await publishToGist(
+              connectorFiles,
+              `${groupBaseName} — Power Platform custom connector (${version})`,
+              false,
+              ghToken,
+            );
+            if (gistResult) {
+              gistUrl = gistResult.gistUrl;
+              const rawUrlValues = Object.values(gistResult.rawUrls) as string[];
+              if (rawUrlValues.length > 0) swaggerRawUrl = String(rawUrlValues[0] ?? "");
+            }
+          }
+
+          results.push({
+            baseName: groupBaseName,
+            gistUrl,
+            swaggerRawUrl,
+            totalOperations: (genData["totalOperations"] as number) ?? 0,
+            status: "success",
+            warnings: (genData["validationWarnings"] as string[]) ?? [],
+          });
+          log(`[BatchGenerate] Group "${groupBaseName}" succeeded: ${genData["totalOperations"]} ops`);
+        } catch (groupErr) {
+          const msg = groupErr instanceof Error ? groupErr.message : String(groupErr);
+          log(`[BatchGenerate] Group "${groupBaseName}" FAILED: ${msg}`);
+          results.push({
+            baseName: groupBaseName, gistUrl: "", swaggerRawUrl: "",
+            totalOperations: 0, status: "error", warnings: [],
+            error: msg,
+          });
+        }
+      }
+
+      const successCount = results.filter((r) => r.status === "success").length;
+      log(`[BatchGenerate] Complete: ${successCount}/${results.length} succeeded`);
+      res.json({
+        groupCount: results.length,
+        successCount,
+        resultsJson: JSON.stringify(results),
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      res.status(500).json({ error: message });
+    }
+  });
+
+  // ─── REST: Deploy pipeline ─────────────────────────────────────────────
+
+  app.post("/api/graph/deploy", async (req, res) => {
+    try {
+      if (config.server.authMode === "noauth") {
+        writeDeployProfileRequired(res);
+        return;
+      }
+
+      const body = req.body as Record<string, unknown>;
+      log(
+        `[Deploy REST] Incoming: baseName="${String(body["baseName"] ?? "(none)")}", ` +
+        `environmentId="${String(body["environmentId"] ?? "(none)")}", authType=${String(body["authType"] ?? "(none)")}`,
+      );
+
+      // Map REST property name (apiDefinition → swagger)
+      if (body["apiDefinition"] && !body["swagger"]) {
+        body["swagger"] = body["apiDefinition"];
+        delete body["apiDefinition"];
+      }
+
+      if (!body["baseName"]) {
+        log(`[Deploy REST] [WARN] baseName not provided — deploy will use swagger title or fail`);
+      }
+
+      const pipelineInput: DeployPipelineInput = {
+        swaggerUrl: body["swaggerUrl"] as string | undefined,
+        swagger: body["swagger"] as string | Record<string, unknown> | undefined,
+        baseName: body["baseName"] as string | undefined,
+        environmentId: body["environmentId"] as string | undefined,
+        authType: body["authType"] as string | undefined,
+        oauthClientId: body["oauthClientId"] as string | undefined,
+        oauthResourceUri: body["oauthResourceUri"] as string | undefined,
+        oauthTenantId: body["oauthTenantId"] as string | undefined,
+        skipAppRegistration: body["skipAppRegistration"] as boolean | undefined,
+        confirmed: body["confirmed"] as boolean | undefined,
+        shareWithEmails: body["shareWithEmails"] as string[] | undefined,
+      };
+
+      const result = await executeDeployPipeline(pipelineInput, config);
+
+      // Flatten nested connector/appRegistration for Swagger 2.0 / Copilot Studio
+      const connector = result.connector;
+      const appReg = result.appRegistration;
+      const flat: Record<string, unknown> = {
+        status: result.status,
+        summary: result.summary,
+        connectorId: connector?.connectorId ?? null,
+        connectorDisplayName: connector?.displayName ?? null,
+        connectorEnvironmentId: connector?.environmentId ?? null,
+        connectorStatus: connector?.status ?? null,
+        connectorAuthType: connector?.authType ?? null,
+        connectorRedirectUri: connector?.redirectUri ?? null,
+        appRegistrationConfigured: appReg?.configured ?? false,
+        appRegistrationAppId: appReg?.appId ?? null,
+        appRegistrationObjectId: appReg?.objectId ?? null,
+        appRegistrationDisplayName: appReg?.displayName ?? null,
+        appRegistrationSkipped: appReg?.skipped ?? false,
+        appRegistrationSkipReason: appReg?.skipReason ?? null,
+        errors: result.errors,
+      };
+      log(`[Deploy REST] Response size: ${JSON.stringify(flat).length}b, status=${String(flat["status"])}`);
+      res.json(flat);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      res.status(500).json({ error: message });
+    }
+  });
+
+  // ─── REST: Batch deploy ────────────────────────────────────────────────
+
+  app.post("/api/graph/deploy/batch", async (req, res) => {
+    try {
+      if (config.server.authMode === "noauth") {
+        writeDeployProfileRequired(res);
+        return;
+      }
+
+      const body = req.body as Record<string, unknown>;
+      const groupsJson = body["groupsJson"] as string | undefined;
+      const environmentId = (body["environmentId"] as string) ?? "";
+      const authType = (body["authType"] as string) ?? "NoAuth";
+
+      log(`[BatchDeploy] groupsJson type=${typeof groupsJson}, environmentId=${environmentId}, authType=${authType}`);
+
+      if (!groupsJson || typeof groupsJson !== "string") {
+        res.status(400).json({ error: "groupsJson is required and must be a JSON string." });
+        return;
+      }
+
+      let groups: Array<{ baseName: string; swaggerUrl: string }>;
+      try {
+        groups = JSON.parse(groupsJson) as Array<{ baseName: string; swaggerUrl: string }>;
+      } catch (parseErr) {
+        const msg = parseErr instanceof Error ? parseErr.message : String(parseErr);
+        res.status(400).json({ error: `Failed to parse groupsJson: ${msg}` });
+        return;
+      }
+
+      if (!Array.isArray(groups) || groups.length === 0) {
+        res.status(400).json({ error: "groupsJson must be a non-empty array of {baseName, swaggerUrl} objects." });
+        return;
+      }
+
+      log(`[BatchDeploy] Parsed ${groups.length} group(s)`);
+
+      const results: Array<{
+        baseName: string;
+        status: string;
+        connectorId: string;
+        connectorDisplayName: string;
+        appRegistrationAppId: string;
+        error?: string;
+      }> = [];
+
+      for (const group of groups) {
+        const groupBaseName = group.baseName?.trim();
+        const swaggerUrl = group.swaggerUrl?.trim();
+
+        if (!groupBaseName) {
+          results.push({
+            baseName: "(unnamed)", status: "error",
+            connectorId: "", connectorDisplayName: "", appRegistrationAppId: "",
+            error: "baseName is required for each group",
+          });
+          continue;
+        }
+
+        if (!swaggerUrl) {
+          results.push({
+            baseName: groupBaseName, status: "error",
+            connectorId: "", connectorDisplayName: "", appRegistrationAppId: "",
+            error: "swaggerUrl is required for each group",
+          });
+          continue;
+        }
+
+        log(`[BatchDeploy] Deploying group "${groupBaseName}": swaggerUrl=${swaggerUrl}`);
+
+        try {
+          const deployInput: DeployPipelineInput = {
+            baseName: groupBaseName,
+            swaggerUrl,
+            environmentId,
+            authType,
+          };
+
+          const result = await executeDeployPipeline(deployInput, config);
+          const connector = result.connector;
+          const appReg = result.appRegistration;
+
+          results.push({
+            baseName: groupBaseName,
+            status: result.status,
+            connectorId: String(connector?.connectorId ?? ""),
+            connectorDisplayName: String(connector?.displayName ?? ""),
+            appRegistrationAppId: String(appReg?.appId ?? ""),
+          });
+          log(`[BatchDeploy] Group "${groupBaseName}" succeeded: connectorId=${connector?.connectorId}`);
+        } catch (groupErr) {
+          const msg = groupErr instanceof Error ? groupErr.message : String(groupErr);
+          log(`[BatchDeploy] Group "${groupBaseName}" FAILED: ${msg}`);
+          results.push({
+            baseName: groupBaseName, status: "error",
+            connectorId: "", connectorDisplayName: "", appRegistrationAppId: "",
+            error: msg,
+          });
+        }
+      }
+
+      const successCount = results.filter((r) => r.status !== "error").length;
+      log(`[BatchDeploy] Complete: ${successCount}/${results.length} succeeded`);
+      res.json({
+        groupCount: results.length,
+        successCount,
+        resultsJson: JSON.stringify(results),
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      res.status(500).json({ error: message });
+    }
+  });
+
+  // ─── Download a generated file ─────────────────────────────────────────
+
+  app.get("/download/:id/:filename", (req, res) => {
+    const { id, filename } = req.params;
+
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id ?? "")) {
+      res.status(400).json({ error: "Invalid generation ID." });
+      return;
+    }
+
+    if (!filename || filename.includes("/") || filename.includes("\\") || filename.includes("..")) {
+      res.status(400).json({ error: "Invalid filename." });
+      return;
+    }
+
+    const filePath = path.join(outputRoot, id!, filename);
+
+    if (!fs.existsSync(filePath)) {
+      res.status(404).json({
+        error: "File not found. It may have expired.",
+        hint: `Generated files are automatically deleted after ${ttlMinutes} minutes.`,
+      });
+      return;
+    }
+
+    res.setHeader("Content-Type", contentTypeForFile(filename));
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+    fs.createReadStream(filePath).pipe(res);
+  });
+
+  // ─── Test endpoint: Batch parameter echo ───────────────────────────────
+
+  app.post("/api/graph/test/batch-echo", (req, res) => {
+    const body = req.body as Record<string, unknown>;
+    const groupsJson = body["groupsJson"] as string | undefined;
+
+    log(
+      `[BatchEcho] Received: groupsJson type=${typeof groupsJson}, ` +
+      `length=${groupsJson?.length ?? 0}`,
+    );
+
+    const g1BaseName = body["g1BaseName"] as string | undefined;
+    const g1Ops = body["g1Ops"] as string | undefined;
+    const g2BaseName = body["g2BaseName"] as string | undefined;
+    const g2Ops = body["g2Ops"] as string | undefined;
+    const g3BaseName = body["g3BaseName"] as string | undefined;
+    const g3Ops = body["g3Ops"] as string | undefined;
+
+    let parsedGroups: Array<{ baseName: string; ops: string }> = [];
+    let parseError: string | null = null;
+    let encodingUsed = "none";
+
+    if (groupsJson && typeof groupsJson === "string" && groupsJson.trim().startsWith("[")) {
+      try {
+        parsedGroups = JSON.parse(groupsJson) as Array<{ baseName: string; ops: string }>;
+        encodingUsed = "groupsJson";
+        log(`[BatchEcho] JSON.parse succeeded: ${parsedGroups.length} group(s)`);
+      } catch (err) {
+        parseError = err instanceof Error ? err.message : String(err);
+        log(`[BatchEcho] JSON.parse FAILED: ${parseError}`);
+      }
+    }
+
+    if (parsedGroups.length === 0 && !parseError && g1BaseName) {
+      encodingUsed = "individual";
+      if (g1BaseName) parsedGroups.push({ baseName: g1BaseName, ops: g1Ops ?? "" });
+      if (g2BaseName) parsedGroups.push({ baseName: g2BaseName, ops: g2Ops ?? "" });
+      if (g3BaseName) parsedGroups.push({ baseName: g3BaseName, ops: g3Ops ?? "" });
+      log(`[BatchEcho] Fallback params: ${parsedGroups.length} group(s)`);
+    }
+
+    const sampleResults = parsedGroups.map((g, i) => ({
+      baseName: g.baseName,
+      gistUrl: `https://gist.github.com/example/${i + 1}`,
+      totalOperations: g.ops ? g.ops.split(",").filter(Boolean).length : 0,
+      status: "success",
+      warnings: [] as string[],
+    }));
+
+    res.json({
+      encodingUsed,
+      parseError,
+      groupCount: parsedGroups.length,
+      parsedGroups,
+      resultsJson: JSON.stringify(sampleResults),
+    });
+  });
+
+  // ─── Cleanup sweep ────────────────────────────────────────────────────
+
+  const cleanupInterval = setInterval(() => {
+    sweepExpiredOutputs(outputRoot, ttlMs);
+    sweepExpiredSessions();
+  }, 5 * 60 * 1000);
 
   // ─── Start ─────────────────────────────────────────────────────────────
 
   app.listen(port, () => {
     log(`Graph Connector Factory server listening on port ${port}`);
-    log(`  MCP endpoint:  POST http://localhost:${port}/mcp`);
-    log(`  Health check:  GET  http://localhost:${port}/health`);
-    log(`  Auth mode:     ${config.server.authMode}`);
+    log(`  MCP endpoint:      POST   http://localhost:${port}/mcp`);
+    log(`  Session delete:    DELETE http://localhost:${port}/mcp`);
+    log(`  Health check:      GET    http://localhost:${port}/health`);
+    log(`  REST operations:   GET    http://localhost:${port}/api/graph/operations?endpoint=/users`);
+    log(`  Session endpoints: GET    http://localhost:${port}/api/graph/session/endpoints`);
+    log(`  Session context:   GET    http://localhost:${port}/api/graph/session/context`);
+    log(`  Environments:      GET    http://localhost:${port}/api/graph/environments`);
+    log(`  Name check:        GET    http://localhost:${port}/api/graph/namecheck?names=...&environmentId=...`);
+    log(`  Generate:          POST   http://localhost:${port}/api/graph/connector`);
+    log(`  Deploy:            POST   http://localhost:${port}/api/graph/deploy`);
+    log(`  File downloads:    GET    http://localhost:${port}/download/:id/:filename`);
+    log(`  Output directory:  ${outputRoot}`);
+    log(`  Output TTL:        ${ttlMinutes} minutes`);
+    log(`  Auth mode:         ${config.server.authMode}`);
   });
+
+  // Suppress unused variable warning for cleanupInterval
+  void cleanupInterval;
 }
