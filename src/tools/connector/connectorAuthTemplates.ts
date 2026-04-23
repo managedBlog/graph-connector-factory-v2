@@ -304,7 +304,7 @@ export function generateFederatedIdentityProperties(
         identityProvider: "aad",
         clientId: options.clientId,
         clientAssertionType: "GenericFederatedIdentityCredential",
-        ...(options.scopes && options.scopes.length > 0 ? { scopes: [...options.scopes] } : {}),
+        scopes: options.scopes ? [...options.scopes] : [],
         redirectMode: "GlobalPerConnector",
         ...(redirectUrl ? { redirectUrl } : {}),
         properties: {
