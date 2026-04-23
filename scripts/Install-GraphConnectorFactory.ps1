@@ -696,53 +696,61 @@ function Invoke-StageFIC {
     foreach ($conn in $connectors) {
         Write-Step "Processing: $($conn.DisplayName) ($($conn.Id))…"
 
-        # Discover managed-identity subject with retry
-        Write-Step '  Waiting for managed-identity subject…'
-        $miSubject = Invoke-WithRetry -Activity "MI subject for $($conn.DisplayName)" -MaxAttempts 6 -DelaySeconds 10 -ScriptBlock {
-            # Query the connector via Power Platform API to get MI info
-            $connectorInfo = & pac connector list --environment $using:EnvironmentId 2>&1
-            # Try az rest to get connector properties including MI
-            $apiUrl = "https://api.powerapps.com/providers/Microsoft.PowerApps/apis/$($using:conn.Id)?api-version=2024-01-01&`$filter=environment eq '$($using:EnvironmentId)'"
+        # Discover connector's APIM internal name to build the FIC subject.
+        # The subject follows: /eid1/c/pub/t/{tenantHash}/a/{appHash}/{region}_{connectorApiName}
+        # We query the Power Platform API for the connector's connectorInternalId.
+        Write-Step '  Discovering connector APIM identity…'
+        $connectorApiName = $null
+        $ficSubject = Invoke-WithRetry -Activity "APIM identity for $($conn.DisplayName)" -MaxAttempts 6 -DelaySeconds 10 -ScriptBlock {
+            $apiUrl = "https://api.powerapps.com/providers/Microsoft.PowerApps/apis/$($using:conn.Id)?api-version=2023-06-01&`$filter=environment eq '$($using:EnvironmentId)'"
             try {
                 $response = az rest --method GET --url $apiUrl --resource 'https://service.powerapps.com/' --output json 2>$null
                 if ($response) {
                     $parsed = $response | ConvertFrom-Json
-                    $subject = $parsed.properties.metadata.managedIdentityObjectId
-                    if ($subject) { return $subject }
+                    # Check if FIC fields already present (connector was updated via UI)
+                    $existingFic = $parsed.properties.connectionParameters.token.oAuthSettings.properties.FederatedIdentityCredentials
+                    if ($existingFic -and $existingFic.Subject) {
+                        return $existingFic.Subject
+                    }
+                    # Build subject from the connector's runtimeUrls
+                    # runtimeUrls contain: https://{envId}.{num}.custom.{region}.azure-apihub.net/apim/{apiName}
+                    $runtimeUrl = ($parsed.properties.runtimeUrls | Where-Object { $_ -match '^https://' }) | Select-Object -First 1
+                    if ($runtimeUrl -and $runtimeUrl -match '/apim/(.+)$') {
+                        $script:connectorApiName = $Matches[1]
+                    }
                 }
             } catch {
                 # Fall through to retry
             }
-
-            # Alternative: check if pac connector list output contains MI info
-            foreach ($line in $connectorInfo) {
-                if ($line -match $using:conn.Id -and $line -match '([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})') {
-                    # This might be the MI object ID — only if it's different from the connector ID
-                    $candidate = $Matches[1]
-                    if ($candidate -ne $using:conn.Id) { return $candidate }
-                }
-            }
             return $null
         }
 
-        if (-not $miSubject) {
-            Write-Warning "Could not discover MI subject for $($conn.DisplayName). You can add the FIC manually later."
-            Write-Warning "  az ad app federated-credential create --id $ClientAppObjectId --parameters <ficParams.json>"
+        if (-not $ficSubject -and -not $connectorApiName) {
+            Write-Warning "Could not discover APIM identity for $($conn.DisplayName). You can configure FIC manually later."
+            Write-Warning "  1. Open the connector in make.powerapps.com → Security tab"
+            Write-Warning "  2. Select 'Use managed identity' and save"
+            Write-Warning "  3. Copy the FIC subject and create: az ad app federated-credential create --id $ClientAppObjectId --parameters <ficParams.json>"
             continue
         }
 
-        Write-Success "MI Subject: $miSubject"
+        if (-not $ficSubject) {
+            Write-Warning "Could not auto-detect FIC subject. The connector API name is '$connectorApiName'."
+            Write-Warning "You must configure managed identity manually in the connector Security tab,"
+            Write-Warning "then create the FIC with the subject shown there."
+            continue
+        }
+
+        Write-Success "FIC Subject: $ficSubject"
 
         # Build FIC parameters
         $ficName = "$($conn.Name)-fic"
         $ficParams = @{
             name        = $ficName
             issuer      = $issuer
-            subject     = $miSubject
+            subject     = $ficSubject
             audiences   = @('api://AzureADTokenExchange')
             description = "FIC for Power Platform connector: $($conn.DisplayName)"
         }
-        $ficJson = $ficParams | ConvertTo-Json -Depth 5 -Compress
 
         # Check if FIC already exists
         Write-Step "  Checking existing FICs…"
@@ -750,7 +758,7 @@ function Invoke-StageFIC {
         $alreadyExists = $false
         if ($existingFics) {
             foreach ($fic in $existingFics) {
-                if ($fic.subject -eq $miSubject -or $fic.name -eq $ficName) {
+                if ($fic.subject -eq $ficSubject -or $fic.name -eq $ficName) {
                     Write-Success "FIC already exists for $($conn.DisplayName) — skipping"
                     $alreadyExists = $true
                     break
@@ -775,10 +783,59 @@ function Invoke-StageFIC {
                 if (Test-Path $ficFile) { Remove-Item $ficFile -Force }
             }
         }
+
+        # Update connector apiProperties with FIC fields so it uses managed identity
+        Write-Step "  Updating connector to use managed identity…"
+        $propsPath = Join-Path $preparedDir "$($conn.Name).apiProperties.json"
+        if (Test-Path $propsPath) {
+            $propsContent = Get-Content $propsPath -Raw
+            $propsContent = $propsContent.Replace('__FIC_SUBJECT__', $ficSubject)
+            $updatedPropsPath = Join-Path $repoRoot "artifacts" "fic-props-$($conn.Name).json"
+            Set-Content -Path $updatedPropsPath -Value $propsContent -Encoding UTF8
+
+            $swaggerPath = Join-Path $preparedDir "$($conn.Name).swagger.json"
+            if (Test-Path $swaggerPath) {
+                try {
+                    $updateOutput = & pac connector update `
+                        --connector-id $conn.Id `
+                        --api-definition-file $swaggerPath `
+                        --api-properties-file $updatedPropsPath `
+                        --environment $EnvironmentId 2>&1
+                    if ($LASTEXITCODE -eq 0) {
+                        Write-Success "Connector updated with managed identity"
+                    } else {
+                        Write-Warning "pac connector update failed: $($updateOutput -join "`n")"
+                    }
+                } finally {
+                    if (Test-Path $updatedPropsPath) { Remove-Item $updatedPropsPath -Force }
+                }
+            } else {
+                Write-Warning "Swagger file not found at $swaggerPath — cannot update connector apiProperties"
+            }
+        } else {
+            Write-Warning "Prepared apiProperties not found at $propsPath — cannot update connector"
+        }
+
+        # Add connector-specific redirect URI on Client app
+        Write-Step "  Adding redirect URI for connector…"
+        $connRedirectUri = "https://global.consent.azure-apim.net/redirect/$connectorApiName"
+        $clientAppInfo = Invoke-AzCli @('ad', 'app', 'show', '--id', $ClientAppObjectId)
+        $currentUris = @()
+        if ($clientAppInfo.web -and $clientAppInfo.web.redirectUris) {
+            $currentUris = @($clientAppInfo.web.redirectUris)
+        }
+        if ($currentUris -notcontains $connRedirectUri) {
+            $allUris = @($currentUris) + @($connRedirectUri)
+            Invoke-AzCli @('ad', 'app', 'update', '--id', $ClientAppObjectId,
+                '--web-redirect-uris', ($allUris -join ' '))
+            Write-Success "Redirect URI added: $connRedirectUri"
+        } else {
+            Write-Success "Redirect URI already present"
+        }
     }
 
-    # Verify redirect URI on Client app
-    Write-Step 'Verifying redirect URI on Client app…'
+    # Verify base redirect URI on Client app
+    Write-Step 'Verifying base redirect URI on Client app…'
     $clientAppInfo = Invoke-AzCli @('ad', 'app', 'show', '--id', $ClientAppObjectId)
     $redirectUri = 'https://global.consent.azure-apim.net/redirect'
     $currentUris = @()
@@ -787,14 +844,13 @@ function Invoke-StageFIC {
     }
 
     if ($currentUris -contains $redirectUri) {
-        Write-Success "Redirect URI already present: $redirectUri"
+        Write-Success "Base redirect URI already present: $redirectUri"
     } else {
-        Write-Step "Adding redirect URI: $redirectUri"
+        Write-Step "Adding base redirect URI: $redirectUri"
         $allUris = @($currentUris) + @($redirectUri)
-        $uriArg = $allUris -join ' '
         Invoke-AzCli @('ad', 'app', 'update', '--id', $ClientAppObjectId,
-            '--web-redirect-uris', $redirectUri)
-        Write-Success 'Redirect URI added'
+            '--web-redirect-uris', ($allUris -join ' '))
+        Write-Success 'Base redirect URI added'
     }
 
     Write-Host "`n────────────────────────────────────────────────────────" -ForegroundColor Cyan

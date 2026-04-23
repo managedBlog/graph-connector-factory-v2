@@ -6,12 +6,18 @@
         "oAuthSettings": {
           "identityProvider": "aad",
           "clientId": "__OAUTH_CLIENT_ID__",
+          "clientAssertionType": "GenericFederatedIdentityCredential",
           "scopes": [],
           "redirectMode": "GlobalPerConnector",
-          "redirectUrl": "https://global.consent.azure-apim.net/redirect",
           "properties": {
             "IsFirstParty": "False",
-            "AzureActiveDirectoryResourceId": "__OAUTH_RESOURCE_URI__"
+            "AzureActiveDirectoryResourceId": "__OAUTH_RESOURCE_URI__",
+            "IsOnbehalfofLoginSupported": true,
+            "FederatedIdentityCredentials": {
+              "Issuer": "https://login.microsoftonline.com/__TENANT_ID__/v2.0",
+              "Subject": "__FIC_SUBJECT__",
+              "Audience": "api://AzureADTokenExchange"
+            }
           },
           "customParameters": {
             "LoginUri": {
@@ -25,6 +31,9 @@
             },
             "EnableOnbehalfOfLogin": {
               "value": "false"
+            },
+            "grantType": {
+              "value": "authorization_code_with_federated_identity_credentials"
             }
           }
         },
