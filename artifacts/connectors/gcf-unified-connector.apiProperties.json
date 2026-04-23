@@ -6,7 +6,7 @@
         "oAuthSettings": {
           "identityProvider": "aad",
           "clientId": "__OAUTH_CLIENT_ID__",
-          "scopes": "__OAUTH_SCOPE__",
+          "scopes": [],
           "redirectMode": "GlobalPerConnector",
           "redirectUrl": "https://global.consent.azure-apim.net/redirect",
           "properties": {
@@ -14,18 +14,38 @@
             "AzureActiveDirectoryResourceId": "__OAUTH_RESOURCE_URI__"
           },
           "customParameters": {
-            "tenantId": {
+            "LoginUri": {
+              "value": "https://login.microsoftonline.com"
+            },
+            "TenantId": {
               "value": "__TENANT_ID__"
             },
-            "resourceUri": {
+            "ResourceUri": {
               "value": "__OAUTH_RESOURCE_URI__"
             },
-            "loginUri": {
-              "value": "https://login.microsoftonline.com"
-            },
-            "loginUriAAD": {
-              "value": "https://login.microsoftonline.com"
+            "EnableOnbehalfOfLogin": {
+              "value": "false"
             }
+          }
+        },
+        "uiDefinition": {
+          "displayName": "OAuth Connection",
+          "description": "OAuth Connection",
+          "constraints": {
+            "required": "true",
+            "hidden": "false"
+          }
+        }
+      },
+      "token:TenantId": {
+        "type": "string",
+        "metadata": {
+          "sourceType": "AzureActiveDirectoryTenant"
+        },
+        "uiDefinition": {
+          "constraints": {
+            "required": "false",
+            "hidden": "true"
           }
         }
       }

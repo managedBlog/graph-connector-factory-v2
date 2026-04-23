@@ -1,0 +1,44 @@
+<botcomponent_connectionreferenceset>
+  <botcomponent_connectionreference botcomponentid.schemaname="copilots_header_91a5e.action.copilots_header_91a5e.topic.MCP-Server-for-Enterprise" connectionreferenceid.connectionreferencelogicalname="copilots_header_91a5e.shared_cr863-5fmcp-2dserver-2dfor-2denterprise-5f251f982b189de9d2.ffeabf5ca65a428b9e191d85a199ab84">
+    <iscustomizable>1</iscustomizable>
+  </botcomponent_connectionreference>
+  <botcomponent_connectionreference botcomponentid.schemaname="copilots_header_91a5e.action.GCA-DeployPipeline-Batchdeployconnectors" connectionreferenceid.connectionreferencelogicalname="copilots_header_91a5e.shared_gca-20-2d-20deploy-20pipeline-5f251f982b189de9d-2501cc3075c9bd9f.2b47903cf48c4a4aa58a3d67d0da8fbf">
+    <iscustomizable>1</iscustomizable>
+  </botcomponent_connectionreference>
+  <botcomponent_connectionreference botcomponentid.schemaname="copilots_header_91a5e.action.GCA-DeployPipeline-Checkconnectorandappregistrationnames_VMz" connectionreferenceid.connectionreferencelogicalname="copilots_header_91a5e.shared_gca-20-2d-20deploy-20pipeline-5f251f982b189de9d-2501cc3075c9bd9f.2b47903cf48c4a4aa58a3d67d0da8fbf">
+    <iscustomizable>1</iscustomizable>
+  </botcomponent_connectionreference>
+  <botcomponent_connectionreference botcomponentid.schemaname="copilots_header_91a5e.action.GCA-DeployPipeline-Deployconnectorpipeline" connectionreferenceid.connectionreferencelogicalname="copilots_header_91a5e.shared_gca-20-2d-20deploy-20pipeline-5f251f982b189de9d-2501cc3075c9bd9f.2b47903cf48c4a4aa58a3d67d0da8fbf">
+    <iscustomizable>1</iscustomizable>
+  </botcomponent_connectionreference>
+  <botcomponent_connectionreference botcomponentid.schemaname="copilots_header_91a5e.action.GCA-DeployPipeline-ListPowerPlatformenvironments" connectionreferenceid.connectionreferencelogicalname="copilots_header_91a5e.shared_gca-20-2d-20deploy-20pipeline-5f251f982b189de9d-2501cc3075c9bd9f.2b47903cf48c4a4aa58a3d67d0da8fbf">
+    <iscustomizable>1</iscustomizable>
+  </botcomponent_connectionreference>
+  <botcomponent_connectionreference botcomponentid.schemaname="copilots_header_91a5e.action.GCA-GraphConnectorAgent-Batchgeneratecustomconnectors" connectionreferenceid.connectionreferencelogicalname="copilots_header_91a5e.shared_gca-20-2d-20graph-20connector-20agent-5f251f982-d68697514e08ff5e.0cf2330ef6d1424fae976ebd546eb0b8">
+    <iscustomizable>1</iscustomizable>
+  </botcomponent_connectionreference>
+  <botcomponent_connectionreference botcomponentid.schemaname="copilots_header_91a5e.action.GCA-GraphConnectorAgent-GeneratecustomconnectorSwagger" connectionreferenceid.connectionreferencelogicalname="copilots_header_91a5e.shared_gca-20-2d-20graph-20connector-20agent-5f251f982-d68697514e08ff5e.0cf2330ef6d1424fae976ebd546eb0b8">
+    <iscustomizable>1</iscustomizable>
+  </botcomponent_connectionreference>
+  <botcomponent_connectionreference botcomponentid.schemaname="copilots_header_91a5e.action.GCA-GraphConnectorAgent-Getsessioncontext" connectionreferenceid.connectionreferencelogicalname="copilots_header_91a5e.shared_gca-20-2d-20graph-20connector-20agent-5f251f982-d68697514e08ff5e.0cf2330ef6d1424fae976ebd546eb0b8">
+    <iscustomizable>1</iscustomizable>
+  </botcomponent_connectionreference>
+  <botcomponent_connectionreference botcomponentid.schemaname="copilots_header_91a5e.action.GCA-GraphConnectorAgent-Getsessionendpoints" connectionreferenceid.connectionreferencelogicalname="copilots_header_91a5e.shared_gca-20-2d-20graph-20connector-20agent-5f251f982-d68697514e08ff5e.0cf2330ef6d1424fae976ebd546eb0b8">
+    <iscustomizable>1</iscustomizable>
+  </botcomponent_connectionreference>
+  <botcomponent_connectionreference botcomponentid.schemaname="copilots_header_91a5e.action.GCA-GraphConnectorAgent-ListGraphAPIoperations" connectionreferenceid.connectionreferencelogicalname="copilots_header_91a5e.shared_gca-20-2d-20graph-20connector-20agent-5f251f982-d68697514e08ff5e.0cf2330ef6d1424fae976ebd546eb0b8">
+    <iscustomizable>1</iscustomizable>
+  </botcomponent_connectionreference>
+  <botcomponent_connectionreference botcomponentid.schemaname="copilots_header_91a5e.action.GCA-GraphConnectorAgent-Testbatchecho" connectionreferenceid.connectionreferencelogicalname="copilots_header_91a5e.shared_gca-20-2d-20graph-20connector-20agent-5f251f982-d68697514e08ff5e.0cf2330ef6d1424fae976ebd546eb0b8">
+    <iscustomizable>1</iscustomizable>
+  </botcomponent_connectionreference>
+  <botcomponent_connectionreference botcomponentid.schemaname="copilots_header_91a5e.action.GCA-GraphConnectorAgent-Testbatchparameterencoding" connectionreferenceid.connectionreferencelogicalname="copilots_header_91a5e.shared_gca-20-2d-20graph-20connector-20agent-5f251f982-d68697514e08ff5e.0cf2330ef6d1424fae976ebd546eb0b8">
+    <iscustomizable>1</iscustomizable>
+  </botcomponent_connectionreference>
+  <botcomponent_connectionreference botcomponentid.schemaname="copilots_header_91a5e.action.GraphConnectorMCPAgent-GraphConnectorMCPAgent" connectionreferenceid.connectionreferencelogicalname="copilots_header_91a5e.shared_graph-20connector-20mcp-20agent-5f251f982b189de-87abc2274a175636.a59c5c93b67241578f32416f39623bde">
+    <iscustomizable>1</iscustomizable>
+  </botcomponent_connectionreference>
+  <botcomponent_connectionreference botcomponentid.schemaname="copilots_header_91a5e.action.MicrosoftLearnDocsMCP-MicrosoftLearnDocsMCPServer" connectionreferenceid.connectionreferencelogicalname="copilots_header_91a5e.shared_microsoftlearndocsmcpserver.6a3f588225184c24a0a321041be01682">
+    <iscustomizable>1</iscustomizable>
+  </botcomponent_connectionreference>
+</botcomponent_connectionreferenceset>

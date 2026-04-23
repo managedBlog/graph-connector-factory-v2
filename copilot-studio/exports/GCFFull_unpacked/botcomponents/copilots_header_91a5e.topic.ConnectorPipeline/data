@@ -1,0 +1,1005 @@
+kind: AdaptiveDialog
+beginDialog:
+  kind: OnRecognizedIntent
+  id: main
+  intent:
+    displayName: Connector Pipeline
+    includeInOnSelectIntent: false
+    triggerQueries:
+      - Build connectors
+      - Connector pipeline
+      - Batch build
+      - Build all connectors
+      - Deploy all connectors
+      - Run the pipeline
+      - Generate and deploy
+      - Build a connector
+      - Create a connector
+      - Select operations
+      - Start building
+      - New connector
+
+  actions:
+    - kind: SetVariable
+      id: setVar_initConnectorCount
+      variable: Topic.connectorCount
+      value: =0
+
+    - kind: SetVariable
+      id: setVar_initHasDesignContext
+      variable: Topic.hasDesignContext
+      value: =false
+
+    - kind: SetVariable
+      id: setVar_userObjectId
+      variable: Topic.userObjectId
+      value: =System.User.Id
+
+    - kind: BeginDialog
+      id: beginDialog_sessionContext
+      input:
+        binding:
+          userObjectId: =Topic.userObjectId
+      dialog: copilots_header_91a5e.action.GCA-GraphConnectorAgent-Getsessioncontext
+      output:
+        binding:
+          appRegistrationStrategy: Topic.appRegistrationStrategy
+          authType: Topic.authType
+          baseName: Topic.baseName
+          baseNameSource: Topic.baseNameSource
+          connectorCount: Topic.connectorCount
+          connectorGroupsJson: Topic.connectorGroupsJson
+          endpointCount: Topic.endpointCount
+          endpointPath: Topic.endpointPath
+          endpoints: Topic.endpoints
+          environmentId: Topic.environmentId
+          group1Json: Topic.group1Json
+          group2Json: Topic.group2Json
+          group3Json: Topic.group3Json
+          hasDesignContext: Topic.hasDesignContext
+          latestEndpoint: Topic.latestEndpoint
+          maxOperations: Topic.maxOperations
+          notes: Topic.notes
+          targetVersion: Topic.targetVersion
+
+    - kind: ConditionGroup
+      id: check_hasContext
+      conditions:
+        - id: noContext
+          condition: =!Topic.hasDesignContext Or Topic.connectorCount < 1 Or IsBlank(Topic.group1Json)
+          actions:
+            - kind: SendActivity
+              id: sendMsg_noContext
+              activity: |-
+                No connector design context found. Please explore endpoints and set up your connector groups first using the research tools, then come back here.
+
+                Correlation key used (System.User.Id): **{Topic.userObjectId}**
+                If this is blank, sign in and retry so session context can be resolved deterministically.
+
+                Say **Build a connector** to use the step-by-step flow, or explore endpoints first.
+
+            - kind: EndDialog
+              id: end_noContext
+
+    - kind: SetVariable
+      id: setVar_cpConnCount
+      variable: Topic.cpConnCount
+      value: =Topic.connectorCount
+
+    - kind: SetVariable
+      id: setVar_cpGroup1Json
+      variable: Topic.cpGroup1Json
+      value: =Topic.group1Json
+
+    - kind: SetVariable
+      id: setVar_cpGroup2Json
+      variable: Topic.cpGroup2Json
+      value: =If(IsBlank(Topic.group2Json), Blank(), Topic.group2Json)
+
+    - kind: SetVariable
+      id: setVar_cpGroup3Json
+      variable: Topic.cpGroup3Json
+      value: =If(IsBlank(Topic.group3Json), Blank(), Topic.group3Json)
+
+    - kind: SetVariable
+      id: setVar_cpAuthType
+      variable: Topic.cpAuthType
+      value: =If(IsBlank(Topic.authType), "NoAuth", Topic.authType)
+
+    - kind: SetVariable
+      id: setVar_cpEnvId
+      variable: Topic.cpEnvId
+      value: =Topic.environmentId
+
+    - kind: SetVariable
+      id: setVar_cpVersion
+      variable: Topic.cpVersion
+      value: =If(IsBlank(Topic.targetVersion), "v1.0", Topic.targetVersion)
+
+    - kind: AdaptiveCardPrompt
+      id: adaptiveCard_selection
+      card: |-
+        ={
+          type: "AdaptiveCard",
+          '$schema': "https://adaptivecards.io/schemas/adaptive-card.json",
+          version: "1.5",
+          body: [
+            {
+              type: "TextBlock",
+              text: Concatenate("Connector Pipeline — ", Text(Topic.cpConnCount), " Group(s)"),
+              weight: "Bolder",
+              size: "Large",
+              wrap: true
+            },
+            {
+              type: "TextBlock",
+              text: "Review your connector groups below. Toggle operations on/off, click 🔍 for details.",
+              wrap: true,
+              isSubtle: true
+            },
+            {
+              type: "Input.ChoiceSet",
+              id: "selAuthType",
+              label: "Auth Type",
+              style: "compact",
+              value: Topic.cpAuthType,
+              choices: [
+                { title: "No Auth", value: "NoAuth" },
+                { title: "OAuth (AAD)", value: "OAuthAAD" },
+                { title: "Federated Identity", value: "FederatedIdentity" }
+              ]
+            },
+            {
+              type: "ColumnSet",
+              spacing: "Small",
+              separator: true,
+              selectAction: {
+                type: "Action.ToggleVisibility",
+                targetElements: ["d-g1-ops"]
+              },
+              columns: [
+                {
+                  type: "Column",
+                  width: "stretch",
+                  items: [
+                    {
+                      type: "TextBlock",
+                      text: Concatenate(Text(ParseJSON(Topic.cpGroup1Json).baseName), " — ", Text(CountRows(Table(ParseJSON(Topic.cpGroup1Json).operations))), " operations"),
+                      weight: "Bolder",
+                      color: "Accent",
+                      wrap: true
+                    }
+                  ]
+                },
+                {
+                  type: "Column",
+                  width: "auto",
+                  verticalContentAlignment: "Center",
+                  items: [
+                    {type: "Icon", name: "ChevronDown", size: "Small", color: "Accent"}
+                  ]
+                }
+              ]
+            },
+            {
+              type: "Container",
+              id: "d-g1-ops",
+              isVisible: false,
+              spacing: "None",
+              items: ForAll(
+                Table(ParseJSON(Topic.cpGroup1Json).operations),
+                {
+                  type: "Container",
+                  spacing: "None",
+                  items: [
+                    {
+                      type: "ColumnSet",
+                      columns: [
+                        { type: "Column", width: "auto", verticalContentAlignment: "Center", items: [{ type: "Input.Toggle", id: Concatenate("g1_", Substitute(Text(Value.operationId), ".", "_")), title: "", valueOn: Text(Value.operationId), valueOff: "", value: Text(Value.operationId) }] },
+                        { type: "Column", width: "auto", verticalContentAlignment: "Center", items: [{ type: "Badge", text: If(Upper(Text(Value.method)) = "DELETE", "DEL", Upper(Text(Value.method))), style: Switch(Upper(Text(Value.method)), "GET", "good", "POST", "accent", "DELETE", "attention", "PATCH", "warning", "default"), appearance: "tint", shape: "rounded" }] },
+                        { type: "Column", width: "stretch", verticalContentAlignment: "Center", items: [{ type: "TextBlock", text: Concatenate(Text(Value.operationId), " — ", Text(Value.summary)), wrap: true }] },
+                        { type: "Column", width: "auto", verticalContentAlignment: "Center", items: [{ type: "TextBlock", text: Coalesce(Text(Value.scope), " "), size: "Small", isSubtle: true }] },
+                        { type: "Column", width: "auto", verticalContentAlignment: "Center", selectAction: { type: "Action.ToggleVisibility", targetElements: [Concatenate("d-g1-", Substitute(Text(Value.operationId), ".", "-"), "-detail")] }, items: [{ type: "TextBlock", text: "🔍" }] }
+                      ]
+                    },
+                    {
+                      type: "Container",
+                      id: Concatenate("d-g1-", Substitute(Text(Value.operationId), ".", "-"), "-detail"),
+                      isVisible: false,
+                      style: "emphasis",
+                      items: [
+                        { type: "TextBlock", text: Concatenate("**Endpoint:** ", Upper(Text(Value.method)), " ", Coalesce(Text(Value.path), " ")), wrap: true },
+                        { type: "TextBlock", text: Concatenate("**Scope:** ", Coalesce(Text(Value.scope), " ")), wrap: true },
+                        { type: "TextBlock", text: Concatenate("**Params:** ", If(IsBlank(Text(Value.params)), "(none)", Text(Value.params))), wrap: true, size: "Small" },
+                        { type: "TextBlock", text: Concatenate("**Returns:** ", If(IsBlank(Text(Value.returns)), "N/A", Text(Value.returns))), wrap: true, size: "Small" }
+                      ]
+                    }
+                  ]
+                }
+              )
+            },
+            {
+              type: "ColumnSet",
+              spacing: "Small",
+              separator: true,
+              isVisible: !IsBlank(Topic.cpGroup2Json) And Topic.cpConnCount >= 2,
+              selectAction: {
+                type: "Action.ToggleVisibility",
+                targetElements: ["d-g2-ops"]
+              },
+              columns: [
+                {
+                  type: "Column",
+                  width: "stretch",
+                  items: [
+                    {
+                      type: "TextBlock",
+                      text: If(Topic.cpConnCount >= 2 And !IsBlank(Topic.cpGroup2Json), Concatenate(Text(ParseJSON(Topic.cpGroup2Json).baseName), " — ", Text(CountRows(Table(ParseJSON(Topic.cpGroup2Json).operations))), " operations"), " "),
+                      weight: "Bolder",
+                      color: "Accent",
+                      wrap: true
+                    }
+                  ]
+                },
+                {
+                  type: "Column",
+                  width: "auto",
+                  verticalContentAlignment: "Center",
+                  items: [
+                    {type: "Icon", name: "ChevronDown", size: "Small", color: "Accent"}
+                  ]
+                }
+              ]
+            },
+            {
+              type: "Container",
+              id: "d-g2-ops",
+              isVisible: false,
+              spacing: "None",
+              items: If(Topic.cpConnCount >= 2 And !IsBlank(Topic.cpGroup2Json),
+                ForAll(
+                  Table(ParseJSON(Topic.cpGroup2Json).operations),
+                  {
+                    type: "Container",
+                    spacing: "None",
+                    items: [
+                      {
+                        type: "ColumnSet",
+                        columns: [
+                          { type: "Column", width: "auto", verticalContentAlignment: "Center", items: [{ type: "Input.Toggle", id: Concatenate("g2_", Substitute(Text(Value.operationId), ".", "_")), title: "", valueOn: Text(Value.operationId), valueOff: "", value: Text(Value.operationId) }] },
+                          { type: "Column", width: "auto", verticalContentAlignment: "Center", items: [{ type: "Badge", text: If(Upper(Text(Value.method)) = "DELETE", "DEL", Upper(Text(Value.method))), style: Switch(Upper(Text(Value.method)), "GET", "good", "POST", "accent", "DELETE", "attention", "PATCH", "warning", "default"), appearance: "tint", shape: "rounded" }] },
+                          { type: "Column", width: "stretch", verticalContentAlignment: "Center", items: [{ type: "TextBlock", text: Concatenate(Text(Value.operationId), " — ", Text(Value.summary)), wrap: true }] },
+                          { type: "Column", width: "auto", verticalContentAlignment: "Center", items: [{ type: "TextBlock", text: Coalesce(Text(Value.scope), " "), size: "Small", isSubtle: true }] },
+                          { type: "Column", width: "auto", verticalContentAlignment: "Center", selectAction: { type: "Action.ToggleVisibility", targetElements: [Concatenate("d-g2-", Substitute(Text(Value.operationId), ".", "-"), "-detail")] }, items: [{ type: "TextBlock", text: "🔍" }] }
+                        ]
+                      },
+                      {
+                        type: "Container",
+                        id: Concatenate("d-g2-", Substitute(Text(Value.operationId), ".", "-"), "-detail"),
+                        isVisible: false,
+                        style: "emphasis",
+                        items: [
+                          { type: "TextBlock", text: Concatenate("**Endpoint:** ", Upper(Text(Value.method)), " ", Coalesce(Text(Value.path), " ")), wrap: true },
+                          { type: "TextBlock", text: Concatenate("**Scope:** ", Coalesce(Text(Value.scope), " ")), wrap: true },
+                          { type: "TextBlock", text: Concatenate("**Params:** ", If(IsBlank(Text(Value.params)), "(none)", Text(Value.params))), wrap: true, size: "Small" },
+                          { type: "TextBlock", text: Concatenate("**Returns:** ", If(IsBlank(Text(Value.returns)), "N/A", Text(Value.returns))), wrap: true, size: "Small" }
+                        ]
+                      }
+                    ]
+                  }
+                ),
+                Table({type: "TextBlock", text: " "})
+              )
+            },
+            {
+              type: "ColumnSet",
+              spacing: "Small",
+              separator: true,
+              isVisible: !IsBlank(Topic.cpGroup3Json) And Topic.cpConnCount >= 3,
+              selectAction: {
+                type: "Action.ToggleVisibility",
+                targetElements: ["d-g3-ops"]
+              },
+              columns: [
+                {
+                  type: "Column",
+                  width: "stretch",
+                  items: [
+                    {
+                      type: "TextBlock",
+                      text: If(Topic.cpConnCount >= 3 And !IsBlank(Topic.cpGroup3Json), Concatenate(Text(ParseJSON(Topic.cpGroup3Json).baseName), " — ", Text(CountRows(Table(ParseJSON(Topic.cpGroup3Json).operations))), " operations"), " "),
+                      weight: "Bolder",
+                      color: "Accent",
+                      wrap: true
+                    }
+                  ]
+                },
+                {
+                  type: "Column",
+                  width: "auto",
+                  verticalContentAlignment: "Center",
+                  items: [
+                    {type: "Icon", name: "ChevronDown", size: "Small", color: "Accent"}
+                  ]
+                }
+              ]
+            },
+            {
+              type: "Container",
+              id: "d-g3-ops",
+              isVisible: false,
+              spacing: "None",
+              items: If(Topic.cpConnCount >= 3 And !IsBlank(Topic.cpGroup3Json),
+                ForAll(
+                  Table(ParseJSON(Topic.cpGroup3Json).operations),
+                  {
+                    type: "Container",
+                    spacing: "None",
+                    items: [
+                      {
+                        type: "ColumnSet",
+                        columns: [
+                          { type: "Column", width: "auto", verticalContentAlignment: "Center", items: [{ type: "Input.Toggle", id: Concatenate("g3_", Substitute(Text(Value.operationId), ".", "_")), title: "", valueOn: Text(Value.operationId), valueOff: "", value: Text(Value.operationId) }] },
+                          { type: "Column", width: "auto", verticalContentAlignment: "Center", items: [{ type: "Badge", text: If(Upper(Text(Value.method)) = "DELETE", "DEL", Upper(Text(Value.method))), style: Switch(Upper(Text(Value.method)), "GET", "good", "POST", "accent", "DELETE", "attention", "PATCH", "warning", "default"), appearance: "tint", shape: "rounded" }] },
+                          { type: "Column", width: "stretch", verticalContentAlignment: "Center", items: [{ type: "TextBlock", text: Concatenate(Text(Value.operationId), " — ", Text(Value.summary)), wrap: true }] },
+                          { type: "Column", width: "auto", verticalContentAlignment: "Center", items: [{ type: "TextBlock", text: Coalesce(Text(Value.scope), " "), size: "Small", isSubtle: true }] },
+                          { type: "Column", width: "auto", verticalContentAlignment: "Center", selectAction: { type: "Action.ToggleVisibility", targetElements: [Concatenate("d-g3-", Substitute(Text(Value.operationId), ".", "-"), "-detail")] }, items: [{ type: "TextBlock", text: "🔍" }] }
+                        ]
+                      },
+                      {
+                        type: "Container",
+                        id: Concatenate("d-g3-", Substitute(Text(Value.operationId), ".", "-"), "-detail"),
+                        isVisible: false,
+                        style: "emphasis",
+                        items: [
+                          { type: "TextBlock", text: Concatenate("**Endpoint:** ", Upper(Text(Value.method)), " ", Coalesce(Text(Value.path), " ")), wrap: true },
+                          { type: "TextBlock", text: Concatenate("**Scope:** ", Coalesce(Text(Value.scope), " ")), wrap: true },
+                          { type: "TextBlock", text: Concatenate("**Params:** ", If(IsBlank(Text(Value.params)), "(none)", Text(Value.params))), wrap: true, size: "Small" },
+                          { type: "TextBlock", text: Concatenate("**Returns:** ", If(IsBlank(Text(Value.returns)), "N/A", Text(Value.returns))), wrap: true, size: "Small" }
+                        ]
+                      }
+                    ]
+                  }
+                ),
+                Table({type: "TextBlock", text: " "})
+              )
+            }
+          ],
+          actions: [
+            {
+              type: "Action.Submit",
+              title: "Continue to Confirmation"
+            }
+          ]
+        }
+      output:
+        binding:
+          actionSubmitId: Topic.selActionSubmitId
+          selAuthType: Topic.selAuthType
+
+      outputType:
+        properties:
+          actionSubmitId: String
+          selAuthType: String
+
+    - kind: SetVariable
+      id: setVar_selRawValue
+      variable: Topic.selRawValue
+      value: =JSON(System.Activity.Value)
+
+    - kind: SetVariable
+      id: setVar_cfmAuthType
+      variable: Topic.cfmAuthType
+      value: =If(IsBlank(Topic.selAuthType), Topic.cpAuthType, Topic.selAuthType)
+
+    - kind: SetVariable
+      id: setVar_cfmG1Name
+      variable: Topic.cfmG1Name
+      value: =Text(ParseJSON(Topic.cpGroup1Json).baseName)
+
+    - kind: SetVariable
+      id: setVar_cfmG1Ops
+      variable: Topic.cfmG1Ops
+      value: =If(IsBlank(Topic.selRawValue), Concat(ForAll(Table(ParseJSON(Topic.cpGroup1Json).operations), Text(Value.operationId)), Text(Value), ","), Concat(Filter(ForAll(Table(ParseJSON(Topic.cpGroup1Json).operations), {opId: Text(Value.operationId), searchFor: Concatenate("""g1_", Substitute(Text(Value.operationId), ".", "_"), """:""" , Text(Value.operationId), """")}), !IsBlank(Find(searchFor, Topic.selRawValue))), opId, ","))
+
+    - kind: SetVariable
+      id: setVar_cfmG2Name
+      variable: Topic.cfmG2Name
+      value: =If(Topic.cpConnCount >= 2 And !IsBlank(Topic.cpGroup2Json), Text(ParseJSON(Topic.cpGroup2Json).baseName), Blank())
+
+    - kind: SetVariable
+      id: setVar_cfmG2Ops
+      variable: Topic.cfmG2Ops
+      value: =If(Topic.cpConnCount < 2 Or IsBlank(Topic.cpGroup2Json), Blank(), If(IsBlank(Topic.selRawValue), Concat(ForAll(Table(ParseJSON(Topic.cpGroup2Json).operations), Text(Value.operationId)), Text(Value), ","), Concat(Filter(ForAll(Table(ParseJSON(Topic.cpGroup2Json).operations), {opId: Text(Value.operationId), searchFor: Concatenate("""g2_", Substitute(Text(Value.operationId), ".", "_"), """:""" , Text(Value.operationId), """")}), !IsBlank(Find(searchFor, Topic.selRawValue))), opId, ",")))
+
+    - kind: SetVariable
+      id: setVar_cfmG3Name
+      variable: Topic.cfmG3Name
+      value: =If(Topic.cpConnCount >= 3 And !IsBlank(Topic.cpGroup3Json), Text(ParseJSON(Topic.cpGroup3Json).baseName), Blank())
+
+    - kind: SetVariable
+      id: setVar_cfmG3Ops
+      variable: Topic.cfmG3Ops
+      value: =If(Topic.cpConnCount < 3 Or IsBlank(Topic.cpGroup3Json), Blank(), If(IsBlank(Topic.selRawValue), Concat(ForAll(Table(ParseJSON(Topic.cpGroup3Json).operations), Text(Value.operationId)), Text(Value), ","), Concat(Filter(ForAll(Table(ParseJSON(Topic.cpGroup3Json).operations), {opId: Text(Value.operationId), searchFor: Concatenate("""g3_", Substitute(Text(Value.operationId), ".", "_"), """:""" , Text(Value.operationId), """")}), !IsBlank(Find(searchFor, Topic.selRawValue))), opId, ",")))
+
+    - kind: SetVariable
+      id: setVar_cfmG1OpCount
+      variable: Topic.cfmG1OpCount
+      value: =If(IsBlank(Topic.cfmG1Ops), 0, CountRows(Split(Topic.cfmG1Ops, ",")))
+
+    - kind: SetVariable
+      id: setVar_cfmG2OpCount
+      variable: Topic.cfmG2OpCount
+      value: =If(IsBlank(Topic.cfmG2Ops), 0, CountRows(Split(Topic.cfmG2Ops, ",")))
+
+    - kind: SetVariable
+      id: setVar_cfmG3OpCount
+      variable: Topic.cfmG3OpCount
+      value: =If(IsBlank(Topic.cfmG3Ops), 0, CountRows(Split(Topic.cfmG3Ops, ",")))
+
+    - kind: SetVariable
+      id: setVar_cfmTotalOps
+      variable: Topic.cfmTotalOps
+      value: =Topic.cfmG1OpCount + Topic.cfmG2OpCount + Topic.cfmG3OpCount
+
+    - kind: BeginDialog
+      id: beginDialog_getEnvironments
+      dialog: copilots_header_91a5e.action.GCA-DeployPipeline-ListPowerPlatformenvironments
+      output:
+        binding:
+          environments: Topic.environments
+
+    - kind: SetVariable
+      id: setVar_hasEnvOptions
+      variable: Topic.hasEnvOptions
+      value: =!IsBlank(Topic.environments) And CountRows(Topic.environments) > 0
+
+    - kind: ConditionGroup
+      id: check_envListAvailable
+      conditions:
+        - id: envListUnavailable
+          condition: =!Topic.hasEnvOptions
+          actions:
+            - kind: SendActivity
+              id: sendMsg_envListUnavailable
+              activity: |-
+                ❌ **Environment listing failed**.
+
+                This pipeline requires the deploy server to list environments successfully before continuing.
+                Verify Connector Deploy Agent appOnly credential prerequisites, then retry.
+
+            - kind: EndDialog
+              id: end_envListUnavailable
+
+    - kind: AdaptiveCardPrompt
+      id: adaptiveCard_confirmation
+      card: |-
+        ={
+          type: "AdaptiveCard",
+          '$schema': "https://adaptivecards.io/schemas/adaptive-card.json",
+          version: "1.5",
+          body: [
+            {
+              type: "TextBlock",
+              text: "Confirm Connector Pipeline",
+              weight: "Bolder",
+              size: "Large",
+              wrap: true
+            },
+            {
+              type: "TextBlock",
+              text: Concatenate(Text(Topic.cpConnCount), " connector(s), ", Text(Topic.cfmTotalOps), " total operations"),
+              wrap: true,
+              isSubtle: true
+            },
+            {
+              type: "Input.Text",
+              id: "cfmG1Name",
+              label: Concatenate("Connector 1 (", Text(Topic.cfmG1OpCount), " ops)"),
+              value: Topic.cfmG1Name
+            },
+            If(Topic.cpConnCount >= 2 And !IsBlank(Topic.cfmG2Name),
+              {
+                type: "Input.Text",
+                id: "cfmG2Name",
+                label: Concatenate("Connector 2 (", Text(Topic.cfmG2OpCount), " ops)"),
+                value: Topic.cfmG2Name
+              }
+            ),
+            If(Topic.cpConnCount >= 3 And !IsBlank(Topic.cfmG3Name),
+              {
+                type: "Input.Text",
+                id: "cfmG3Name",
+                label: Concatenate("Connector 3 (", Text(Topic.cfmG3OpCount), " ops)"),
+                value: Topic.cfmG3Name
+              }
+            ),
+            {
+              type: "Input.ChoiceSet",
+              id: "envId",
+              label: "Target Environment",
+              style: "compact",
+              value: If(IsBlank(Topic.cpEnvId), "", Topic.cpEnvId),
+              choices: ForAll(Topic.environments, {title: displayName, value: id})
+            },
+            {
+              type: "Input.ChoiceSet",
+              id: "cfmNextAction",
+              label: "Action",
+              style: "expanded",
+              value: "generateDeploy",
+              choices: [
+                { title: "⚡ Generate & Deploy All", value: "generateDeploy" },
+                { title: "📦 Generate Only", value: "generateOnly" },
+                { title: "↩ Back", value: "back" },
+                { title: "✖ Cancel", value: "cancel" }
+              ]
+            }
+          ],
+          actions: [
+            {
+              type: "Action.Submit",
+              title: "Execute Pipeline"
+            }
+          ]
+        }
+      output:
+        binding:
+          actionSubmitId: Topic.cfmActionSubmitId
+          cfmG1Name: Topic.cfmFinalG1Name
+          cfmG2Name: Topic.cfmFinalG2Name
+          cfmG3Name: Topic.cfmFinalG3Name
+          cfmNextAction: Topic.cfmNextAction
+          envId: Topic.cfmEnvId
+
+      outputType:
+        properties:
+          actionSubmitId: String
+          cfmG1Name: String
+          cfmG2Name: String
+          cfmG3Name: String
+          cfmNextAction: String
+          envId: String
+
+    - kind: SetVariable
+      id: setVar_cfmAuthTypeFallback
+      variable: Topic.cfmAuthType
+      value: =If(IsBlank(Topic.cfmAuthType), Topic.cpAuthType, Topic.cfmAuthType)
+
+    - kind: SetVariable
+      id: setVar_cfmEnvFallback
+      variable: Topic.cfmEnvId
+      value: =If(IsBlank(Topic.cfmEnvId) And Topic.hasEnvOptions, Topic.cpEnvId, Topic.cfmEnvId)
+
+    - kind: ConditionGroup
+      id: check_cfmEnvRequired
+      conditions:
+        - id: missingEnvSelection
+          condition: =IsBlank(Topic.cfmEnvId)
+          actions:
+            - kind: SendActivity
+              id: sendMsg_missingEnvSelection
+              activity: Please select a target environment before running the pipeline.
+
+            - kind: EndDialog
+              id: end_missingEnvSelection
+
+    - kind: ConditionGroup
+      id: check_cfmAction
+      conditions:
+        - id: actionBack
+          condition: =Topic.cfmNextAction = "back"
+          actions:
+            - kind: SendActivity
+              id: sendMsg_back
+              activity: Going back... Say **Build connectors** to restart the pipeline.
+
+            - kind: EndDialog
+              id: end_back
+
+        - id: actionCancel
+          condition: =Topic.cfmNextAction = "cancel"
+          actions:
+            - kind: SendActivity
+              id: sendMsg_cancel
+              activity: Cancelled. No connectors were generated.
+
+            - kind: EndDialog
+              id: end_cancel
+
+    - kind: SetVariable
+      id: setVar_finalG1Name
+      variable: Topic.cfmG1Name
+      value: =If(IsBlank(Topic.cfmFinalG1Name), Topic.cfmG1Name, Topic.cfmFinalG1Name)
+
+    - kind: SetVariable
+      id: setVar_finalG2Name
+      variable: Topic.cfmG2Name
+      value: =If(IsBlank(Topic.cfmFinalG2Name), Topic.cfmG2Name, Topic.cfmFinalG2Name)
+
+    - kind: SetVariable
+      id: setVar_finalG3Name
+      variable: Topic.cfmG3Name
+      value: =If(IsBlank(Topic.cfmFinalG3Name), Topic.cfmG3Name, Topic.cfmFinalG3Name)
+
+    - kind: SetVariable
+      id: setVar_namecheckNames
+      variable: Topic.namecheckNames
+      value: =If(Topic.cpConnCount = 1, Topic.cfmG1Name, If(Topic.cpConnCount = 2, Concatenate(Topic.cfmG1Name, ",", Topic.cfmG2Name), Concatenate(Topic.cfmG1Name, ",", Topic.cfmG2Name, ",", Topic.cfmG3Name)))
+
+    - kind: BeginDialog
+      id: beginDialog_namecheck
+      input:
+        binding:
+          environmentId: =Topic.cfmEnvId
+          names: =Topic.namecheckNames
+
+      dialog: copilots_header_91a5e.action.GCA-DeployPipeline-Checkconnectorandappregistrationnames_VMz
+      output:
+        binding:
+          conflictCount: Topic.namecheckConflictCount
+          hasConflicts: Topic.namecheckHasConflicts
+          resultsJson: Topic.namecheckResultsJson
+
+    - kind: ConditionGroup
+      id: check_nameConflicts
+      conditions:
+        - id: hasConflicts
+          condition: =Boolean(Topic.namecheckHasConflicts)
+          actions:
+            - kind: SetVariable
+              id: setVar_ncSuggestG1
+              variable: Topic.ncSuggestG1
+              value: =If(Boolean(Index(Table(ParseJSON(Topic.namecheckResultsJson)), 1).Value.connectorConflict), Text(Index(Table(ParseJSON(Topic.namecheckResultsJson)), 1).Value.suggestedName), Topic.cfmG1Name)
+
+            - kind: SetVariable
+              id: setVar_ncSuggestG2
+              variable: Topic.ncSuggestG2
+              value: =If(Topic.cpConnCount >= 2, If(Boolean(Index(Table(ParseJSON(Topic.namecheckResultsJson)), 2).Value.connectorConflict), Text(Index(Table(ParseJSON(Topic.namecheckResultsJson)), 2).Value.suggestedName), Topic.cfmG2Name), Blank())
+
+            - kind: SetVariable
+              id: setVar_ncSuggestG3
+              variable: Topic.ncSuggestG3
+              value: =If(Topic.cpConnCount >= 3, If(Boolean(Index(Table(ParseJSON(Topic.namecheckResultsJson)), 3).Value.connectorConflict), Text(Index(Table(ParseJSON(Topic.namecheckResultsJson)), 3).Value.suggestedName), Topic.cfmG3Name), Blank())
+
+            - kind: AdaptiveCardPrompt
+              id: adaptiveCard_nameConflict
+              card: |-
+                ={
+                  type: "AdaptiveCard",
+                  '$schema': "https://adaptivecards.io/schemas/adaptive-card.json",
+                  version: "1.5",
+                  body: [
+                    {
+                      type: "TextBlock",
+                      text: Concatenate("⚠️ Name Conflict — ", Text(Topic.namecheckConflictCount), " conflict(s) detected"),
+                      weight: "Bolder",
+                      size: "Medium",
+                      color: "Warning",
+                      wrap: true
+                    },
+                    {
+                      type: "TextBlock",
+                      text: "One or more names already exist. Suggested alternatives are pre-filled below — edit if needed, then re-check.",
+                      wrap: true,
+                      isSubtle: true
+                    },
+                    {
+                      type: "Input.Text",
+                      id: "fixG1Name",
+                      label: Concatenate("Connector 1 (", Text(Topic.cfmG1OpCount), " ops)"),
+                      value: Topic.ncSuggestG1
+                    },
+                    If(Topic.cpConnCount >= 2 And !IsBlank(Topic.cfmG2Name),
+                      {
+                        type: "Input.Text",
+                        id: "fixG2Name",
+                        label: Concatenate("Connector 2 (", Text(Topic.cfmG2OpCount), " ops)"),
+                        value: Topic.ncSuggestG2
+                      }
+                    ),
+                    If(Topic.cpConnCount >= 3 And !IsBlank(Topic.cfmG3Name),
+                      {
+                        type: "Input.Text",
+                        id: "fixG3Name",
+                        label: Concatenate("Connector 3 (", Text(Topic.cfmG3OpCount), " ops)"),
+                        value: Topic.ncSuggestG3
+                      }
+                    )
+                  ],
+                  actions: [
+                    {
+                      type: "Action.Submit",
+                      title: "Re-check Names"
+                    }
+                  ]
+                }
+              output:
+                binding:
+                  fixG1Name: Topic.fixG1Name
+                  fixG2Name: Topic.fixG2Name
+                  fixG3Name: Topic.fixG3Name
+
+              outputType:
+                properties:
+                  fixG1Name: String
+                  fixG2Name: String
+                  fixG3Name: String
+
+            - kind: SetVariable
+              id: setVar_fixedG1Name
+              variable: Topic.cfmG1Name
+              value: =If(IsBlank(Topic.fixG1Name), Topic.cfmG1Name, Topic.fixG1Name)
+
+            - kind: SetVariable
+              id: setVar_fixedG2Name
+              variable: Topic.cfmG2Name
+              value: =If(IsBlank(Topic.fixG2Name), Topic.cfmG2Name, Topic.fixG2Name)
+
+            - kind: SetVariable
+              id: setVar_fixedG3Name
+              variable: Topic.cfmG3Name
+              value: =If(IsBlank(Topic.fixG3Name), Topic.cfmG3Name, Topic.fixG3Name)
+
+            - kind: SetVariable
+              id: setVar_fixedNamecheckNames
+              variable: Topic.namecheckNames
+              value: =If(Topic.cpConnCount = 1, Topic.cfmG1Name, If(Topic.cpConnCount = 2, Concatenate(Topic.cfmG1Name, ",", Topic.cfmG2Name), Concatenate(Topic.cfmG1Name, ",", Topic.cfmG2Name, ",", Topic.cfmG3Name)))
+
+            - kind: BeginDialog
+              id: beginDialog_namecheck2
+              input:
+                binding:
+                  environmentId: =Topic.cfmEnvId
+                  names: =Topic.namecheckNames
+
+              dialog: copilots_header_91a5e.action.GCA-DeployPipeline-Checkconnectorandappregistrationnames_VMz
+              output:
+                binding:
+                  conflictCount: Topic.namecheckConflictCount
+                  hasConflicts: Topic.namecheckHasConflicts
+                  resultsJson: Topic.namecheckResultsJson
+
+            - kind: ConditionGroup
+              id: check_nameConflicts2
+              conditions:
+                - id: stillHasConflicts
+                  condition: =Boolean(Topic.namecheckHasConflicts)
+                  actions:
+                    - kind: SendActivity
+                      id: sendMsg_stillConflicts
+                      activity: |-
+                        ❌ **Names still conflict** ({Topic.namecheckConflictCount} conflict(s)).
+
+                        {Topic.namecheckResultsJson}
+
+                        Please restart the pipeline with different names. Say **Build connectors** to try again.
+
+                    - kind: EndDialog
+                      id: end_stillConflicts
+
+    - kind: SetVariable
+      id: setVar_batchGenGroupsJson
+      variable: Topic.batchGenGroupsJson
+      value: =If(Topic.cpConnCount = 1, Concatenate("[{""baseName"":""", Topic.cfmG1Name, """,""ops"":""", Topic.cfmG1Ops, """}]"), If(Topic.cpConnCount = 2, Concatenate("[{""baseName"":""", Topic.cfmG1Name, """,""ops"":""", Topic.cfmG1Ops, """},{""baseName"":""", Topic.cfmG2Name, """,""ops"":""", Topic.cfmG2Ops, """}]"), Concatenate("[{""baseName"":""", Topic.cfmG1Name, """,""ops"":""", Topic.cfmG1Ops, """},{""baseName"":""", Topic.cfmG2Name, """,""ops"":""", Topic.cfmG2Ops, """},{""baseName"":""", Topic.cfmG3Name, """,""ops"":""", Topic.cfmG3Ops, """}]")))
+
+    - kind: SendActivity
+      id: sendMsg_genStart
+      activity: |-
+        ⚡ **Starting batch generation** for {Topic.cpConnCount} connector(s)...
+
+        This may take a moment while each connector Swagger is generated and published.
+
+    - kind: BeginDialog
+      id: beginDialog_batchGenerate
+      input:
+        binding:
+          groupsJson: =Topic.batchGenGroupsJson
+          version: =Topic.cpVersion
+
+      dialog: copilots_header_91a5e.action.GCA-GraphConnectorAgent-Batchgeneratecustomconnectors
+      output:
+        binding:
+          groupCount: Topic.genGroupCount
+          resultsJson: Topic.genResultsJson
+          successCount: Topic.genSuccessCount
+
+    - kind: ParseValue
+      id: parseValue_genResults
+      variable: Topic.genResults
+      valueType:
+        kind: Table
+        properties:
+          baseName: String
+          error: String
+          gistUrl: String
+          status: String
+          swaggerRawUrl: String
+          totalOperations: Number
+          warnings: String
+
+      value: =Topic.genResultsJson
+
+    - kind: SendActivity
+      id: sendMsg_genSummary
+      activity:
+        attachments:
+          - kind: AdaptiveCardTemplate
+            cardContent: |-
+              ={
+                type: "AdaptiveCard",
+                '$schema': "https://adaptivecards.io/schemas/adaptive-card.json",
+                version: "1.5",
+                body: [
+                  {
+                    type: "TextBlock",
+                    text: Concatenate("Generation Complete — ", Text(Topic.genSuccessCount), "/", Text(Topic.genGroupCount), " succeeded"),
+                    weight: "Bolder",
+                    size: "Medium",
+                    color: If(Topic.genSuccessCount = Topic.genGroupCount, "Good", "Warning")
+                  },
+                  {
+                    type: "FactSet",
+                    facts: ForAll(Topic.genResults, {title: baseName, value: Concatenate(status, " — ", Text(totalOperations), " ops", If(IsBlank(gistUrl), "", Concatenate(" — ", gistUrl)))})
+                  }
+                ]
+              }
+
+    - kind: ConditionGroup
+      id: check_deployNeeded
+      conditions:
+        - id: needsDeploy
+          condition: =Topic.cfmNextAction = "generateDeploy" && Topic.genSuccessCount > 0
+          actions:
+            - kind: SetVariable
+              id: setVar_gen1SwaggerUrl
+              variable: Topic.gen1SwaggerUrl
+              value: =If(Index(Topic.genResults, 1).status = "success", Text(Index(Topic.genResults, 1).swaggerRawUrl), Blank())
+
+            - kind: SetVariable
+              id: setVar_gen2SwaggerUrl
+              variable: Topic.gen2SwaggerUrl
+              value: =If(Topic.cpConnCount >= 2 And Index(Topic.genResults, 2).status = "success", Text(Index(Topic.genResults, 2).swaggerRawUrl), Blank())
+
+            - kind: SetVariable
+              id: setVar_gen3SwaggerUrl
+              variable: Topic.gen3SwaggerUrl
+              value: =If(Topic.cpConnCount >= 3 And Index(Topic.genResults, 3).status = "success", Text(Index(Topic.genResults, 3).swaggerRawUrl), Blank())
+
+            - kind: SetVariable
+              id: setVar_initDep1Status
+              variable: Topic.dep1Status
+              value: ="skipped"
+
+            - kind: SetVariable
+              id: setVar_initDep2Status
+              variable: Topic.dep2Status
+              value: ="skipped"
+
+            - kind: SetVariable
+              id: setVar_initDep3Status
+              variable: Topic.dep3Status
+              value: ="skipped"
+
+            - kind: SendActivity
+              id: sendMsg_depStart
+              activity: "🚀 **Starting deployment** to environment **{Topic.cfmEnvId}**..."
+
+            - kind: SendActivity
+              id: sendMsg_dep1Start
+              activity: "⏳ Deploying connector 1: **{Topic.cfmG1Name}**..."
+
+            - kind: BeginDialog
+              id: beginDialog_dep1
+              input:
+                binding:
+                  baseName: =Topic.cfmG1Name
+                  environmentId: =Topic.cfmEnvId
+                  authType: =If(IsBlank(Topic.cfmAuthType), Blank(), Topic.cfmAuthType)
+                  swaggerUrl: =Topic.gen1SwaggerUrl
+
+              dialog: copilots_header_91a5e.action.GCA-DeployPipeline-Deployconnectorpipeline
+              output:
+                binding:
+                  status: Topic.dep1Status
+                  summary: Topic.dep1Summary
+                  connectorDisplayName: Topic.dep1ConnName
+
+            - kind: SendActivity
+              id: sendMsg_dep1Result
+              activity: "Connector 1 ({Topic.cfmG1Name}) — {Topic.dep1Status}"
+
+            - kind: ConditionGroup
+              id: check_dep2
+              conditions:
+                - id: dep2Needed
+                  condition: =Topic.cpConnCount >= 2 And !IsBlank(Topic.gen2SwaggerUrl)
+                  actions:
+                    - kind: SendActivity
+                      id: sendMsg_dep2Start
+                      activity: "⏳ Deploying connector 2: **{Topic.cfmG2Name}**..."
+
+                    - kind: BeginDialog
+                      id: beginDialog_dep2
+                      input:
+                        binding:
+                          baseName: =Topic.cfmG2Name
+                          environmentId: =Topic.cfmEnvId
+                          authType: =If(IsBlank(Topic.cfmAuthType), Blank(), Topic.cfmAuthType)
+                          swaggerUrl: =Topic.gen2SwaggerUrl
+
+                      dialog: copilots_header_91a5e.action.GCA-DeployPipeline-Deployconnectorpipeline
+                      output:
+                        binding:
+                          status: Topic.dep2Status
+                          summary: Topic.dep2Summary
+                          connectorDisplayName: Topic.dep2ConnName
+
+                    - kind: SendActivity
+                      id: sendMsg_dep2Result
+                      activity: "Connector 2 ({Topic.cfmG2Name}) — {Topic.dep2Status}"
+
+            - kind: ConditionGroup
+              id: check_dep3
+              conditions:
+                - id: dep3Needed
+                  condition: =Topic.cpConnCount >= 3 And !IsBlank(Topic.gen3SwaggerUrl)
+                  actions:
+                    - kind: SendActivity
+                      id: sendMsg_dep3Start
+                      activity: "⏳ Deploying connector 3: **{Topic.cfmG3Name}**..."
+
+                    - kind: BeginDialog
+                      id: beginDialog_dep3
+                      input:
+                        binding:
+                          baseName: =Topic.cfmG3Name
+                          environmentId: =Topic.cfmEnvId
+                          authType: =If(IsBlank(Topic.cfmAuthType), Blank(), Topic.cfmAuthType)
+                          swaggerUrl: =Topic.gen3SwaggerUrl
+
+                      dialog: copilots_header_91a5e.action.GCA-DeployPipeline-Deployconnectorpipeline
+                      output:
+                        binding:
+                          status: Topic.dep3Status
+                          summary: Topic.dep3Summary
+                          connectorDisplayName: Topic.dep3ConnName
+
+                    - kind: SendActivity
+                      id: sendMsg_dep3Result
+                      activity: "Connector 3 ({Topic.cfmG3Name}) — {Topic.dep3Status}"
+
+            - kind: SetVariable
+              id: setVar_depSuccessCount
+              variable: Topic.depSuccessCount
+              value: =If(Topic.dep1Status = "success", 1, 0) + If(Topic.dep2Status = "success", 1, 0) + If(Topic.dep3Status = "success", 1, 0)
+
+            - kind: SendActivity
+              id: sendMsg_depDone
+              activity: "**Pipeline complete!** {Topic.depSuccessCount} of {Topic.genSuccessCount} connector(s) deployed to environment {Topic.cfmEnvId}."
+
+      elseActions:
+        - kind: ConditionGroup
+          id: check_genOnlyOrFailed
+          conditions:
+            - id: genOnlySuccess
+              condition: =Topic.cfmNextAction = "generateOnly"
+              actions:
+                - kind: SendActivity
+                  id: sendMsg_genOnly
+                  activity: |-
+                    **Generation Only** — connectors were generated but not deployed.
+
+                    Use the Gist URLs from the summary above to import manually, or run the pipeline again with "Generate & Deploy All".
+
+            - id: genFailedAll
+              condition: =Topic.genSuccessCount = 0
+              actions:
+                - kind: SendActivity
+                  id: sendMsg_genFailed
+                  activity: ❌ **All generations failed.** Check the results above for error details and try again.
+
+    - kind: EndDialog
+      id: end_pipeline
+
+inputType: {}

@@ -1,0 +1,11 @@
+<botcomponent schemaname="copilots_header_91a5e.action.copilots_header_91a5e.topic.MCP-Server-for-Enterprise">
+  <componenttype>9</componenttype>
+  <description>A Model Context Protocol (MCP) server that enables AI assistants to securely interact with Microsoft Graph API for enterprise identity and access management operations.</description>
+  <iscustomizable>0</iscustomizable>
+  <name>MCP-Server-for-Enterprise</name>
+  <parentbotid>
+    <schemaname>copilots_header_91a5e</schemaname>
+  </parentbotid>
+  <statecode>0</statecode>
+  <statuscode>1</statuscode>
+</botcomponent>

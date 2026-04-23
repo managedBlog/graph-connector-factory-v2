@@ -1,0 +1,9 @@
+﻿connectionReferences:
+  - connectionReferenceLogicalName: copilots_header_91a5e.shared_cr863-5fmcp-2dserver-2dfor-2denterprise-5f251f982b189de9d2.ffeabf5ca65a428b9e191d85a199ab84
+    connectorId: /providers/Microsoft.PowerApps/apis/shared_cr863-5fmcp-2dserver-2dfor-2denterprise-5f251f982b189de9d2
+  - connectionReferenceLogicalName: copilots_header_91a5e.shared_gca-20-2d-20deploy-20pipeline-5f251f982b189de9d-2501cc3075c9bd9f.2b47903cf48c4a4aa58a3d67d0da8fbf
+    connectorId: /providers/Microsoft.PowerApps/apis/shared_gca-20-2d-20deploy-20pipeline-5f251f982b189de9d-2501cc3075c9bd9f
+  - connectionReferenceLogicalName: copilots_header_91a5e.shared_graph-20connector-20mcp-20agent-5f251f982b189de-87abc2274a175636.a59c5c93b67241578f32416f39623bde
+    connectorId: /providers/Microsoft.PowerApps/apis/shared_graph-20connector-20mcp-20agent-5f251f982b189de-87abc2274a175636
+  - connectionReferenceLogicalName: copilots_header_91a5e.shared_microsoftlearndocsmcpserver.6a3f588225184c24a0a321041be01682
+    connectorId: /providers/Microsoft.PowerApps/apis/shared_microsoftlearndocsmcpserver

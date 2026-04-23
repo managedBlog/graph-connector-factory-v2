@@ -1,0 +1,11 @@
+<botcomponent schemaname="copilots_header_91a5e.action.GCA-GraphConnectorAgent-GeneratecustomconnectorSwagger">
+  <componenttype>9</componenttype>
+  <description>GCA-GraphConnectorAgent-GeneratecustomconnectorSwagger</description>
+  <iscustomizable>0</iscustomizable>
+  <name>GCA - Graph Connector Agent - Generate custom connector Swagger</name>
+  <parentbotid>
+    <schemaname>copilots_header_91a5e</schemaname>
+  </parentbotid>
+  <statecode>0</statecode>
+  <statuscode>1</statuscode>
+</botcomponent>

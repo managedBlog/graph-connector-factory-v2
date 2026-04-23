@@ -15,7 +15,7 @@
     },
     {
       "id": "gcf-mcp-agent",
-      "displayName": "Graph Connector Factory - MCP Agent",
+      "displayName": "GCF MCP Agent",
       "swaggerFile": "gcf-mcp-agent.swagger.json",
       "apiPropertiesFile": "gcf-mcp-agent.apiProperties.json",
       "tokens": {

@@ -1,0 +1,22 @@
+mcs.metadata:
+  componentName: GCA - Graph Connector Agent - Get session endpoints
+  description: GCA-GraphConnectorAgent-Getsessionendpoints
+kind: TaskDialog
+modelDisplayName: Get session endpoints
+modelDescription: Returns the list of Microsoft Graph API endpoints explored via graph_listOperations during the current MCP session. Used by the OperationSelection topic to skip the endpoint Question node when the AI has already researched endpoints.
+outputs:
+  - propertyName: endpointCount
+
+  - propertyName: endpoints
+
+  - propertyName: latestEndpoint
+
+action:
+  kind: InvokeConnectorTaskAction
+  connectionReference: copilots_header_91a5e.shared_gca-20-2d-20deploy-20pipeline-5f251f982b189de9d-2501cc3075c9bd9f.2b47903cf48c4a4aa58a3d67d0da8fbf
+  connectionProperties:
+    mode: Invoker
+
+  operationId: graph_getSessionEndpoints
+
+outputMode: All

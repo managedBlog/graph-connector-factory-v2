@@ -1,0 +1,21 @@
+mcs.metadata:
+  componentName: GCA - Deploy Pipeline - Check connector and app registration names
+kind: TaskDialog
+modelDisplayName: Check connector and app registration names
+modelDescription: Pre-flight name conflict check. Verifies that proposed connector base names do not conflict with existing connectors in the target Power Platform environment or existing app registrations in Entra ID. Returns per-name conflict status with suggested alternatives. Requires authentication to query downstream CDA and ARA agents.
+outputs:
+  - propertyName: conflictCount
+
+  - propertyName: hasConflicts
+
+  - propertyName: resultsJson
+
+action:
+  kind: InvokeConnectorTaskAction
+  connectionReference: copilots_header_91a5e.shared_gca-20-2d-20deploy-20pipeline-5f251f982b189de9d-2501cc3075c9bd9f.2b47903cf48c4a4aa58a3d67d0da8fbf
+  connectionProperties:
+    mode: Invoker
+
+  operationId: graph_namecheck
+
+outputMode: All

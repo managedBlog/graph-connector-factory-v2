@@ -1,0 +1,14 @@
+mcs.metadata:
+  componentName: Microsoft Learn Docs MCP - Microsoft Learn Docs MCP Server
+kind: TaskDialog
+modelDisplayName: Microsoft Learn Docs MCP Server
+modelDescription: MCP Server to search Microsoft Learn content
+action:
+  kind: InvokeExternalAgentTaskAction
+  connectionReference: copilots_header_91a5e.shared_microsoftlearndocsmcpserver.6a3f588225184c24a0a321041be01682
+  connectionProperties:
+    mode: Invoker
+
+  operationDetails:
+    kind: ModelContextProtocolMetadata
+    operationId: microsoft_docs_search

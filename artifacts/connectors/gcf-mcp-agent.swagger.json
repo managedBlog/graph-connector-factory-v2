@@ -1,8 +1,8 @@
 {
   "swagger": "2.0",
   "info": {
-    "title": "Graph Connector Factory - MCP Agent",
-    "description": "MCP (Model Context Protocol) agent connector for Graph Connector Factory. Enables AI-powered conversational interaction for researching Microsoft Graph API endpoints and generating custom connectors. Uses the MCP Streamable protocol.",
+    "title": "GCF MCP Agent",
+    "description": "MCP agent connector for Graph Connector Factory v2. Enables AI-powered research of Microsoft Graph API endpoints and custom connector generation via MCP Streamable protocol.",
     "version": "1.0",
     "contact": {
       "name": "Graph Connector Factory",
@@ -14,57 +14,33 @@
   "schemes": [
     "https"
   ],
-  "consumes": [
-    "application/json"
-  ],
-  "produces": [
-    "application/json"
-  ],
   "paths": {
     "/mcp": {
       "post": {
-        "operationId": "mcpPost",
-        "summary": "MCP Agent Endpoint",
-        "description": "Send a JSON-RPC 2.0 message to the MCP agent. Supports tool calls, prompts, and resource access via the MCP Streamable protocol.",
+        "operationId": "InvokeServer",
+        "summary": "GCF MCP Agent",
+        "description": "MCP agent connector for Graph Connector Factory v2. Enables AI-powered research of Microsoft Graph API endpoints and custom connector generation via MCP Streamable protocol.",
         "x-ms-agentic-protocol": "mcp-streamable-1.0",
-        "parameters": [
-          {
-            "name": "body",
-            "in": "body",
-            "required": true,
-            "schema": {
-              "type": "object"
-            }
-          }
-        ],
         "responses": {
           "200": {
-            "description": "MCP response",
-            "schema": {
-              "type": "object"
-            }
+            "description": "Immediate Response"
           }
         }
       }
     }
   },
-  "definitions": {},
   "securityDefinitions": {
     "oauth2-auth": {
       "type": "oauth2",
       "flow": "accessCode",
-      "tokenUrl": "https://login.microsoftonline.com/common/oauth2/v2.0/token",
-      "authorizationUrl": "https://login.microsoftonline.com/common/oauth2/v2.0/authorize",
-      "scopes": {
-        "__OAUTH_SCOPE__": "__OAUTH_SCOPE__"
-      }
+      "tokenUrl": "https://login.windows.net/common/oauth2/authorize",
+      "authorizationUrl": "https://login.microsoftonline.com/common/oauth2/authorize",
+      "scopes": {}
     }
   },
   "security": [
     {
-      "oauth2-auth": [
-        "__OAUTH_SCOPE__"
-      ]
+      "oauth2-auth": []
     }
   ]
 }

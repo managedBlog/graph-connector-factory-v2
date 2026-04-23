@@ -1,0 +1,64 @@
+mcs.metadata:
+  componentName: Conversation Start
+  description: This system topic triggers when the agent receives an Activity indicating the beginning of a new conversation. If you do not want the agent to initiate the conversation, disable this topic.
+kind: AdaptiveDialog
+beginDialog:
+  kind: OnConversationStart
+  id: main
+  actions:
+    - kind: SendActivity
+      id: sendMessage_M0LuhV
+      activity:
+        text:
+          - Welcome to the Graph Connector Factory. Tell me what you need, or use the buttons below to get started.
+        speak:
+          - Welcome to the Graph Connector Factory. I can help you discover Graph API endpoints, build custom connectors, deploy them, and configure authentication. Tell me what you need to get started.
+        attachments:
+          - kind: AdaptiveCardTemplate
+            cardContent: |-
+              {
+                "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+                "type": "AdaptiveCard",
+                "version": "1.5",
+                "body": [
+                  {
+                    "type": "TextBlock",
+                    "text": "Graph Connector Factory",
+                    "weight": "Bolder",
+                    "size": "Large",
+                    "wrap": true
+                  },
+                  {
+                    "type": "TextBlock",
+                    "text": "I help IT pros and admins build Power Platform custom connectors from Microsoft Graph API endpoints.",
+                    "wrap": true,
+                    "spacing": "Small"
+                  },
+                  {
+                    "type": "FactSet",
+                    "facts": [
+                      { "title": "Discover", "value": "Find Graph API endpoints for your scenario" },
+                      { "title": "Build", "value": "Generate custom connector definitions (Swagger 2.0)" },
+                      { "title": "Deploy", "value": "Deploy connectors to Power Platform" },
+                      { "title": "Configure", "value": "Set up authentication and app registrations" }
+                    ]
+                  }
+                ],
+                "actions": [
+                  {
+                    "type": "Action.Submit",
+                    "title": "Build a Connector",
+                    "data": { "action": "quickStart", "choice": "build" }
+                  },
+                  {
+                    "type": "Action.Submit",
+                    "title": "Explore Graph APIs",
+                    "data": { "action": "quickStart", "choice": "explore" }
+                  },
+                  {
+                    "type": "Action.Submit",
+                    "title": "Deploy Existing Connector",
+                    "data": { "action": "quickStart", "choice": "deploy" }
+                  }
+                ]
+              }

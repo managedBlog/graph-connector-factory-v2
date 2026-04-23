@@ -1,0 +1,26 @@
+mcs.metadata:
+  componentName: GCA - Graph Connector Agent - List Graph API operations
+  description: GCA-GraphConnectorAgent-ListGraphAPIoperations
+kind: TaskDialog
+modelDisplayName: List Graph API operations
+modelDescription: List available HTTP operations for a Microsoft Graph API endpoint path. Returns a structured array of operations suitable for populating a dynamic selection card.
+outputs:
+  - propertyName: cacheAge
+
+  - propertyName: endpoint
+
+  - propertyName: operations
+
+  - propertyName: version
+
+  - propertyName: warnings
+
+action:
+  kind: InvokeConnectorTaskAction
+  connectionReference: copilots_header_91a5e.shared_gca-20-2d-20deploy-20pipeline-5f251f982b189de9d-2501cc3075c9bd9f.2b47903cf48c4a4aa58a3d67d0da8fbf
+  connectionProperties:
+    mode: Invoker
+
+  operationId: graph_listOperations
+
+outputMode: All

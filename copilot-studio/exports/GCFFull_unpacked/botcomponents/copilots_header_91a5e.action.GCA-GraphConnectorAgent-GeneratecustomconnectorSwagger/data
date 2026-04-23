@@ -1,0 +1,23 @@
+kind: TaskDialog
+modelDisplayName: Generate custom connector Swagger
+modelDescription: Generate a Power Platform-compatible Swagger 2.0 custom connector schema from selected Microsoft Graph API operations. Returns connector name, operation count, and Gist URL.
+outputs:
+  - propertyName: baseName
+
+  - propertyName: downloadUrls
+
+  - propertyName: gistUrl
+
+  - propertyName: totalOperations
+
+  - propertyName: validationWarnings
+
+action:
+  kind: InvokeConnectorTaskAction
+  connectionReference: copilots_header_91a5e.shared_gca-20-2d-20graph-20connector-20agent-5f251f982-d68697514e08ff5e.0cf2330ef6d1424fae976ebd546eb0b8
+  connectionProperties:
+    mode: Invoker
+
+  operationId: graph_generateConnector
+
+outputMode: All

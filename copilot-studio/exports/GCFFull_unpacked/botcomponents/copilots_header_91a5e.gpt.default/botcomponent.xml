@@ -1,0 +1,11 @@
+<botcomponent schemaname="copilots_header_91a5e.gpt.default">
+  <componenttype>15</componenttype>
+  <description>default</description>
+  <iscustomizable>0</iscustomizable>
+  <name>default</name>
+  <parentbotid>
+    <schemaname>copilots_header_91a5e</schemaname>
+  </parentbotid>
+  <statecode>0</statecode>
+  <statuscode>1</statuscode>
+</botcomponent>

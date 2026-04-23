@@ -1,0 +1,11 @@
+<botcomponent schemaname="copilots_header_91a5e.action.GCA-GraphConnectorAgent-Getsessionendpoints">
+  <componenttype>9</componenttype>
+  <description>GCA-GraphConnectorAgent-Getsessionendpoints</description>
+  <iscustomizable>0</iscustomizable>
+  <name>GCA - Graph Connector Agent - Get session endpoints</name>
+  <parentbotid>
+    <schemaname>copilots_header_91a5e</schemaname>
+  </parentbotid>
+  <statecode>0</statecode>
+  <statuscode>1</statuscode>
+</botcomponent>

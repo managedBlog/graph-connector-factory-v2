@@ -1,0 +1,14 @@
+<botcomponent schemaname="copilots_header_91a5e.topic.ConnectorPipeline">
+  <componenttype>9</componenttype>
+  <description>ConnectorPipeline — Sprint 15: Batch Build &amp; Deploy
+Parallel path to OperationSelection. Uses batch generate and batch deploy endpoints
+to process all connector groups in single API calls instead of sequential per-group loops.
+Requires session design context (from research phase) with pre-built connector groups.</description>
+  <iscustomizable>0</iscustomizable>
+  <name>ConnectorPipeline</name>
+  <parentbotid>
+    <schemaname>copilots_header_91a5e</schemaname>
+  </parentbotid>
+  <statecode>0</statecode>
+  <statuscode>1</statuscode>
+</botcomponent>

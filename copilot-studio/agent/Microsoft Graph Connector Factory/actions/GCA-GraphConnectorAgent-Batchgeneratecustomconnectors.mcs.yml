@@ -1,0 +1,21 @@
+mcs.metadata:
+  componentName: GCA - Graph Connector Agent - Batch generate custom connectors
+kind: TaskDialog
+modelDisplayName: Batch generate custom connectors
+modelDescription: Generate Power Platform custom connector Swagger files for multiple connector groups in a single call. Accepts a JSON string of groups (each with baseName and ops), generates each connector, publishes to Gist, and returns results as a JSON string for Parse value node consumption.
+outputs:
+  - propertyName: groupCount
+
+  - propertyName: resultsJson
+
+  - propertyName: successCount
+
+action:
+  kind: InvokeConnectorTaskAction
+  connectionReference: copilots_header_91a5e.shared_gca-20-2d-20deploy-20pipeline-5f251f982b189de9d-2501cc3075c9bd9f.2b47903cf48c4a4aa58a3d67d0da8fbf
+  connectionProperties:
+    mode: Invoker
+
+  operationId: graph_batchGenerate
+
+outputMode: All
