@@ -1,8 +1,8 @@
 mcs.metadata:
-  componentName: GCF REST Connector - Deploy connector pipeline
+  componentName: GCF REST Connector - Poll deploy status
 kind: TaskDialog
-modelDisplayName: Deploy connector pipeline (async)
-modelDescription: "Start an asynchronous deploy of a Power Platform custom connector. Returns a jobId immediately. Poll graph_deployStatus with the jobId to track progress and get results."
+modelDisplayName: Poll deploy status
+modelDescription: "Long-polls a deploy job. Returns current status and, when complete, the full result. Holds up to 25 seconds before returning. Loop until status is success, partial, or failed."
 outputs:
   - propertyName: appRegistrationAppId
 
@@ -15,6 +15,16 @@ outputs:
   - propertyName: appRegistrationSkipped
 
   - propertyName: appRegistrationSkipReason
+
+  - propertyName: batchCompleted
+
+  - propertyName: batchCurrentBaseName
+
+  - propertyName: batchResultsJson
+
+  - propertyName: batchSucceeded
+
+  - propertyName: batchTotal
 
   - propertyName: connectorAuthType
 
@@ -48,6 +58,6 @@ action:
   connectionProperties:
     mode: Invoker
 
-  operationId: graph_deployPipeline
+  operationId: graph_deployStatus
 
 outputMode: All

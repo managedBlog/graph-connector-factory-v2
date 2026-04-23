@@ -884,6 +884,8 @@ beginDialog:
               id: sendMsg_depStart
               activity: "🚀 **Starting deployment** to environment **{Topic.cfmEnvId}**..."
 
+            # ─── Connector 1: Async deploy + inline poll loop ───────────
+
             - kind: SendActivity
               id: sendMsg_dep1Start
               activity: "⏳ Deploying connector 1: **{Topic.cfmG1Name}**..."
@@ -896,17 +898,78 @@ beginDialog:
                   environmentId: =Topic.cfmEnvId
                   authType: =If(IsBlank(Topic.cfmAuthType), Blank(), Topic.cfmAuthType)
                   swaggerUrl: =Topic.gen1SwaggerUrl
-
               dialog: copilots_header_91a5e.action.GCFRESTConnector-Deployconnectorpipeline
               output:
                 binding:
+                  jobId: Topic.dep1JobId
                   status: Topic.dep1Status
-                  summary: Topic.dep1Summary
-                  connectorDisplayName: Topic.dep1ConnName
+
+            - kind: ConditionGroup
+              id: check_dep1JobId
+              conditions:
+                - id: dep1JobOk
+                  condition: =!IsBlank(Topic.dep1JobId) And (Topic.dep1Status = "accepted" Or Topic.dep1Status = "running")
+                  actions:
+                    - kind: SetVariable
+                      id: setVar_dep1PollCount
+                      variable: Topic.dep1PollCount
+                      value: =0
+
+                    # GotoAction target — poll loop entry
+                    - kind: BeginDialog
+                      id: beginDialog_pollDep1
+                      input:
+                        binding:
+                          jobId: =Topic.dep1JobId
+                      dialog: copilots_header_91a5e.action.GCFRESTConnector-Polldeploystatus
+                      output:
+                        binding:
+                          status: Topic.dep1Status
+                          summary: Topic.dep1Summary
+                          connectorDisplayName: Topic.dep1ConnName
+                          error: Topic.dep1Error
+
+                    - kind: SetVariable
+                      id: setVar_dep1PollInc
+                      variable: Topic.dep1PollCount
+                      value: =Topic.dep1PollCount + 1
+
+                    - kind: ConditionGroup
+                      id: check_dep1StillRunning
+                      conditions:
+                        - id: dep1Running
+                          condition: =Topic.dep1Status = "accepted" Or Topic.dep1Status = "running"
+                          actions:
+                            - kind: ConditionGroup
+                              id: check_dep1FirstRetry
+                              conditions:
+                                - id: dep1IsFirstRetry
+                                  condition: =Topic.dep1PollCount = 1
+                                  actions:
+                                    - kind: SendActivity
+                                      id: sendMsg_dep1StillWorking
+                                      activity: "⏳ Still deploying **{Topic.cfmG1Name}**... (this can take up to 2 minutes)"
+
+                            - kind: GotoAction
+                              id: goto_pollDep1Again
+                              actionId: beginDialog_pollDep1
+
+              elseActions:
+                - kind: SetVariable
+                  id: setVar_dep1FailImmediate
+                  variable: Topic.dep1Summary
+                  value: ="Deploy initiation failed — no job ID returned."
+
+                - kind: SetVariable
+                  id: setVar_dep1StatusFail
+                  variable: Topic.dep1Status
+                  value: ="failed"
 
             - kind: SendActivity
               id: sendMsg_dep1Result
-              activity: "Connector 1 ({Topic.cfmG1Name}) — {Topic.dep1Status}"
+              activity: "Connector 1 ({Topic.cfmG1Name}) — **{Topic.dep1Status}**"
+
+            # ─── Connector 2: Async deploy + inline poll loop ───────────
 
             - kind: ConditionGroup
               id: check_dep2
@@ -926,17 +989,77 @@ beginDialog:
                           environmentId: =Topic.cfmEnvId
                           authType: =If(IsBlank(Topic.cfmAuthType), Blank(), Topic.cfmAuthType)
                           swaggerUrl: =Topic.gen2SwaggerUrl
-
                       dialog: copilots_header_91a5e.action.GCFRESTConnector-Deployconnectorpipeline
                       output:
                         binding:
+                          jobId: Topic.dep2JobId
                           status: Topic.dep2Status
-                          summary: Topic.dep2Summary
-                          connectorDisplayName: Topic.dep2ConnName
+
+                    - kind: ConditionGroup
+                      id: check_dep2JobId
+                      conditions:
+                        - id: dep2JobOk
+                          condition: =!IsBlank(Topic.dep2JobId) And (Topic.dep2Status = "accepted" Or Topic.dep2Status = "running")
+                          actions:
+                            - kind: SetVariable
+                              id: setVar_dep2PollCount
+                              variable: Topic.dep2PollCount
+                              value: =0
+
+                            - kind: BeginDialog
+                              id: beginDialog_pollDep2
+                              input:
+                                binding:
+                                  jobId: =Topic.dep2JobId
+                              dialog: copilots_header_91a5e.action.GCFRESTConnector-Polldeploystatus
+                              output:
+                                binding:
+                                  status: Topic.dep2Status
+                                  summary: Topic.dep2Summary
+                                  connectorDisplayName: Topic.dep2ConnName
+                                  error: Topic.dep2Error
+
+                            - kind: SetVariable
+                              id: setVar_dep2PollInc
+                              variable: Topic.dep2PollCount
+                              value: =Topic.dep2PollCount + 1
+
+                            - kind: ConditionGroup
+                              id: check_dep2StillRunning
+                              conditions:
+                                - id: dep2Running
+                                  condition: =Topic.dep2Status = "accepted" Or Topic.dep2Status = "running"
+                                  actions:
+                                    - kind: ConditionGroup
+                                      id: check_dep2FirstRetry
+                                      conditions:
+                                        - id: dep2IsFirstRetry
+                                          condition: =Topic.dep2PollCount = 1
+                                          actions:
+                                            - kind: SendActivity
+                                              id: sendMsg_dep2StillWorking
+                                              activity: "⏳ Still deploying **{Topic.cfmG2Name}**... (this can take up to 2 minutes)"
+
+                                    - kind: GotoAction
+                                      id: goto_pollDep2Again
+                                      actionId: beginDialog_pollDep2
+
+                      elseActions:
+                        - kind: SetVariable
+                          id: setVar_dep2FailImmediate
+                          variable: Topic.dep2Summary
+                          value: ="Deploy initiation failed — no job ID returned."
+
+                        - kind: SetVariable
+                          id: setVar_dep2StatusFail
+                          variable: Topic.dep2Status
+                          value: ="failed"
 
                     - kind: SendActivity
                       id: sendMsg_dep2Result
-                      activity: "Connector 2 ({Topic.cfmG2Name}) — {Topic.dep2Status}"
+                      activity: "Connector 2 ({Topic.cfmG2Name}) — **{Topic.dep2Status}**"
+
+            # ─── Connector 3: Async deploy + inline poll loop ───────────
 
             - kind: ConditionGroup
               id: check_dep3
@@ -956,17 +1079,77 @@ beginDialog:
                           environmentId: =Topic.cfmEnvId
                           authType: =If(IsBlank(Topic.cfmAuthType), Blank(), Topic.cfmAuthType)
                           swaggerUrl: =Topic.gen3SwaggerUrl
-
                       dialog: copilots_header_91a5e.action.GCFRESTConnector-Deployconnectorpipeline
                       output:
                         binding:
+                          jobId: Topic.dep3JobId
                           status: Topic.dep3Status
-                          summary: Topic.dep3Summary
-                          connectorDisplayName: Topic.dep3ConnName
+
+                    - kind: ConditionGroup
+                      id: check_dep3JobId
+                      conditions:
+                        - id: dep3JobOk
+                          condition: =!IsBlank(Topic.dep3JobId) And (Topic.dep3Status = "accepted" Or Topic.dep3Status = "running")
+                          actions:
+                            - kind: SetVariable
+                              id: setVar_dep3PollCount
+                              variable: Topic.dep3PollCount
+                              value: =0
+
+                            - kind: BeginDialog
+                              id: beginDialog_pollDep3
+                              input:
+                                binding:
+                                  jobId: =Topic.dep3JobId
+                              dialog: copilots_header_91a5e.action.GCFRESTConnector-Polldeploystatus
+                              output:
+                                binding:
+                                  status: Topic.dep3Status
+                                  summary: Topic.dep3Summary
+                                  connectorDisplayName: Topic.dep3ConnName
+                                  error: Topic.dep3Error
+
+                            - kind: SetVariable
+                              id: setVar_dep3PollInc
+                              variable: Topic.dep3PollCount
+                              value: =Topic.dep3PollCount + 1
+
+                            - kind: ConditionGroup
+                              id: check_dep3StillRunning
+                              conditions:
+                                - id: dep3Running
+                                  condition: =Topic.dep3Status = "accepted" Or Topic.dep3Status = "running"
+                                  actions:
+                                    - kind: ConditionGroup
+                                      id: check_dep3FirstRetry
+                                      conditions:
+                                        - id: dep3IsFirstRetry
+                                          condition: =Topic.dep3PollCount = 1
+                                          actions:
+                                            - kind: SendActivity
+                                              id: sendMsg_dep3StillWorking
+                                              activity: "⏳ Still deploying **{Topic.cfmG3Name}**... (this can take up to 2 minutes)"
+
+                                    - kind: GotoAction
+                                      id: goto_pollDep3Again
+                                      actionId: beginDialog_pollDep3
+
+                      elseActions:
+                        - kind: SetVariable
+                          id: setVar_dep3FailImmediate
+                          variable: Topic.dep3Summary
+                          value: ="Deploy initiation failed — no job ID returned."
+
+                        - kind: SetVariable
+                          id: setVar_dep3StatusFail
+                          variable: Topic.dep3Status
+                          value: ="failed"
 
                     - kind: SendActivity
                       id: sendMsg_dep3Result
-                      activity: "Connector 3 ({Topic.cfmG3Name}) — {Topic.dep3Status}"
+                      activity: "Connector 3 ({Topic.cfmG3Name}) — **{Topic.dep3Status}**"
+
+            # ─── Deploy summary ─────────────────────────────────────────
 
             - kind: SetVariable
               id: setVar_depSuccessCount
