@@ -6,7 +6,7 @@
   "scripts": {
     "build": "tsc",
     "start": "node dist/index.js",
-    "start:http": "MCP_TRANSPORT=http node dist/index.js",
+    "start:http": "cross-env MCP_TRANSPORT=http node dist/index.js",
     "dev": "tsc --watch",
     "clean": "rimraf dist"
   },
@@ -20,6 +20,7 @@
     "@types/express": "^4.17.21",
     "@types/js-yaml": "^4.0.9",
     "@types/node": "^20.10.0",
+    "cross-env": "^10.1.0",
     "rimraf": "^5.0.5",
     "typescript": "~5.3.3"
   },
