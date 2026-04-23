@@ -29,7 +29,7 @@ function builtInDefaults(): AgentConfig {
       apiUrl: "https://api.powerapps.com",
       apiVersion: "2024-01-01",
       powerAppsApiUrl: "https://api.powerapps.com",
-      powerAppsApiVersion: "2024-01-01",
+      powerAppsApiVersion: "2016-11-01",
       flowApiUrl: "https://api.flow.microsoft.com",
       flowApiVersion: "2016-11-01",
       defaultEnvironmentId: "",
