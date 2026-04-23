@@ -7,7 +7,6 @@
           "identityProvider": "aad",
           "clientId": "__OAUTH_CLIENT_ID__",
           "clientAssertionType": "GenericFederatedIdentityCredential",
-          "scopes": [],
           "redirectMode": "GlobalPerConnector",
           "properties": {
             "IsFirstParty": "False",
