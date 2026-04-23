@@ -1857,7 +1857,7 @@ export function startHttpServer(options: HttpHostOptions): void {
 
   // ─── Start ─────────────────────────────────────────────────────────────
 
-  app.listen(port, () => {
+  const server = app.listen(port, () => {
     log(`Graph Connector Factory server listening on port ${port}`);
     log(`  MCP endpoint:      POST   http://localhost:${port}/mcp`);
     log(`  Session delete:    DELETE http://localhost:${port}/mcp`);
@@ -1869,10 +1869,43 @@ export function startHttpServer(options: HttpHostOptions): void {
     log(`  Name check:        GET    http://localhost:${port}/api/graph/namecheck?names=...&environmentId=...`);
     log(`  Generate:          POST   http://localhost:${port}/api/graph/connector`);
     log(`  Deploy:            POST   http://localhost:${port}/api/graph/deploy`);
+    log(`  Deploy status:     GET    http://localhost:${port}/api/graph/deploy/status`);
     log(`  File downloads:    GET    http://localhost:${port}/download/:id/:filename`);
     log(`  Output directory:  ${outputRoot}`);
     log(`  Output TTL:        ${ttlMinutes} minutes`);
     log(`  Auth mode:         ${config.server.authMode}`);
+  });
+
+  server.on("error", (err: NodeJS.ErrnoException) => {
+    if (err.code === "EADDRINUSE") {
+      log(`ERROR: Port ${port} is already in use. Kill the existing process or set GCF_PORT to use a different port.`);
+    } else {
+      log(`ERROR: Server failed to start: ${err.message}`);
+    }
+    process.exit(1);
+  });
+
+  // Graceful shutdown
+  const shutdown = (signal: string) => {
+    log(`${signal} received — shutting down gracefully...`);
+    clearInterval(cleanupInterval);
+    server.close(() => {
+      log("Server closed.");
+      process.exit(0);
+    });
+    // Force exit after 5s if connections don't drain
+    setTimeout(() => process.exit(1), 5000).unref();
+  };
+  process.on("SIGINT", () => shutdown("SIGINT"));
+  process.on("SIGTERM", () => shutdown("SIGTERM"));
+
+  // Global safety nets
+  process.on("uncaughtException", (err) => {
+    log(`FATAL uncaughtException: ${err.message}\n${err.stack ?? ""}`);
+    process.exit(1);
+  });
+  process.on("unhandledRejection", (reason) => {
+    log(`WARN unhandledRejection: ${reason}`);
   });
 
   // Suppress unused variable warning for cleanupInterval
