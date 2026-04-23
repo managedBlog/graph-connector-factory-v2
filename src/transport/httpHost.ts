@@ -24,7 +24,7 @@ import * as path from "path";
 import { randomUUID } from "crypto";
 import express from "express";
 import type { AgentConfig } from "../config/types";
-import { runWithRequestContext, validateToken, updateCallerIdentity } from "../auth";
+import { runWithRequestContext, getRequestContext, validateToken, updateCallerIdentity } from "../auth";
 import type { TokenValidationConfig } from "../auth";
 import { createMcpTransportAdapter, McpAdapter } from "./mcpAdapter";
 import { invokeTool, listAllTools, listMcpTools, stripHashSuffix, appendHashSuffix } from "../tools/registry";
@@ -162,6 +162,29 @@ function writeDeployProfileRequired(
   });
 }
 
+// ─── Deploy job types ─────────────────────────────────────────────────────────
+
+type DeployJobStatus = "accepted" | "running" | "success" | "partial" | "failed";
+
+interface DeployJob {
+  readonly id: string;
+  readonly jobType: "deploy" | "batchDeploy";
+  status: DeployJobStatus;
+  readonly createdAt: number;
+  completedAt?: number;
+  readonly ownerKey: string | undefined;
+  result?: Record<string, unknown>;
+  batchProgress?: { total: number; completed: number; succeeded: number; currentBaseName?: string };
+  error?: string;
+}
+
+/** Long-poll max wait (ms). Leaves 5s buffer for Copilot Studio's 30s limit. */
+const DEPLOY_STATUS_POLL_MAX_MS = 25_000;
+/** Interval between checks inside the long-poll loop. */
+const DEPLOY_STATUS_POLL_INTERVAL_MS = 1_000;
+/** How long completed jobs stay in memory before sweep (ms). */
+const DEPLOY_JOB_TTL_MS = 60 * 60 * 1_000;
+
 // ─── Session types ────────────────────────────────────────────────────────────
 
 interface SessionContextEntry {
@@ -288,6 +311,53 @@ export function startHttpServer(options: HttpHostOptions): void {
   };
 
   app.use(authMiddleware);
+
+  // ─── Deploy job store ─────────────────────────────────────────────────
+
+  const deployJobs = new Map<string, DeployJob>();
+
+  function sweepExpiredJobs(): void {
+    const now = Date.now();
+    for (const [id, job] of deployJobs) {
+      if (job.status === "accepted" || job.status === "running") continue;
+      if (job.completedAt && now - job.completedAt > DEPLOY_JOB_TTL_MS) {
+        deployJobs.delete(id);
+        log(`[DeployJob] Expired job ${id} (completed ${Math.round((now - job.completedAt) / 60_000)}m ago)`);
+      }
+    }
+  }
+
+  function flattenDeployJob(job: DeployJob): Record<string, unknown> {
+    const r = job.result ?? {};
+    return {
+      jobId: job.id,
+      jobType: job.jobType,
+      status: job.status,
+      retryAfter: (job.status === "accepted" || job.status === "running") ? 5 : null,
+      createdAt: job.createdAt,
+      completedAt: job.completedAt ?? null,
+      summary: (r["summary"] as string | undefined) ?? null,
+      connectorId: (r["connectorId"] as string | undefined) ?? null,
+      connectorDisplayName: (r["connectorDisplayName"] as string | undefined) ?? null,
+      connectorEnvironmentId: (r["connectorEnvironmentId"] as string | undefined) ?? null,
+      connectorStatus: (r["connectorStatus"] as string | undefined) ?? null,
+      connectorAuthType: (r["connectorAuthType"] as string | undefined) ?? null,
+      connectorRedirectUri: (r["connectorRedirectUri"] as string | undefined) ?? null,
+      appRegistrationConfigured: (r["appRegistrationConfigured"] as boolean | undefined) ?? null,
+      appRegistrationAppId: (r["appRegistrationAppId"] as string | undefined) ?? null,
+      appRegistrationObjectId: (r["appRegistrationObjectId"] as string | undefined) ?? null,
+      appRegistrationDisplayName: (r["appRegistrationDisplayName"] as string | undefined) ?? null,
+      appRegistrationSkipped: (r["appRegistrationSkipped"] as boolean | undefined) ?? null,
+      appRegistrationSkipReason: (r["appRegistrationSkipReason"] as string | undefined) ?? null,
+      errors: (r["errors"] as string[] | undefined) ?? [],
+      batchTotal: job.batchProgress?.total ?? null,
+      batchCompleted: job.batchProgress?.completed ?? null,
+      batchSucceeded: job.batchProgress?.succeeded ?? null,
+      batchCurrentBaseName: job.batchProgress?.currentBaseName ?? null,
+      batchResultsJson: (r["resultsJson"] as string | undefined) ?? null,
+      error: job.error ?? null,
+    };
+  }
 
   // ─── Session management ────────────────────────────────────────────────
 
@@ -1386,30 +1456,72 @@ export function startHttpServer(options: HttpHostOptions): void {
         shareWithEmails: body["shareWithEmails"] as string[] | undefined,
       };
 
-      const result = await executeDeployPipeline(pipelineInput, config);
-
-      // Flatten nested connector/appRegistration for Swagger 2.0 / Copilot Studio
-      const connector = result.connector;
-      const appReg = result.appRegistration;
-      const flat: Record<string, unknown> = {
-        status: result.status,
-        summary: result.summary,
-        connectorId: connector?.connectorId ?? null,
-        connectorDisplayName: connector?.displayName ?? null,
-        connectorEnvironmentId: connector?.environmentId ?? null,
-        connectorStatus: connector?.status ?? null,
-        connectorAuthType: connector?.authType ?? null,
-        connectorRedirectUri: connector?.redirectUri ?? null,
-        appRegistrationConfigured: appReg?.configured ?? false,
-        appRegistrationAppId: appReg?.appId ?? null,
-        appRegistrationObjectId: appReg?.objectId ?? null,
-        appRegistrationDisplayName: appReg?.displayName ?? null,
-        appRegistrationSkipped: appReg?.skipped ?? false,
-        appRegistrationSkipReason: appReg?.skipReason ?? null,
-        errors: result.errors,
+      // Capture request context for background execution
+      const reqCtx = getRequestContext();
+      const capturedCtx = {
+        bearerToken: reqCtx?.bearerToken,
+        caller: reqCtx?.caller ? { ...reqCtx.caller } : undefined,
       };
-      log(`[Deploy REST] Response size: ${JSON.stringify(flat).length}b, status=${String(flat["status"])}`);
-      res.json(flat);
+
+      // Derive owner key from session header or token claims
+      const sessionKey = normalizeSessionKey(
+        req.headers["x-session-id"] ?? req.headers["x-ms-conversation-id"],
+      );
+      const claims = extractTokenClaims(req.headers["authorization"] as string | undefined);
+      const ownerKey = sessionKey ?? claims?.oidKey ?? claims?.subKey ?? undefined;
+
+      const jobId = randomUUID();
+      const job: DeployJob = {
+        id: jobId,
+        jobType: "deploy",
+        status: "accepted",
+        createdAt: Date.now(),
+        ownerKey,
+      };
+      deployJobs.set(jobId, job);
+
+      log(`[Deploy REST] Created job ${jobId} (owner=${ownerKey ?? "anonymous"})`);
+
+      // Fire-and-forget: run pipeline in background with captured auth context
+      void (async () => {
+        try {
+          job.status = "running";
+          const result = await runWithRequestContext(capturedCtx, () =>
+            executeDeployPipeline(pipelineInput, config),
+          ) as Awaited<ReturnType<typeof executeDeployPipeline>>;
+
+          const connector = result.connector;
+          const appReg = result.appRegistration;
+          job.result = {
+            status: result.status,
+            summary: result.summary,
+            connectorId: connector?.connectorId ?? null,
+            connectorDisplayName: connector?.displayName ?? null,
+            connectorEnvironmentId: connector?.environmentId ?? null,
+            connectorStatus: connector?.status ?? null,
+            connectorAuthType: connector?.authType ?? null,
+            connectorRedirectUri: connector?.redirectUri ?? null,
+            appRegistrationConfigured: appReg?.configured ?? false,
+            appRegistrationAppId: appReg?.appId ?? null,
+            appRegistrationObjectId: appReg?.objectId ?? null,
+            appRegistrationDisplayName: appReg?.displayName ?? null,
+            appRegistrationSkipped: appReg?.skipped ?? false,
+            appRegistrationSkipReason: appReg?.skipReason ?? null,
+            errors: result.errors,
+          };
+          job.status = result.status === "success" ? "success" : result.errors?.length ? "partial" : "success";
+          job.completedAt = Date.now();
+          log(`[Deploy REST] Job ${jobId} completed: status=${job.status}`);
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          job.status = "failed";
+          job.error = message;
+          job.completedAt = Date.now();
+          log(`[Deploy REST] Job ${jobId} FAILED: ${message}`);
+        }
+      })();
+
+      res.status(202).json(flattenDeployJob(job));
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       res.status(500).json({ error: message });
@@ -1453,77 +1565,194 @@ export function startHttpServer(options: HttpHostOptions): void {
 
       log(`[BatchDeploy] Parsed ${groups.length} group(s)`);
 
-      const results: Array<{
-        baseName: string;
-        status: string;
-        connectorId: string;
-        connectorDisplayName: string;
-        appRegistrationAppId: string;
-        error?: string;
-      }> = [];
+      // Capture request context for background execution
+      const reqCtx = getRequestContext();
+      const capturedCtx = {
+        bearerToken: reqCtx?.bearerToken,
+        caller: reqCtx?.caller ? { ...reqCtx.caller } : undefined,
+      };
 
-      for (const group of groups) {
-        const groupBaseName = group.baseName?.trim();
-        const swaggerUrl = group.swaggerUrl?.trim();
+      const sessionKey = normalizeSessionKey(
+        req.headers["x-session-id"] ?? req.headers["x-ms-conversation-id"],
+      );
+      const claims = extractTokenClaims(req.headers["authorization"] as string | undefined);
+      const ownerKey = sessionKey ?? claims?.oidKey ?? claims?.subKey ?? undefined;
 
-        if (!groupBaseName) {
-          results.push({
-            baseName: "(unnamed)", status: "error",
-            connectorId: "", connectorDisplayName: "", appRegistrationAppId: "",
-            error: "baseName is required for each group",
-          });
-          continue;
-        }
+      const jobId = randomUUID();
+      const job: DeployJob = {
+        id: jobId,
+        jobType: "batchDeploy",
+        status: "accepted",
+        createdAt: Date.now(),
+        ownerKey,
+        batchProgress: { total: groups.length, completed: 0, succeeded: 0 },
+      };
+      deployJobs.set(jobId, job);
 
-        if (!swaggerUrl) {
-          results.push({
-            baseName: groupBaseName, status: "error",
-            connectorId: "", connectorDisplayName: "", appRegistrationAppId: "",
-            error: "swaggerUrl is required for each group",
-          });
-          continue;
-        }
+      log(`[BatchDeploy] Created job ${jobId} for ${groups.length} group(s) (owner=${ownerKey ?? "anonymous"})`);
 
-        log(`[BatchDeploy] Deploying group "${groupBaseName}": swaggerUrl=${swaggerUrl}`);
-
+      // Fire-and-forget: run batch pipeline in background
+      void (async () => {
         try {
-          const deployInput: DeployPipelineInput = {
-            baseName: groupBaseName,
-            swaggerUrl,
-            environmentId,
-            authType,
+          job.status = "running";
+          const results: Array<{
+            baseName: string; status: string;
+            connectorId: string; connectorDisplayName: string;
+            appRegistrationAppId: string; error?: string;
+          }> = [];
+
+          for (const group of groups) {
+            const groupBaseName = group.baseName?.trim();
+            const swaggerUrl = group.swaggerUrl?.trim();
+
+            if (!groupBaseName) {
+              results.push({
+                baseName: "(unnamed)", status: "error",
+                connectorId: "", connectorDisplayName: "", appRegistrationAppId: "",
+                error: "baseName is required for each group",
+              });
+              job.batchProgress!.completed++;
+              continue;
+            }
+
+            if (!swaggerUrl) {
+              results.push({
+                baseName: groupBaseName, status: "error",
+                connectorId: "", connectorDisplayName: "", appRegistrationAppId: "",
+                error: "swaggerUrl is required for each group",
+              });
+              job.batchProgress!.completed++;
+              continue;
+            }
+
+            job.batchProgress!.currentBaseName = groupBaseName;
+            log(`[BatchDeploy] Job ${jobId}: deploying "${groupBaseName}"`);
+
+            try {
+              const deployInput: DeployPipelineInput = {
+                baseName: groupBaseName,
+                swaggerUrl,
+                environmentId,
+                authType,
+              };
+
+              const result = await runWithRequestContext(capturedCtx, () =>
+                executeDeployPipeline(deployInput, config),
+              ) as Awaited<ReturnType<typeof executeDeployPipeline>>;
+
+              const connector = result.connector;
+              const appReg = result.appRegistration;
+              results.push({
+                baseName: groupBaseName,
+                status: result.status,
+                connectorId: String(connector?.connectorId ?? ""),
+                connectorDisplayName: String(connector?.displayName ?? ""),
+                appRegistrationAppId: String(appReg?.appId ?? ""),
+              });
+              job.batchProgress!.succeeded++;
+              log(`[BatchDeploy] Job ${jobId}: "${groupBaseName}" succeeded`);
+            } catch (groupErr) {
+              const msg = groupErr instanceof Error ? groupErr.message : String(groupErr);
+              log(`[BatchDeploy] Job ${jobId}: "${groupBaseName}" FAILED: ${msg}`);
+              results.push({
+                baseName: groupBaseName, status: "error",
+                connectorId: "", connectorDisplayName: "", appRegistrationAppId: "",
+                error: msg,
+              });
+            }
+            job.batchProgress!.completed++;
+          }
+
+          const successCount = results.filter((r) => r.status !== "error").length;
+          job.result = {
+            groupCount: results.length,
+            successCount,
+            resultsJson: JSON.stringify(results),
+            summary: `Batch deploy: ${successCount}/${results.length} succeeded`,
           };
+          job.status = successCount === results.length ? "success" : successCount > 0 ? "partial" : "failed";
+          job.completedAt = Date.now();
+          delete job.batchProgress!.currentBaseName;
+          log(`[BatchDeploy] Job ${jobId} complete: ${successCount}/${results.length} succeeded`);
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          job.status = "failed";
+          job.error = message;
+          job.completedAt = Date.now();
+          log(`[BatchDeploy] Job ${jobId} FAILED: ${message}`);
+        }
+      })();
 
-          const result = await executeDeployPipeline(deployInput, config);
-          const connector = result.connector;
-          const appReg = result.appRegistration;
+      res.status(202).json(flattenDeployJob(job));
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      res.status(500).json({ error: message });
+    }
+  });
 
-          results.push({
-            baseName: groupBaseName,
-            status: result.status,
-            connectorId: String(connector?.connectorId ?? ""),
-            connectorDisplayName: String(connector?.displayName ?? ""),
-            appRegistrationAppId: String(appReg?.appId ?? ""),
+  // ─── REST: Deploy status (long-poll) ──────────────────────────────────
+
+  app.get("/api/graph/deploy/status", async (req, res) => {
+    try {
+      const jobId = (req.query["jobId"] as string | undefined)?.trim();
+
+      if (!jobId) {
+        res.status(400).json({ error: "jobId query parameter is required." });
+        return;
+      }
+
+      const job = deployJobs.get(jobId);
+
+      if (!job) {
+        // Return 200 with error status — topic-friendlier than 404
+        res.json({
+          jobId,
+          jobType: null,
+          status: "expired",
+          retryAfter: null,
+          error: "Job not found or expired.",
+        });
+        return;
+      }
+
+      // Owner check: if job has an owner, validate caller matches
+      if (job.ownerKey) {
+        const sessionKey = normalizeSessionKey(
+          req.headers["x-session-id"] ?? req.headers["x-ms-conversation-id"],
+        );
+        const claims = extractTokenClaims(req.headers["authorization"] as string | undefined);
+        const callerKey = sessionKey ?? claims?.oidKey ?? claims?.subKey ?? undefined;
+
+        if (callerKey !== job.ownerKey) {
+          res.json({
+            jobId,
+            jobType: job.jobType,
+            status: "unauthorized",
+            retryAfter: null,
+            error: "You are not the owner of this job.",
           });
-          log(`[BatchDeploy] Group "${groupBaseName}" succeeded: connectorId=${connector?.connectorId}`);
-        } catch (groupErr) {
-          const msg = groupErr instanceof Error ? groupErr.message : String(groupErr);
-          log(`[BatchDeploy] Group "${groupBaseName}" FAILED: ${msg}`);
-          results.push({
-            baseName: groupBaseName, status: "error",
-            connectorId: "", connectorDisplayName: "", appRegistrationAppId: "",
-            error: msg,
-          });
+          return;
         }
       }
 
-      const successCount = results.filter((r) => r.status !== "error").length;
-      log(`[BatchDeploy] Complete: ${successCount}/${results.length} succeeded`);
-      res.json({
-        groupCount: results.length,
-        successCount,
-        resultsJson: JSON.stringify(results),
-      });
+      // If already terminal, return immediately
+      if (job.status !== "accepted" && job.status !== "running") {
+        res.json(flattenDeployJob(job));
+        return;
+      }
+
+      // Long-poll: check every DEPLOY_STATUS_POLL_INTERVAL_MS, max DEPLOY_STATUS_POLL_MAX_MS
+      const deadline = Date.now() + DEPLOY_STATUS_POLL_MAX_MS;
+      while (Date.now() < deadline) {
+        if (job.status !== "accepted" && job.status !== "running") {
+          res.json(flattenDeployJob(job));
+          return;
+        }
+        await new Promise((resolve) => setTimeout(resolve, DEPLOY_STATUS_POLL_INTERVAL_MS));
+      }
+
+      // Still running after long-poll timeout — return current state with retryAfter
+      res.json(flattenDeployJob(job));
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       res.status(500).json({ error: message });
@@ -1623,6 +1852,7 @@ export function startHttpServer(options: HttpHostOptions): void {
   const cleanupInterval = setInterval(() => {
     sweepExpiredOutputs(outputRoot, ttlMs);
     sweepExpiredSessions();
+    sweepExpiredJobs();
   }, 5 * 60 * 1000);
 
   // ─── Start ─────────────────────────────────────────────────────────────

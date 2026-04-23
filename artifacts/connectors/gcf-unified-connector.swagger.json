@@ -206,10 +206,9 @@
     "/api/graph/deploy": {
       "post": {
         "operationId": "graph_deployPipeline",
-        "summary": "Deploy connector pipeline",
-        "description": "Deploy a generated Power Platform custom connector and configure its Entra ID app registration in a single call. Chains: app registration creation, connector deployment, then FIC/redirect/permissions configuration.",
+        "summary": "Deploy connector pipeline (async)",
+        "description": "Start an asynchronous deploy of a Power Platform custom connector. Returns a jobId immediately. Poll graph_deployStatus with the jobId to track progress and get results.",
         "x-ms-visibility": "important",
-        "x-ms-api-timeout": 120,
         "parameters": [
           {
             "name": "body",
@@ -255,87 +254,37 @@
           }
         ],
         "responses": {
-          "200": {
-            "description": "Successful response",
+          "202": {
+            "description": "Job accepted — poll graph_deployStatus for result",
             "schema": {
-              "type": "object",
-              "properties": {
-                "status": {
-                  "type": "string",
-                  "x-ms-summary": "Status",
-                  "description": "Overall pipeline status: success, partial, or error."
-                },
-                "summary": {
-                  "type": "string",
-                  "x-ms-summary": "Summary",
-                  "description": "Human-readable summary of the deploy pipeline result."
-                },
-                "connectorId": {
-                  "type": "string",
-                  "x-ms-summary": "Connector ID",
-                  "x-nullable": true
-                },
-                "connectorDisplayName": {
-                  "type": "string",
-                  "x-ms-summary": "Connector Display Name",
-                  "x-nullable": true
-                },
-                "connectorEnvironmentId": {
-                  "type": "string",
-                  "x-ms-summary": "Connector Environment ID",
-                  "x-nullable": true
-                },
-                "connectorStatus": {
-                  "type": "string",
-                  "x-ms-summary": "Connector Status",
-                  "x-nullable": true
-                },
-                "connectorAuthType": {
-                  "type": "string",
-                  "x-ms-summary": "Connector Auth Type",
-                  "x-nullable": true
-                },
-                "connectorRedirectUri": {
-                  "type": "string",
-                  "x-ms-summary": "Connector Redirect URI",
-                  "x-nullable": true
-                },
-                "appRegistrationConfigured": {
-                  "type": "boolean",
-                  "x-ms-summary": "App Registration Configured"
-                },
-                "appRegistrationAppId": {
-                  "type": "string",
-                  "x-ms-summary": "App Registration App ID",
-                  "x-nullable": true
-                },
-                "appRegistrationObjectId": {
-                  "type": "string",
-                  "x-ms-summary": "App Registration Object ID",
-                  "x-nullable": true
-                },
-                "appRegistrationDisplayName": {
-                  "type": "string",
-                  "x-ms-summary": "App Registration Display Name",
-                  "x-nullable": true
-                },
-                "appRegistrationSkipped": {
-                  "type": "boolean",
-                  "x-ms-summary": "App Registration Skipped"
-                },
-                "appRegistrationSkipReason": {
-                  "type": "string",
-                  "x-ms-summary": "App Registration Skip Reason",
-                  "x-nullable": true
-                },
-                "errors": {
-                  "type": "array",
-                  "items": {
-                    "type": "string"
-                  },
-                  "x-ms-summary": "Errors"
-                }
-              }
+              "$ref": "#/definitions/DeployJobResponse"
+            }
+          }
+        }
+      }
+    },
+    "/api/graph/deploy/status": {
+      "get": {
+        "operationId": "graph_deployStatus",
+        "summary": "Poll deploy job status",
+        "description": "Long-polls a deploy or batch-deploy job. Returns the current status and, when complete, the full result. If the job is still running, holds the request up to 25 seconds before returning the latest progress. Topic should loop on this until status is success, partial, or failed.",
+        "x-ms-visibility": "important",
+        "x-ms-api-timeout": 30,
+        "parameters": [
+          {
+            "name": "jobId",
+            "in": "query",
+            "required": true,
+            "type": "string",
+            "description": "The deploy job ID returned by graph_deployPipeline or graph_batchDeploy.",
+            "x-ms-summary": "Job ID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Job status and result (when complete)",
+            "schema": {
+              "$ref": "#/definitions/DeployJobResponse"
             }
           }
         }
@@ -431,7 +380,143 @@
       }
     }
   },
-  "definitions": {},
+  "definitions": {
+    "DeployJobResponse": {
+      "type": "object",
+      "properties": {
+        "jobId": {
+          "type": "string",
+          "description": "Unique identifier for the deploy job.",
+          "x-ms-summary": "Job ID"
+        },
+        "jobType": {
+          "type": "string",
+          "description": "Type of job: deploy or batchDeploy.",
+          "x-ms-summary": "Job Type"
+        },
+        "status": {
+          "type": "string",
+          "description": "Current job status: accepted, running, success, partial, failed, expired, or unauthorized.",
+          "x-ms-summary": "Status"
+        },
+        "retryAfter": {
+          "type": "integer",
+          "description": "Seconds to wait before polling again. Null when job is complete.",
+          "x-ms-summary": "Retry After",
+          "x-nullable": true
+        },
+        "summary": {
+          "type": "string",
+          "description": "Human-readable summary of the result.",
+          "x-ms-summary": "Summary",
+          "x-nullable": true
+        },
+        "connectorId": {
+          "type": "string",
+          "x-ms-summary": "Connector ID",
+          "x-nullable": true
+        },
+        "connectorDisplayName": {
+          "type": "string",
+          "x-ms-summary": "Connector Display Name",
+          "x-nullable": true
+        },
+        "connectorEnvironmentId": {
+          "type": "string",
+          "x-ms-summary": "Connector Environment ID",
+          "x-nullable": true
+        },
+        "connectorStatus": {
+          "type": "string",
+          "x-ms-summary": "Connector Status",
+          "x-nullable": true
+        },
+        "connectorAuthType": {
+          "type": "string",
+          "x-ms-summary": "Connector Auth Type",
+          "x-nullable": true
+        },
+        "connectorRedirectUri": {
+          "type": "string",
+          "x-ms-summary": "Connector Redirect URI",
+          "x-nullable": true
+        },
+        "appRegistrationConfigured": {
+          "type": "boolean",
+          "x-ms-summary": "App Registration Configured",
+          "x-nullable": true
+        },
+        "appRegistrationAppId": {
+          "type": "string",
+          "x-ms-summary": "App Registration App ID",
+          "x-nullable": true
+        },
+        "appRegistrationObjectId": {
+          "type": "string",
+          "x-ms-summary": "App Registration Object ID",
+          "x-nullable": true
+        },
+        "appRegistrationDisplayName": {
+          "type": "string",
+          "x-ms-summary": "App Registration Display Name",
+          "x-nullable": true
+        },
+        "appRegistrationSkipped": {
+          "type": "boolean",
+          "x-ms-summary": "App Registration Skipped",
+          "x-nullable": true
+        },
+        "appRegistrationSkipReason": {
+          "type": "string",
+          "x-ms-summary": "App Registration Skip Reason",
+          "x-nullable": true
+        },
+        "errors": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "x-ms-summary": "Errors"
+        },
+        "batchTotal": {
+          "type": "integer",
+          "description": "Total groups in batch deploy.",
+          "x-ms-summary": "Batch Total",
+          "x-nullable": true
+        },
+        "batchCompleted": {
+          "type": "integer",
+          "description": "Groups completed so far.",
+          "x-ms-summary": "Batch Completed",
+          "x-nullable": true
+        },
+        "batchSucceeded": {
+          "type": "integer",
+          "description": "Groups that succeeded.",
+          "x-ms-summary": "Batch Succeeded",
+          "x-nullable": true
+        },
+        "batchCurrentBaseName": {
+          "type": "string",
+          "description": "Name of the group currently being deployed.",
+          "x-ms-summary": "Batch Current",
+          "x-nullable": true
+        },
+        "batchResultsJson": {
+          "type": "string",
+          "description": "JSON string with per-group results (when batch completes).",
+          "x-ms-summary": "Batch Results JSON",
+          "x-nullable": true
+        },
+        "error": {
+          "type": "string",
+          "description": "Error message if job failed.",
+          "x-ms-summary": "Error",
+          "x-nullable": true
+        }
+      }
+    }
+  },
   "securityDefinitions": {
     "oauth2-auth": {
       "type": "oauth2",
