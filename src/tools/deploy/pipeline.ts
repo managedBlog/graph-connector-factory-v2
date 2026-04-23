@@ -179,7 +179,19 @@ export async function executeDeployPipeline(
   let connectorDeployMs: number | undefined;
   let appRegistrationMs: number | undefined;
 
-  const resolvedAuthType = input.authType ?? "FederatedIdentity";
+  const resolvedAuthType = input.authType?.trim() || config.deploy?.defaultAuthType?.trim() || "FederatedIdentity";
+
+  // Resolve tenant ID: for FederatedIdentity, fall back to config if caller didn't provide one.
+  // OAuthAAD intentionally defaults to "common" elsewhere, so we only inject the config value for FIC.
+  const resolvedTenantId =
+    resolvedAuthType === "FederatedIdentity"
+      ? (input.oauthTenantId?.trim() || config.deploy?.oauthTenantId?.trim())
+      : (input.oauthTenantId?.trim() || undefined);
+
+  log(
+    `[Deploy Pipeline] Resolved authType=${resolvedAuthType}, ` +
+    `tenantId=${resolvedTenantId ?? "(none)"} (source: ${input.oauthTenantId?.trim() ? "input" : resolvedTenantId ? "config" : "none"})`,
+  );
 
   // Validate swagger source early
   if (!input.swagger && !input.swaggerUrl) {
@@ -306,12 +318,13 @@ export async function executeDeployPipeline(
   if (createdApp?.appId) cdaArgs["oauthClientId"] = createdApp.appId;
   else if (input.oauthClientId) cdaArgs["oauthClientId"] = input.oauthClientId;
   if (input.oauthResourceUri) cdaArgs["oauthResourceUri"] = input.oauthResourceUri;
-  if (input.oauthTenantId) cdaArgs["oauthTenantId"] = input.oauthTenantId;
+  if (resolvedTenantId) cdaArgs["oauthTenantId"] = resolvedTenantId;
   if (input.shareWithEmails) cdaArgs["shareWithEmails"] = input.shareWithEmails;
 
   log(
     `[Deploy Pipeline] CDA args: baseName=${input.baseName ?? "(none)"}, authType=${resolvedAuthType}, ` +
-    `oauthClientId=${(cdaArgs["oauthClientId"] as string | undefined) ?? "(none)"}`
+    `oauthClientId=${(cdaArgs["oauthClientId"] as string | undefined) ?? "(none)"}, ` +
+    `oauthTenantId=${resolvedTenantId ?? "(none)"}`
   );
 
   const cdaStart = Date.now();
@@ -435,7 +448,7 @@ export async function executeDeployPipeline(
         graphApiScopes: connector.graphApiScopes,
       },
       appObjectId: createdApp?.objectId,
-      authType: input.authType,
+      authType: resolvedAuthType,
       confirmed: input.confirmed ?? true,
     };
 
