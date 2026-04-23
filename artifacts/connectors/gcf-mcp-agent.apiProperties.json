@@ -12,12 +12,7 @@
           "properties": {
             "IsFirstParty": "False",
             "AzureActiveDirectoryResourceId": "__OAUTH_RESOURCE_URI__",
-            "IsOnbehalfofLoginSupported": true,
-            "FederatedIdentityCredentials": {
-              "Issuer": "https://login.microsoftonline.com/__TENANT_ID__/v2.0",
-              "Subject": "__FIC_SUBJECT__",
-              "Audience": "api://AzureADTokenExchange"
-            }
+            "IsOnbehalfofLoginSupported": true
           },
           "customParameters": {
             "LoginUri": {
