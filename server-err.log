@@ -15,3 +15,8 @@
 16:50:23.647 [graph-connector]   Output directory:  C:\Users\CloudAdmin\OneDrive - Managed Modern Endpoint\Documents\MCP Agents\graph-connector-factory-v2\output
 16:50:23.648 [graph-connector]   Output TTL:        60 minutes
 16:50:23.648 [graph-connector]   Auth mode:         authenticated
+17:43:50.976 [graph-connector] New MCP session: a11ce27c-9eb9-493f-be70-0fc4d48e32bf
+17:43:51.142 [graph-connector] New MCP session: af87ea10-7bec-455b-82c9-f6a75ff1f2fa
+17:58:45.962 [graph-connector] New MCP session: 356b73cb-db9d-4f95-b80d-6dfcbc0bf611
+18:04:53.685 [graph-connector] clientCredential without inline secret — using DefaultAzureCredential for Key Vault access.
+18:04:53.698 [graph-connector] Using BAP admin API for environment listing (service-principal mode).

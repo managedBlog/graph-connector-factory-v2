@@ -1,0 +1,21 @@
+mcs.metadata:
+  componentName: GCF REST Connector - Check connector and app registration names
+kind: TaskDialog
+modelDisplayName: Check connector and app registration names
+modelDescription: Pre-flight name conflict check. Verifies that proposed connector base names do not conflict with existing connectors or app registrations.
+outputs:
+  - propertyName: conflictCount
+
+  - propertyName: hasConflicts
+
+  - propertyName: resultsJson
+
+action:
+  kind: InvokeConnectorTaskAction
+  connectionReference: copilots_header_91a5e.shared_new-5fgcf-20rest-20connector-5f251f982b189de9d2.52f1402e515247c1ae6cdbfa6793c46d
+  connectionProperties:
+    mode: Invoker
+
+  operationId: graph_namecheck
+
+outputMode: All

@@ -70,19 +70,32 @@ const generatedSwaggerCache = new Map<string, { swagger: string; gistRawUrl?: st
 
 // ─── Tool definitions ──────────────────────────────────────────────────────
 
+/** Tools exposed to Copilot Studio via the MCP endpoint. */
+const MCP_VISIBLE_TOOLS = new Set([
+  "graph_listOperations",
+  "graph_generateConnector",
+  "graph_setDesignContext",
+]);
+
 /**
- * Returns all available tools for MCP tools/list and REST introspection.
+ * Returns tools visible to MCP clients (Copilot Studio).
+ * Only exposes the AI research tools — internal pipeline tools are hidden.
+ */
+export function listMcpTools(): AvailableTool[] {
+  return graphToolDefinitions.filter((t) => MCP_VISIBLE_TOOLS.has(t.name));
+}
+
+/**
+ * Returns all available tools for REST introspection and internal dispatch.
  * Combines graph research, connector deploy, and app registration tools.
  */
 export function listAllTools(): AvailableTool[] {
-  // Build CDA tool schemas from the registry
   const connectorTools: AvailableTool[] = Object.values(connectorToolRegistry).map((tool) => ({
     name: tool.name,
     description: tool.description,
     inputSchema: tool.inputSchema as Record<string, unknown>,
   }));
 
-  // Build ARA tool schemas from the registry (exclude setAutonomyMode — already in CDA)
   const appregTools: AvailableTool[] = Object.values(appregToolRegistry)
     .filter((tool) => tool.name !== "setAutonomyMode")
     .map((tool) => ({

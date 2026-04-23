@@ -1,0 +1,17 @@
+mcs.metadata:
+  componentName: GCF REST Connector - List Power Platform environments
+kind: TaskDialog
+modelDisplayName: List Power Platform environments
+modelDescription: Returns available Power Platform environments for the deployment picker.
+outputs:
+  - propertyName: environments
+
+action:
+  kind: InvokeConnectorTaskAction
+  connectionReference: copilots_header_91a5e.shared_new-5fgcf-20rest-20connector-5f251f982b189de9d2.52f1402e515247c1ae6cdbfa6793c46d
+  connectionProperties:
+    mode: Invoker
+
+  operationId: graph_getEnvironments
+
+outputMode: All

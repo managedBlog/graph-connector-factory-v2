@@ -1,3 +1,5 @@
+mcs.metadata:
+  componentName: ConnectorPipeline
 kind: AdaptiveDialog
 beginDialog:
   kind: OnRecognizedIntent
@@ -37,7 +39,7 @@ beginDialog:
 
     - kind: BeginDialog
       id: beginDialog_sessionContext
-      dialog: copilots_header_91a5e.action.GCA-GraphConnectorAgent-Getsessioncontext
+      dialog: copilots_header_91a5e.action.GCFRESTConnector-Getsessioncontext
       output:
         binding:
           appRegistrationStrategy: Topic.appRegistrationStrategy
@@ -441,7 +443,7 @@ beginDialog:
 
     - kind: BeginDialog
       id: beginDialog_getEnvironments
-      dialog: copilots_header_91a5e.action.GCA-DeployPipeline-ListPowerPlatformenvironments
+      dialog: copilots_header_91a5e.action.GCFRESTConnector-ListPowerPlatformenvironments
       output:
         binding:
           environments: Topic.environments
@@ -631,7 +633,7 @@ beginDialog:
           environmentId: =Topic.cfmEnvId
           names: =Topic.namecheckNames
 
-      dialog: copilots_header_91a5e.action.GCA-DeployPipeline-Checkconnectorandappregistrationnames_VMz
+      dialog: copilots_header_91a5e.action.GCFRESTConnector-Checkconnectorandappregistrationnames
       output:
         binding:
           conflictCount: Topic.namecheckConflictCount
@@ -750,7 +752,7 @@ beginDialog:
                   environmentId: =Topic.cfmEnvId
                   names: =Topic.namecheckNames
 
-              dialog: copilots_header_91a5e.action.GCA-DeployPipeline-Checkconnectorandappregistrationnames_VMz
+              dialog: copilots_header_91a5e.action.GCFRESTConnector-Checkconnectorandappregistrationnames
               output:
                 binding:
                   conflictCount: Topic.namecheckConflictCount
@@ -794,7 +796,7 @@ beginDialog:
           groupsJson: =Topic.batchGenGroupsJson
           version: =Topic.cpVersion
 
-      dialog: copilots_header_91a5e.action.GCA-GraphConnectorAgent-Batchgeneratecustomconnectors
+      dialog: copilots_header_91a5e.action.GCFRESTConnector-Batchgeneratecustomconnectors
       output:
         binding:
           groupCount: Topic.genGroupCount
@@ -895,7 +897,7 @@ beginDialog:
                   authType: =If(IsBlank(Topic.cfmAuthType), Blank(), Topic.cfmAuthType)
                   swaggerUrl: =Topic.gen1SwaggerUrl
 
-              dialog: copilots_header_91a5e.action.GCA-DeployPipeline-Deployconnectorpipeline
+              dialog: copilots_header_91a5e.action.GCFRESTConnector-Deployconnectorpipeline
               output:
                 binding:
                   status: Topic.dep1Status
@@ -925,7 +927,7 @@ beginDialog:
                           authType: =If(IsBlank(Topic.cfmAuthType), Blank(), Topic.cfmAuthType)
                           swaggerUrl: =Topic.gen2SwaggerUrl
 
-                      dialog: copilots_header_91a5e.action.GCA-DeployPipeline-Deployconnectorpipeline
+                      dialog: copilots_header_91a5e.action.GCFRESTConnector-Deployconnectorpipeline
                       output:
                         binding:
                           status: Topic.dep2Status
@@ -955,7 +957,7 @@ beginDialog:
                           authType: =If(IsBlank(Topic.cfmAuthType), Blank(), Topic.cfmAuthType)
                           swaggerUrl: =Topic.gen3SwaggerUrl
 
-                      dialog: copilots_header_91a5e.action.GCA-DeployPipeline-Deployconnectorpipeline
+                      dialog: copilots_header_91a5e.action.GCFRESTConnector-Deployconnectorpipeline
                       output:
                         binding:
                           status: Topic.dep3Status

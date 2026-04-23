@@ -1,8 +1,8 @@
 mcs.metadata:
-  componentName: GCA - Deploy Pipeline - Deploy connector pipeline
+  componentName: GCF REST Connector - Deploy connector pipeline
 kind: TaskDialog
 modelDisplayName: Deploy connector pipeline
-modelDescription: "Deploy a generated Power Platform custom connector and configure its Entra ID app registration in a single call. Uses OAuth authentication to authorize the deploy operation. Chains: Connector Deploy Agent then App Registration Agent."
+modelDescription: "Deploy a generated Power Platform custom connector and configure its Entra ID app registration in a single call. Chains: app registration creation, connector deployment, then FIC/redirect/permissions configuration."
 outputs:
   - propertyName: appRegistrationAppId
 
@@ -36,7 +36,7 @@ outputs:
 
 action:
   kind: InvokeConnectorTaskAction
-  connectionReference: copilots_header_91a5e.shared_gca-20-2d-20deploy-20pipeline-5f251f982b189de9d-2501cc3075c9bd9f.2b47903cf48c4a4aa58a3d67d0da8fbf
+  connectionReference: copilots_header_91a5e.shared_new-5fgcf-20rest-20connector-5f251f982b189de9d2.52f1402e515247c1ae6cdbfa6793c46d
   connectionProperties:
     mode: Invoker
 

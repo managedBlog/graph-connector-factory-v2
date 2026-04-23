@@ -27,7 +27,7 @@ import type { AgentConfig } from "../config/types";
 import { runWithRequestContext, validateToken, updateCallerIdentity } from "../auth";
 import type { TokenValidationConfig } from "../auth";
 import { createMcpTransportAdapter, McpAdapter } from "./mcpAdapter";
-import { invokeTool, listAllTools, stripHashSuffix, appendHashSuffix } from "../tools/registry";
+import { invokeTool, listAllTools, listMcpTools, stripHashSuffix, appendHashSuffix } from "../tools/registry";
 import { listPrompts, getPrompt } from "../prompts";
 import { log, logError } from "../logging/logger";
 import { initialisePolicyState } from "../policies";
@@ -213,7 +213,7 @@ export function startHttpServer(options: HttpHostOptions): void {
 
   // Create MCP adapter with dependency injection
   const adapter: McpAdapter = createMcpTransportAdapter({
-    listAvailableTools: listAllTools,
+    listAvailableTools: listMcpTools,
     routeToolInvocationWithConfig: async (toolName: string, input: unknown) => {
       return invokeTool(toolName, input, config);
     },
