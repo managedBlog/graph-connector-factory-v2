@@ -44,9 +44,6 @@ beginDialog:
 
     - kind: BeginDialog
       id: beginDialog_sessionContext
-      input:
-        binding:
-          userObjectId: =Topic.userObjectId
       dialog: copilots_header_91a5e.action.GCA-GraphConnectorAgent-Getsessioncontext
       output:
         binding:

@@ -1,6 +1,3 @@
-mcs.metadata:
-  componentName: default
-  description: default
 kind: GptComponentMetadata
 displayName: Microsoft Graph Connector Factory
 instructions: |-
