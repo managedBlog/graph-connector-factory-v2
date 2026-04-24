@@ -7,15 +7,21 @@
       0. Plan       — Print what each stage does (no changes).
       1. Preflight  — Verify prerequisites (node, npm, az, pac).
       2. Build      — Run npm install and npm run build.
-      3. Entra      — Create API + Client app registrations in Entra ID.
+      3. Entra      — Create API + Client + Enterprise app registrations in Entra ID.
       4. Config     — Generate config/config.json from template + values.
-      5. Artifacts   — Prepare connector artifacts with token replacement.
-      6. Connectors — Deploy connectors via pac connector create.
-      7. FIC        — Discover managed-identity subjects, add FICs to Client app.
-      All           — Run stages 1–7 sequentially.
+      5. Artifacts  — Token-replace connector solution files, pack .zip files.
+      6. Connectors — Import connector solution via pac solution import.
+      7. FIC        — Discover auto-generated FIC Subjects, add FICs + redirect URIs.
+      8. Agent      — Import agent solution via pac solution import.
+      All          — Run stages 1–8 sequentially.
 
-    Architecture: two-app pattern (API app + Client app), two connectors
-    (Unified REST + MCP Agent), OAuth via Federated Identity Credentials.
+    Architecture: two-app pattern (API app + Client app), optional enterprise app,
+    three connectors (Unified REST + MCP Agent + MCP Server for Enterprise),
+    OAuth via Federated Identity Credentials.
+
+    CRITICAL ORDERING: Connectors (6) → FIC (7) → Agent (8).
+    FIC must happen after connector import (to discover auto-generated Subject)
+    and before agent import (so connections can authenticate).
 
 .EXAMPLE
     .\Install-GraphConnectorFactory.ps1 -Stage Plan
@@ -23,12 +29,13 @@
     .\Install-GraphConnectorFactory.ps1 -Stage Entra
     .\Install-GraphConnectorFactory.ps1 -Stage Config -ApiAppId <id> -ApiAppSecret <secret> `
         -ClientAppId <id> -TenantId <tid> -ServerHost <host> -EnvironmentId <eid>
+    .\Install-GraphConnectorFactory.ps1 -Stage Agent -EnvironmentId <eid>
     .\Install-GraphConnectorFactory.ps1 -Stage All
 #>
 [CmdletBinding()]
 param(
     [Parameter(Mandatory)]
-    [ValidateSet('Plan', 'Preflight', 'Build', 'Entra', 'Config', 'Artifacts', 'Connectors', 'FIC', 'All')]
+    [ValidateSet('Plan', 'Preflight', 'Build', 'Entra', 'Config', 'Artifacts', 'Connectors', 'FIC', 'Agent', 'All')]
     [string] $Stage,
 
     # --- Entra stage outputs / Config stage inputs ---
@@ -39,13 +46,17 @@ param(
     [string] $TenantId,
     [string] $McpAccessScopeId,
 
+    # --- Enterprise MCP connector ---
+    [string] $EnterpriseAppId,
+    [string] $EnterpriseAppObjectId,
+    [switch] $SkipEnterprise,
+
     # --- Config / Artifacts inputs ---
     [string] $ServerHost,
     [string] $EnvironmentId,
 
-    # --- Connector outputs / FIC inputs ---
-    [string] $UnifiedConnectorId,
-    [string] $McpConnectorId,
+    # --- Agent stage ---
+    [string] $SettingsFile,
 
     # --- Behaviour ---
     [switch] $NonInteractive
@@ -54,9 +65,18 @@ param(
 $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $configDir = Join-Path $repoRoot 'config'
-$artifactsDir = Join-Path $repoRoot 'artifacts' 'connectors'
-$preparedDir = Join-Path $artifactsDir 'prepared'
-$manifestPath = Join-Path $artifactsDir 'manifest.json'
+$solutionsDir = Join-Path $repoRoot 'copilot-studio' 'solutions'
+$solutionsOutputDir = Join-Path $repoRoot 'artifacts' 'solutions'
+
+# Enterprise MCP Server for Enterprise — global app ID (same across all tenants)
+$ENTERPRISE_MCP_APP_ID = 'e8c77dc2-69b3-43f4-bc51-3213c9d915b4'
+
+# Connector schema names for FIC discovery (stable across environments)
+$FIC_CONNECTOR_SCHEMAS = @(
+    @{ SchemaName = 'new_gcf-20rest-20connector'; DisplayName = 'GCF REST Connector'; IsEnterprise = $false },
+    @{ SchemaName = 'new_gcf-20mcp-20agent';     DisplayName = 'GCF MCP Agent';       IsEnterprise = $false },
+    @{ SchemaName = 'cr863_5Fmcp-2Dserver-2Dfor-2Denterprise'; DisplayName = 'MCP-Server-for-Enterprise'; IsEnterprise = $true }
+)
 
 # ─────────────────────────────────────────────────────────────────
 # Helper functions
@@ -169,13 +189,18 @@ function Invoke-StagePlan {
 
   Stage 1  Preflight   — Check prerequisites (node ≥18, npm, az CLI, pac CLI).
   Stage 2  Build       — npm install && npm run build in repo root.
-  Stage 3  Entra       — Create API + Client app registrations in Entra ID.
+  Stage 3  Entra       — Create API + Client + Enterprise app registrations.
                          Outputs app IDs, secret, scope ID, tenant ID.
   Stage 4  Config      — Generate config/config.json from template + Entra values.
-  Stage 5  Artifacts   — Token-replace connector swagger & apiProperties files.
-  Stage 6  Connectors  — Deploy connectors via pac connector create.
-  Stage 7  FIC         — Discover managed-identity subjects on connectors,
-                         add Federated Identity Credentials to Client app.
+  Stage 5  Artifacts   — Token-replace connector solution files, pack .zip files.
+  Stage 6  Connectors  — Import connector solution via pac solution import.
+  Stage 7  FIC         — Discover auto-generated FIC Subjects on connectors,
+                         add Federated Identity Credentials + redirect URIs.
+  Stage 8  Agent       — Import agent solution via pac solution import.
+
+  CRITICAL ORDERING: Connectors (6) → FIC (7) → Agent (8).
+  FIC must run AFTER connectors (to read auto-generated Subject)
+  and BEFORE agent (so connections can authenticate).
 
   Typical workflow:
     .\Install-GraphConnectorFactory.ps1 -Stage Preflight
@@ -185,9 +210,11 @@ function Invoke-StagePlan {
     .\Install-GraphConnectorFactory.ps1 -Stage Config -ApiAppId ... -ApiAppSecret ... `
         -ClientAppId ... -TenantId ... -ServerHost ... -EnvironmentId ...
     .\Install-GraphConnectorFactory.ps1 -Stage Artifacts -ApiAppId ... `
-        -ClientAppId ... -TenantId ... -ServerHost ...
+        -ClientAppId ... -TenantId ... -ServerHost ... [-EnterpriseAppId ... | -SkipEnterprise]
     .\Install-GraphConnectorFactory.ps1 -Stage Connectors -EnvironmentId ...
-    .\Install-GraphConnectorFactory.ps1 -Stage FIC -ClientAppObjectId ... -TenantId ...
+    .\Install-GraphConnectorFactory.ps1 -Stage FIC -ClientAppObjectId ... -TenantId ... `
+        -EnvironmentId ... [-EnterpriseAppObjectId ...]
+    .\Install-GraphConnectorFactory.ps1 -Stage Agent -EnvironmentId ...
 "@ -ForegroundColor Gray
 }
 
@@ -430,6 +457,125 @@ function Invoke-StageEntra {
         Write-Warning "Could not register Client app as management app: $_"
     }
 
+    # ── Enterprise MCP Server for Enterprise ─────────────────────
+    # Separate Entra app registration for the enterprise connector.
+    # FIC for this connector routes to the enterprise app, NOT the Client app.
+    $enterpriseAppId       = $EnterpriseAppId
+    $enterpriseAppObjectId = $EnterpriseAppObjectId
+    $skipEnt               = $SkipEnterprise.IsPresent
+
+    if (-not $skipEnt) {
+        Write-Step 'Checking if MCP Server for Enterprise SP exists in tenant…'
+        $enterpriseSpResult = Invoke-AzCli @('rest', '--method', 'get',
+            '--url', "https://graph.microsoft.com/v1.0/servicePrincipals?`$filter=appId eq '$ENTERPRISE_MCP_APP_ID'&`$select=id,appId,displayName,oauth2PermissionScopes",
+            '--output', 'json') 2>$null
+
+        if (-not $enterpriseSpResult.value -or $enterpriseSpResult.value.Count -eq 0) {
+            Write-Warning 'MCP Server for Enterprise is NOT provisioned in this tenant.'
+            Write-Host '  Enterprise connector will be stripped from the solution.' -ForegroundColor Yellow
+            Write-Host '  To provision: https://learn.microsoft.com/en-us/graph/mcp-server/get-started' -ForegroundColor DarkGray
+            $skipEnt = $true
+        } else {
+            $enterpriseSp = $enterpriseSpResult.value[0]
+            Write-Success "MCP Server for Enterprise SP found: $($enterpriseSp.displayName)"
+
+            # Reverse lookup: find existing app reg with oauth2PermissionGrants
+            if ([string]::IsNullOrWhiteSpace($enterpriseAppId)) {
+                Write-Step 'Checking for existing enterprise app registrations…'
+                $grants = Invoke-AzCli @('rest', '--method', 'get',
+                    '--url', "https://graph.microsoft.com/v1.0/oauth2PermissionGrants?`$filter=resourceId eq '$($enterpriseSp.id)'&`$select=clientId,scope",
+                    '--output', 'json') 2>$null
+
+                if ($grants.value -and $grants.value.Count -gt 0) {
+                    $grantClientId = $grants.value[0].clientId
+                    $clientSpInfo = Invoke-AzCli @('rest', '--method', 'get',
+                        '--url', "https://graph.microsoft.com/v1.0/servicePrincipals/$grantClientId`?`$select=appId,displayName",
+                        '--output', 'json') 2>$null
+
+                    if ($clientSpInfo) {
+                        $appInfo = Invoke-AzCli @('ad', 'app', 'show', '--id', $clientSpInfo.appId)
+                        if ($appInfo -and $appInfo.displayName -match 'GCF|Graph Connector Factory|Enterprise') {
+                            $enterpriseAppId       = $appInfo.appId
+                            $enterpriseAppObjectId = $appInfo.id
+                            Write-Success "Found existing enterprise app: $($appInfo.displayName) (appId: $enterpriseAppId)"
+                        } else {
+                            Write-Host "  Found consented app ($($clientSpInfo.displayName)) but name doesn't match expected pattern — skipping" -ForegroundColor DarkGray
+                        }
+                    }
+                } else {
+                    Write-Host '  No existing app registrations with granted access found.' -ForegroundColor DarkGray
+                }
+            }
+
+            # Create enterprise app if still not found
+            if ([string]::IsNullOrWhiteSpace($enterpriseAppId)) {
+                Write-Step 'Creating enterprise app registration: GCF Enterprise MCP Client…'
+
+                # Find MCP.Users.Read scope on the enterprise SP
+                $mcpUsersReadScope = $enterpriseSp.oauth2PermissionScopes | Where-Object { $_.value -eq 'MCP.Users.Read' }
+                if (-not $mcpUsersReadScope) {
+                    Write-Warning 'MCP.Users.Read scope not found on enterprise SP. Creating app without specific scope.'
+                }
+
+                $enterpriseApp = Invoke-AzCli @('ad', 'app', 'create',
+                    '--display-name', 'GCF Enterprise MCP Client',
+                    '--web-redirect-uris', 'https://global.consent.azure-apim.net/redirect')
+                $enterpriseAppId       = $enterpriseApp.appId
+                $enterpriseAppObjectId = $enterpriseApp.id
+                Write-Success "Created enterprise app: $enterpriseAppId (objectId: $enterpriseAppObjectId)"
+
+                # Add MCP.Users.Read delegated permission via Graph PATCH
+                if ($mcpUsersReadScope) {
+                    $entPermBody = @{
+                        requiredResourceAccess = @(
+                            @{
+                                resourceAppId  = $ENTERPRISE_MCP_APP_ID
+                                resourceAccess = @(
+                                    @{ id = $mcpUsersReadScope.id; type = 'Scope' }
+                                )
+                            }
+                        )
+                    } | ConvertTo-Json -Depth 5 -Compress
+                    $tmpEntPermFile = Join-Path $env:TEMP 'gcf-ent-perm-body.json'
+                    $entPermBody | Set-Content $tmpEntPermFile -Encoding utf8 -NoNewline
+                    try {
+                        Invoke-AzCli @('rest', '--method', 'PATCH',
+                            '--uri', "https://graph.microsoft.com/v1.0/applications/$enterpriseAppObjectId",
+                            '--body', "@$tmpEntPermFile",
+                            '--headers', 'Content-Type=application/json')
+                        Write-Success 'MCP.Users.Read permission added'
+                    } catch {
+                        Write-Warning "Failed to add MCP.Users.Read permission: $_"
+                    } finally {
+                        Remove-Item $tmpEntPermFile -ErrorAction SilentlyContinue
+                    }
+                }
+
+                # Ensure SP for enterprise app
+                try {
+                    Invoke-AzCli @('ad', 'sp', 'create', '--id', $enterpriseAppId)
+                    Write-Success 'Enterprise app service principal created'
+                } catch {
+                    if ($_.Exception.Message -match 'already exists') {
+                        Write-Success 'Enterprise app service principal already exists'
+                    } else { throw }
+                }
+
+                # Grant admin consent
+                try {
+                    Invoke-AzCli @('ad', 'app', 'permission', 'admin-consent', '--id', $enterpriseAppId)
+                    Write-Success 'Admin consent granted for enterprise app'
+                } catch {
+                    Write-Warning "Admin consent may require Global Admin. Grant manually: az ad app permission admin-consent --id $enterpriseAppId"
+                }
+            } else {
+                Write-Host "  Using existing enterprise app: $enterpriseAppId (objectId: $enterpriseAppObjectId)" -ForegroundColor DarkCyan
+            }
+        }
+    } else {
+        Write-Host "`n  Enterprise MCP: Skipped (-SkipEnterprise)" -ForegroundColor DarkGray
+    }
+
     # ── Output summary ───────────────────────────────────────────
     Write-Host "`n────────────────────────────────────────────────────────" -ForegroundColor Cyan
     Write-Host "  Entra ID Registration Complete — Save These Values!" -ForegroundColor Green
@@ -443,6 +589,10 @@ function Invoke-StageEntra {
         'Client Object ID'    = $clientObjectId
         'MCP.access Scope ID' = $scopeId
         'Tenant ID'           = $tenantId
+    }
+    if (-not $skipEnt -and -not [string]::IsNullOrWhiteSpace($enterpriseAppId)) {
+        $outputValues['Enterprise App ID']       = $enterpriseAppId
+        $outputValues['Enterprise Object ID']    = $enterpriseAppObjectId
     }
     Write-ValueTable $outputValues
 
@@ -458,7 +608,7 @@ function Invoke-StageEntra {
 "@ -ForegroundColor DarkGray
 
     # Return values for pipeline / All stage
-    return @{
+    $result = @{
         ApiAppId          = $apiAppId
         ApiObjectId       = $apiObjectId
         ApiAppSecret      = $apiSecret
@@ -467,6 +617,14 @@ function Invoke-StageEntra {
         McpAccessScopeId  = $scopeId
         TenantId          = $tenantId
     }
+    if (-not $skipEnt -and -not [string]::IsNullOrWhiteSpace($enterpriseAppId)) {
+        $result.EnterpriseAppId       = $enterpriseAppId
+        $result.EnterpriseAppObjectId = $enterpriseAppObjectId
+    }
+    if ($skipEnt) {
+        $result.SkipEnterprise = $true
+    }
+    return $result
 }
 
 # ─────────────────────────────────────────────────────────────────
@@ -551,7 +709,6 @@ function Invoke-StageArtifacts {
     Assert-Parameter 'TenantId'   $TenantId   'Artifacts'
     Assert-Parameter 'ServerHost' $ServerHost 'Artifacts'
 
-    $oauthScope       = "api://$ApiAppId/MCP.access"
     $oauthResourceUri = "api://$ApiAppId"
     $prepareScript    = Join-Path $PSScriptRoot 'Prepare-Artifacts.ps1'
 
@@ -560,90 +717,95 @@ function Invoke-StageArtifacts {
     }
 
     Write-Step "Calling Prepare-Artifacts.ps1…"
-    & $prepareScript `
-        -ServerHost      $ServerHost `
-        -OAuthScope      $oauthScope `
-        -OAuthClientId   $ClientAppId `
-        -OAuthResourceUri $oauthResourceUri `
-        -TenantId        $TenantId
+    $prepArgs = @{
+        ServerHost      = $ServerHost
+        OAuthClientId   = $ClientAppId
+        OAuthResourceUri = $oauthResourceUri
+        TenantId        = $TenantId
+        OutputDir       = $solutionsOutputDir
+    }
+
+    if ($SkipEnterprise) {
+        $prepArgs['SkipEnterprise'] = $true
+    } elseif (-not [string]::IsNullOrWhiteSpace($EnterpriseAppId)) {
+        $prepArgs['EnterpriseAppId'] = $EnterpriseAppId
+    }
+
+    & $prepareScript @prepArgs
+
+    # Verify outputs
+    $connectorZip = Join-Path $solutionsOutputDir 'GCFApps_connectors.zip'
+    $agentZip     = Join-Path $solutionsOutputDir 'GCFApps_agent.zip'
+
+    if (-not (Test-Path $connectorZip)) {
+        throw "Connector solution zip not found: $connectorZip"
+    }
+    if (-not (Test-Path $agentZip)) {
+        throw "Agent solution zip not found: $agentZip"
+    }
 
     Write-Success 'Artifact preparation complete'
+    Write-Success "Connector zip: $connectorZip"
+    Write-Success "Agent zip:     $agentZip"
 }
 
 # ─────────────────────────────────────────────────────────────────
-# Stage 6 — Connectors
+# Stage 6 — Connectors (Solution Import)
 # ─────────────────────────────────────────────────────────────────
 
 function Invoke-StageConnectors {
-    Write-StageHeader 'Stage 6 · Connector Deployment'
+    Write-StageHeader 'Stage 6 · Connector Solution Import'
 
     Assert-Parameter 'EnvironmentId' $EnvironmentId 'Connectors'
 
-    if (-not (Test-Path $manifestPath)) {
-        throw "Manifest not found: $manifestPath. Run the Artifacts stage first."
+    $connectorZip = Join-Path $solutionsOutputDir 'GCFApps_connectors.zip'
+    if (-not (Test-Path $connectorZip)) {
+        throw "Connector solution zip not found: $connectorZip. Run the Artifacts stage first."
     }
 
-    $manifest = Get-Content $manifestPath -Raw | ConvertFrom-Json
-    $results  = @{}
+    Write-Step "Importing connector solution: $connectorZip"
+    Write-Step "Target environment: $EnvironmentId"
 
-    foreach ($connector in $manifest.connectors) {
-        $swaggerPath  = Join-Path $preparedDir $connector.swaggerFile
-        $propsPath    = Join-Path $preparedDir $connector.apiPropertiesFile
+    $pacOutput = & pac solution import `
+        --path $connectorZip `
+        --force-overwrite `
+        --publish-changes `
+        --environment $EnvironmentId 2>&1
 
-        if (-not (Test-Path $swaggerPath)) {
-            throw "Prepared swagger not found: $swaggerPath. Run the Artifacts stage first."
-        }
-        if (-not (Test-Path $propsPath)) {
-            throw "Prepared apiProperties not found: $propsPath. Run the Artifacts stage first."
-        }
-
-        Write-Step "Deploying connector: $($connector.displayName)…"
-        $pacOutput = & pac connector create `
-            --api-definition-file $swaggerPath `
-            --api-properties-file $propsPath `
-            --environment $EnvironmentId 2>&1
-
-        if ($LASTEXITCODE -ne 0) {
-            Write-Failure "Failed to deploy $($connector.displayName)"
-            Write-Host ($pacOutput -join "`n") -ForegroundColor Red
-            throw "pac connector create failed for $($connector.displayName)"
-        }
-
-        # Try to extract connector ID from pac output
-        $connectorIdLine = $pacOutput | Where-Object { $_ -match 'connector.*id|connectorId|/connectors/' } | Select-Object -First 1
-        $connectorId = ''
-        if ($connectorIdLine -match '([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})') {
-            $connectorId = $Matches[1]
-        }
-
-        $results[$connector.id] = $connectorId
-        Write-Success "$($connector.displayName) deployed (ID: $connectorId)"
-        Write-Host ($pacOutput -join "`n") -ForegroundColor DarkGray
+    if ($LASTEXITCODE -ne 0) {
+        Write-Failure 'Connector solution import failed'
+        Write-Host ($pacOutput -join "`n") -ForegroundColor Red
+        Write-Host "`n  Troubleshooting:" -ForegroundColor Yellow
+        Write-Host "    - Verify pac auth: pac auth list" -ForegroundColor Yellow
+        Write-Host "    - Verify environment: pac env list" -ForegroundColor Yellow
+        Write-Host "    - Check for missing dependencies in the solution" -ForegroundColor Yellow
+        throw 'pac solution import failed for connector solution'
     }
 
-    # Output summary
+    Write-Host ($pacOutput -join "`n") -ForegroundColor DarkGray
+    Write-Success 'Connector solution imported successfully'
+
     Write-Host "`n────────────────────────────────────────────────────────" -ForegroundColor Cyan
-    Write-Host "  Connector Deployment Complete" -ForegroundColor Green
+    Write-Host "  Connector Solution Import Complete" -ForegroundColor Green
     Write-Host "────────────────────────────────────────────────────────" -ForegroundColor Cyan
-    Write-ValueTable $results
+    Write-Host "`n  IMPORTANT: FIC Subject generation may take up to 5 minutes." -ForegroundColor Yellow
+    Write-Host "  The FIC stage will poll with exponential backoff.`n" -ForegroundColor Yellow
 
-    if ($results.ContainsKey('gcf-unified-connector') -and $results.ContainsKey('gcf-mcp-agent')) {
-        Write-Host "`n  Next: run the FIC stage:" -ForegroundColor Yellow
-        Write-Host @"
+    Write-Host "  Next: run the FIC stage:" -ForegroundColor Yellow
+    Write-Host @"
     .\Install-GraphConnectorFactory.ps1 -Stage FIC ``
         -ClientAppObjectId '<CLIENT_OBJECT_ID>' ``
         -TenantId '<TENANT_ID>' ``
-        -UnifiedConnectorId '$($results['gcf-unified-connector'])' ``
-        -McpConnectorId '$($results['gcf-mcp-agent'])' ``
-        -EnvironmentId '<ENV_ID>'
+        -EnvironmentId '$EnvironmentId'
 "@ -ForegroundColor DarkGray
-    }
-
-    return $results
 }
 
 # ─────────────────────────────────────────────────────────────────
 # Stage 7 — FIC (Federated Identity Credentials)
+#
+# CRITICAL: Must run AFTER Connectors (Stage 6) and BEFORE Agent (Stage 8).
+# Power Platform auto-generates FIC Subject values after connector import.
+# There is a propagation delay — we use exponential backoff to wait.
 # ─────────────────────────────────────────────────────────────────
 
 function Invoke-StageFIC {
@@ -655,107 +817,204 @@ function Invoke-StageFIC {
 
     $issuer = "https://login.microsoftonline.com/$TenantId/v2.0"
 
-    # Build list of connectors to process
-    $connectors = @()
-    if ($UnifiedConnectorId) {
-        $connectors += @{ Id = $UnifiedConnectorId; Name = 'gcf-unified-connector'; DisplayName = 'Graph Connector Factory' }
-    }
-    if ($McpConnectorId) {
-        $connectors += @{ Id = $McpConnectorId; Name = 'gcf-mcp-agent'; DisplayName = 'Graph Connector Factory - MCP Agent' }
-    }
-
-    if ($connectors.Count -eq 0) {
-        Write-Warning 'No connector IDs provided. Attempting to discover connectors from Power Platform…'
-
-        # Try listing connectors and matching by name
-        Write-Step 'Listing connectors in environment…'
-        $pacList = & pac connector list --environment $EnvironmentId 2>&1
-        if ($LASTEXITCODE -ne 0) {
-            throw "pac connector list failed. Provide -UnifiedConnectorId and -McpConnectorId explicitly."
+    # Resolve enterprise app object ID if enterprise app ID provided
+    $entObjId = $EnterpriseAppObjectId
+    if (-not $SkipEnterprise -and [string]::IsNullOrWhiteSpace($entObjId) -and -not [string]::IsNullOrWhiteSpace($EnterpriseAppId)) {
+        Write-Step 'Resolving Enterprise app object ID…'
+        $entApp = Invoke-AzCli @('ad', 'app', 'show', '--id', $EnterpriseAppId, '--query', 'id', '--output', 'tsv')
+        if ($entApp) {
+            $entObjId = "$entApp".Trim()
+            Write-Success "Enterprise app object ID: $entObjId"
         }
+    }
 
-        foreach ($line in $pacList) {
-            if ($line -match 'Graph Connector Factory\b' -and $line -notmatch 'MCP Agent') {
-                if ($line -match '([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})') {
-                    $connectors += @{ Id = $Matches[1]; Name = 'gcf-unified-connector'; DisplayName = 'Graph Connector Factory' }
-                }
+    # Build connector list to process
+    $connectorSchemas = @()
+    foreach ($schema in $FIC_CONNECTOR_SCHEMAS) {
+        if ($schema.IsEnterprise -and $SkipEnterprise) { continue }
+        $connectorSchemas += $schema
+    }
+
+    if ($connectorSchemas.Count -eq 0) {
+        Write-Warning 'No connectors to process for FIC.'
+        return
+    }
+
+    # ── Phase 1: List connectors in environment ──────────────────────
+    Write-Step 'Phase 1: Listing connectors in environment…'
+    $ppApiBase    = 'https://api.powerapps.com/providers/Microsoft.PowerApps'
+    $ppApiVersion = '2016-11-01'
+
+    $listUrl = "${ppApiBase}/apis?api-version=${ppApiVersion}&`$filter=environment eq '${EnvironmentId}'"
+    $listResponse = Invoke-AzCli @('rest', '--method', 'GET', '--url', $listUrl,
+        '--resource', 'https://service.powerapps.com/', '--output', 'json')
+
+    if (-not $listResponse -or -not $listResponse.value) {
+        throw "Failed to list connectors in environment $EnvironmentId"
+    }
+    $allConnectors = @($listResponse.value)
+    Write-Success "Found $($allConnectors.Count) connector(s) in environment"
+
+    # ── Phase 2+3: Match and extract FIC with exponential backoff ────
+    Write-Step 'Phase 2: Matching connectors and extracting FIC values…'
+    Write-Host ''
+
+    $maxRetries    = 6      # 6 attempts: initial + 5 retries (waits: 10, 20, 40, 80, 160 ≈ 5 min)
+    $baseDelaySec  = 10
+    $ficEntries    = @()
+    $pendingSchemas = [System.Collections.Generic.List[hashtable]]::new()
+    foreach ($s in $connectorSchemas) { $pendingSchemas.Add($s) }
+
+    for ($attempt = 1; $attempt -le $maxRetries; $attempt++) {
+        $stillPending = [System.Collections.Generic.List[hashtable]]::new()
+
+        foreach ($schema in $pendingSchemas) {
+            Write-Host "    [$attempt/$maxRetries] Looking for: $($schema.SchemaName)" -ForegroundColor White
+
+            # Match connector by schema name (stable across environments)
+            $match = $allConnectors | Where-Object {
+                $_.name -like "*$($schema.SchemaName)*"
             }
-            if ($line -match 'MCP Agent') {
-                if ($line -match '([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})') {
-                    $connectors += @{ Id = $Matches[1]; Name = 'gcf-mcp-agent'; DisplayName = 'Graph Connector Factory - MCP Agent' }
-                }
+
+            if (-not $match) {
+                Write-Host "      NOT FOUND in environment — will retry" -ForegroundColor Yellow
+                $stillPending.Add($schema)
+                continue
             }
-        }
 
-        if ($connectors.Count -eq 0) {
-            throw 'Could not discover connectors. Provide -UnifiedConnectorId and -McpConnectorId explicitly.'
-        }
-        Write-Success "Discovered $($connectors.Count) connector(s)"
-    }
+            # Handle multiple matches
+            if ($match -is [array] -and $match.Count -gt 1) {
+                Write-Warning "Multiple matches for $($schema.SchemaName) — using first"
+                $match = $match[0]
+            }
 
-    foreach ($conn in $connectors) {
-        Write-Step "Processing: $($conn.DisplayName) ($($conn.Id))…"
+            $connId = $match.name
+            Write-Host "      Found: $connId" -ForegroundColor DarkGray
 
-        # The connector was created with clientAssertionType=GenericFederatedIdentityCredential
-        # in apiProperties, so the platform auto-generates the FIC Subject, Issuer, and
-        # Audience. We read those values back and register them on the Entra Client app.
-        Write-Step '  Reading auto-generated FIC values from connector…'
-        $ficSubject = $null
-        $ficIssuer  = $null
-        $connectorApiName = $null
-        $ficData = Invoke-WithRetry -Activity "FIC values for $($conn.DisplayName)" -MaxAttempts 6 -DelaySeconds 10 -ScriptBlock {
-            $apiUrl = "https://api.powerapps.com/providers/Microsoft.PowerApps/apis/$($using:conn.Id)?api-version=2025-04-01&`$filter=environment eq '$($using:EnvironmentId)'"
+            # GET full connector definition to read FIC fields
+            $getUrl = "${ppApiBase}/apis/${connId}?api-version=${ppApiVersion}&`$filter=environment eq '${EnvironmentId}'"
             try {
-                $response = az rest --method GET --url $apiUrl --resource 'https://service.powerapps.com/' --output json 2>$null
-                if ($response) {
-                    $parsed = $response | ConvertFrom-Json
-                    $fic = $parsed.properties.connectionParameters.token.oAuthSettings.properties.FederatedIdentityCredentials
-                    if ($fic -and $fic.Subject) {
-                        return $fic
-                    }
-                }
+                $fullDef = Invoke-AzCli @('rest', '--method', 'GET', '--url', $getUrl,
+                    '--resource', 'https://service.powerapps.com/', '--output', 'json')
             } catch {
-                # Fall through to retry
+                Write-Host "      Failed to GET definition: $_" -ForegroundColor Red
+                $stillPending.Add($schema)
+                continue
             }
-            return $null
+
+            # Extract FIC fields
+            $oAuthSettings = $null
+            try { $oAuthSettings = $fullDef.properties.connectionParameters.token.oAuthSettings } catch { }
+
+            if (-not $oAuthSettings) {
+                Write-Host "      No oAuthSettings found — will retry" -ForegroundColor Yellow
+                $stillPending.Add($schema)
+                continue
+            }
+
+            $redirectUri = $oAuthSettings.redirectUrl
+            $ficBlock    = $null
+            try { $ficBlock = $oAuthSettings.properties.FederatedIdentityCredentials } catch { }
+
+            $ficSubject  = if ($ficBlock) { $ficBlock.Subject } else { $null }
+            $ficIssuer   = if ($ficBlock) { $ficBlock.Issuer } else { $null }
+
+            if ([string]::IsNullOrWhiteSpace($ficSubject)) {
+                Write-Host "      Subject not yet populated — will retry" -ForegroundColor DarkYellow
+                $stillPending.Add($schema)
+                continue
+            }
+
+            # FIC entry collected successfully
+            $ficName = "fic-$($schema.SchemaName -replace '[^a-zA-Z0-9-]', '-')"
+            $ficEntries += @{
+                SchemaName    = $schema.SchemaName
+                DisplayName   = $schema.DisplayName
+                IsEnterprise  = $schema.IsEnterprise
+                ConnectorId   = $connId
+                FicName       = $ficName
+                FicSubject    = $ficSubject
+                FicIssuer     = if ($ficIssuer) { $ficIssuer } else { $issuer }
+                RedirectUri   = $redirectUri
+            }
+
+            Write-Success "Extracted FIC for: $($schema.DisplayName)"
+            Write-Host "      Subject:      $ficSubject" -ForegroundColor DarkGray
+            Write-Host "      Redirect URI: $redirectUri" -ForegroundColor DarkGray
+            Write-Host ''
         }
 
-        if (-not $ficData -or -not $ficData.Subject) {
-            Write-Warning "Could not read auto-generated FIC for $($conn.DisplayName)."
-            Write-Warning "Verify the connector was created with clientAssertionType = GenericFederatedIdentityCredential."
-            Write-Warning "Open the connector in make.powerapps.com → Security tab to check."
+        if ($stillPending.Count -eq 0) { break }
+
+        if ($attempt -lt $maxRetries) {
+            $wait = $baseDelaySec * [math]::Pow(2, $attempt - 1)
+            Write-Host ''
+            Write-Host "    Waiting ${wait}s for FIC Subject generation ($($stillPending.Count) pending)…" -ForegroundColor DarkCyan
+            Start-Sleep -Seconds $wait
+
+            # Refresh connector list
+            try {
+                $listResponse = Invoke-AzCli @('rest', '--method', 'GET', '--url', $listUrl,
+                    '--resource', 'https://service.powerapps.com/', '--output', 'json')
+                $allConnectors = @($listResponse.value)
+            } catch {
+                Write-Warning "Failed to refresh connector list: $_"
+            }
+        }
+
+        $pendingSchemas = $stillPending
+    }
+
+    # Report connectors whose Subject never appeared
+    if ($pendingSchemas.Count -gt 0) {
+        Write-Host ''
+        Write-Warning "FIC Subject still empty after $maxRetries retries for:"
+        foreach ($s in $pendingSchemas) {
+            Write-Host "      - $($s.DisplayName) ($($s.SchemaName))" -ForegroundColor Yellow
+        }
+        Write-Host ''
+        Write-Host "  Verify in make.powerapps.com → connector Security tab:" -ForegroundColor Yellow
+        Write-Host "    1. clientAssertionType = GenericFederatedIdentityCredential" -ForegroundColor Yellow
+        Write-Host "    2. FederatedIdentityCredentials block has a Subject value" -ForegroundColor Yellow
+
+        if ($NonInteractive) {
+            throw "FIC discovery incomplete for $($pendingSchemas.Count) connector(s). Cannot proceed in non-interactive mode."
+        }
+
+        Write-Host ''
+        $continue = Read-Host "  Continue with $($ficEntries.Count) collected FIC(s)? (y/n)"
+        if ($continue -ne 'y') { throw 'FIC discovery incomplete. Re-run after Subject values are available.' }
+    }
+
+    if ($ficEntries.Count -eq 0) {
+        throw "No FIC values discovered. Ensure connector solution was imported (Stage 6) and wait for Subject generation."
+    }
+
+    # ── Phase 4: Create FIC credentials ──────────────────────────────
+    Write-Step "Phase 3: Creating Federated Identity Credentials…"
+    Write-Host ''
+
+    $ficFailures = @()
+    foreach ($entry in $ficEntries) {
+        # Route to correct app: enterprise → enterprise app, core → client app
+        $targetObjId = if ($entry.IsEnterprise -and $entObjId) { $entObjId } else { $ClientAppObjectId }
+        $targetLabel = if ($entry.IsEnterprise) { 'ENTERPRISE' } else { 'CLIENT' }
+
+        if ($entry.IsEnterprise -and -not $entObjId) {
+            Write-Warning "Skipping enterprise FIC — no EnterpriseAppObjectId available"
+            $ficFailures += $entry.DisplayName
             continue
         }
 
-        $ficSubject = $ficData.Subject
-        $ficIssuer  = $ficData.Issuer
-        Write-Success "FIC Subject: $ficSubject"
-        Write-Success "FIC Issuer:  $ficIssuer"
-
-        # Extract connector API name from the FIC subject for redirect URI
-        # Subject format: /eid1/c/pub/t/{hash}/a/{hash}/{region}_{apiName}
-        if ($ficSubject -match '[^_]+_(.+)$') {
-            $connectorApiName = $Matches[1]
-        }
-
-        # Build FIC parameters for the Entra app
-        $ficName = "$($conn.Name)-fic"
-        $ficParams = @{
-            name        = $ficName
-            issuer      = $ficIssuer
-            subject     = $ficSubject
-            audiences   = @('api://AzureADTokenExchange')
-            description = "FIC for Power Platform connector: $($conn.DisplayName)"
-        }
+        Write-Step "  Creating FIC: $($entry.FicName) → $targetLabel app"
 
         # Check if FIC already exists
-        Write-Step "  Checking existing FICs on Client app…"
-        $existingFics = Invoke-AzCli @('ad', 'app', 'federated-credential', 'list', '--id', $ClientAppObjectId)
+        $existingFics = Invoke-AzCli @('ad', 'app', 'federated-credential', 'list', '--id', $targetObjId)
         $alreadyExists = $false
         if ($existingFics) {
             foreach ($fic in $existingFics) {
-                if ($fic.subject -eq $ficSubject -or $fic.name -eq $ficName) {
-                    Write-Success "FIC already exists for $($conn.DisplayName) — skipping"
+                if ($fic.subject -eq $entry.FicSubject -or $fic.name -eq $entry.FicName) {
+                    Write-Success "FIC already exists for $($entry.DisplayName) — skipping"
                     $alreadyExists = $true
                     break
                 }
@@ -763,38 +1022,77 @@ function Invoke-StageFIC {
         }
 
         if (-not $alreadyExists) {
-            Write-Step "  Adding FIC to Client app: $ficName…"
+            $ficParams = @{
+                name        = $entry.FicName
+                issuer      = $entry.FicIssuer
+                subject     = $entry.FicSubject
+                audiences   = @('api://AzureADTokenExchange')
+                description = "FIC for Power Platform connector: $($entry.DisplayName)"
+            }
 
-            $ficFile = Join-Path $repoRoot "artifacts" "fic-$($conn.Name).json"
+            $ficFile = Join-Path $repoRoot "artifacts" "fic-$($entry.FicName).json"
             $ficParams | ConvertTo-Json -Depth 5 | Set-Content -Path $ficFile -Encoding UTF8
 
             try {
                 Invoke-AzCli @('ad', 'app', 'federated-credential', 'create',
-                    '--id', $ClientAppObjectId,
+                    '--id', $targetObjId,
                     '--parameters', "@$ficFile")
-                Write-Success "FIC added for $($conn.DisplayName)"
+                Write-Success "FIC added for $($entry.DisplayName) on $targetLabel app"
+            } catch {
+                Write-Failure "FIC creation failed for $($entry.DisplayName): $_"
+                $ficFailures += $entry.DisplayName
             } finally {
                 if (Test-Path $ficFile) { Remove-Item $ficFile -Force }
             }
         }
+    }
 
-        # Add connector-specific redirect URI on Client app
-        if ($connectorApiName) {
-            Write-Step "  Adding redirect URI for connector…"
-            $connRedirectUri = "https://global.consent.azure-apim.net/redirect/$connectorApiName"
-            $clientAppInfo = Invoke-AzCli @('ad', 'app', 'show', '--id', $ClientAppObjectId)
-            $currentUris = @()
-            if ($clientAppInfo.web -and $clientAppInfo.web.redirectUris) {
-                $currentUris = @($clientAppInfo.web.redirectUris)
+    # Fail hard if any FIC operations failed — Agent import depends on working auth
+    if ($ficFailures.Count -gt 0) {
+        Write-Host ''
+        Write-Warning "FIC creation failed for: $($ficFailures -join ', ')"
+        throw "FIC stage incomplete — $($ficFailures.Count) credential(s) failed. Agent import cannot proceed safely."
+    }
+
+    # ── Phase 5: Add redirect URIs ───────────────────────────────────
+    Write-Step 'Phase 4: Adding redirect URIs…'
+
+    # Group URIs by target app
+    $urisByApp = @{}
+    foreach ($entry in $ficEntries) {
+        $uri = $entry.RedirectUri
+        if ([string]::IsNullOrWhiteSpace($uri)) { continue }
+        if ($entry.IsEnterprise) {
+            if (-not $entObjId) {
+                Write-Warning "Skipping enterprise redirect URI — no EnterpriseAppObjectId"
+                continue
             }
-            if ($currentUris -notcontains $connRedirectUri) {
-                $allUris = @($currentUris) + @($connRedirectUri)
-                Invoke-AzCli @('ad', 'app', 'update', '--id', $ClientAppObjectId,
-                    '--web-redirect-uris', ($allUris -join ' '))
-                Write-Success "Redirect URI added: $connRedirectUri"
-            } else {
-                Write-Success "Redirect URI already present"
+            $targetObjId = $entObjId
+        } else {
+            $targetObjId = $ClientAppObjectId
+        }
+        if (-not $urisByApp.ContainsKey($targetObjId)) { $urisByApp[$targetObjId] = @() }
+        if ($uri -notin $urisByApp[$targetObjId]) { $urisByApp[$targetObjId] += $uri }
+    }
+
+    foreach ($appObjId in $urisByApp.Keys) {
+        $label = if ($appObjId -eq $ClientAppObjectId) { 'CLIENT' } elseif ($appObjId -eq $entObjId) { 'ENTERPRISE' } else { 'APP' }
+        $clientAppInfo = Invoke-AzCli @('ad', 'app', 'show', '--id', $appObjId)
+        $currentUris = @()
+        if ($clientAppInfo.web -and $clientAppInfo.web.redirectUris) {
+            $currentUris = @($clientAppInfo.web.redirectUris)
+        }
+
+        $newUris = @($urisByApp[$appObjId] | Where-Object { $_ -notin $currentUris })
+        if ($newUris.Count -gt 0) {
+            $allUris = @($currentUris) + @($newUris)
+            Invoke-AzCli @('ad', 'app', 'update', '--id', $appObjId,
+                '--web-redirect-uris', ($allUris -join ' '))
+            foreach ($uri in $newUris) {
+                Write-Success "Redirect URI added ($label): $uri"
             }
+        } else {
+            Write-Success "All redirect URIs already present on $label app"
         }
     }
 
@@ -821,7 +1119,73 @@ function Invoke-StageFIC {
     Write-Host "  FIC Configuration Complete" -ForegroundColor Green
     Write-Host "────────────────────────────────────────────────────────" -ForegroundColor Cyan
     Write-Host "`n  Connectors are now configured with Federated Identity." -ForegroundColor Green
-    Write-Host "  Test by creating a connection in Power Platform.`n" -ForegroundColor Gray
+    Write-Host "  Next: run the Agent stage to import the Copilot Studio agent.`n" -ForegroundColor Gray
+
+    Write-Host @"
+    .\Install-GraphConnectorFactory.ps1 -Stage Agent ``
+        -EnvironmentId '$EnvironmentId'
+"@ -ForegroundColor DarkGray
+}
+
+# ─────────────────────────────────────────────────────────────────
+# Stage 8 — Agent (Solution Import)
+#
+# CRITICAL: Must run AFTER FIC (Stage 7). Connection references in
+# the agent solution need working connectors with valid FIC.
+# ─────────────────────────────────────────────────────────────────
+
+function Invoke-StageAgent {
+    Write-StageHeader 'Stage 8 · Agent Solution Import'
+
+    Assert-Parameter 'EnvironmentId' $EnvironmentId 'Agent'
+
+    $agentZip = Join-Path $solutionsOutputDir 'GCFApps_agent.zip'
+    if (-not (Test-Path $agentZip)) {
+        throw "Agent solution zip not found: $agentZip. Run the Artifacts stage first."
+    }
+
+    Write-Step "Importing agent solution: $agentZip"
+    Write-Step "Target environment: $EnvironmentId"
+
+    Write-Host "`n  NOTE: The agent solution contains connection references." -ForegroundColor Yellow
+    Write-Host "  Connections may need to be created manually in the portal" -ForegroundColor Yellow
+    Write-Host "  after this import completes.`n" -ForegroundColor Yellow
+
+    $pacArgs = @('solution', 'import',
+        '--path', $agentZip,
+        '--force-overwrite',
+        '--publish-changes',
+        '--environment', $EnvironmentId)
+
+    if (-not [string]::IsNullOrWhiteSpace($SettingsFile)) {
+        if (-not (Test-Path $SettingsFile)) {
+            throw "Settings file not found: $SettingsFile"
+        }
+        $pacArgs += @('--settings-file', $SettingsFile)
+        Write-Step "Using settings file: $SettingsFile"
+    }
+
+    $pacOutput = & pac @pacArgs 2>&1
+
+    if ($LASTEXITCODE -ne 0) {
+        Write-Failure 'Agent solution import failed'
+        Write-Host ($pacOutput -join "`n") -ForegroundColor Red
+        Write-Host "`n  Troubleshooting:" -ForegroundColor Yellow
+        Write-Host "    - Ensure connectors were imported first (Stage 6)" -ForegroundColor Yellow
+        Write-Host "    - Ensure FIC was configured (Stage 7)" -ForegroundColor Yellow
+        Write-Host "    - Try with --settings-file for connection reference mapping" -ForegroundColor Yellow
+        Write-Host "    - Check if connections need manual creation in the portal" -ForegroundColor Yellow
+        throw 'pac solution import failed for agent solution'
+    }
+
+    Write-Host ($pacOutput -join "`n") -ForegroundColor DarkGray
+    Write-Success 'Agent solution imported successfully'
+
+    Write-Host "`n────────────────────────────────────────────────────────" -ForegroundColor Cyan
+    Write-Host "  Agent Solution Import Complete" -ForegroundColor Green
+    Write-Host "────────────────────────────────────────────────────────" -ForegroundColor Cyan
+    Write-Host "`n  Verify the agent in Copilot Studio:" -ForegroundColor Green
+    Write-Host "    https://copilotstudio.microsoft.com`n" -ForegroundColor DarkGray
 }
 
 # ─────────────────────────────────────────────────────────────────
@@ -848,6 +1212,15 @@ function Invoke-StageAll {
     $script:TenantId          = $entraResult.TenantId
     $script:McpAccessScopeId  = $entraResult.McpAccessScopeId
 
+    # Propagate enterprise values if present
+    if ($entraResult.ContainsKey('EnterpriseAppId')) {
+        $script:EnterpriseAppId       = $entraResult.EnterpriseAppId
+        $script:EnterpriseAppObjectId = $entraResult.EnterpriseAppObjectId
+    }
+    if ($entraResult.ContainsKey('SkipEnterprise') -and $entraResult.SkipEnterprise) {
+        $script:SkipEnterprise = [switch]::new($true)
+    }
+
     # Prompt for values not available from Entra stage
     if ([string]::IsNullOrWhiteSpace($ServerHost)) {
         $script:ServerHost = Read-HostIfInteractive 'Enter server host (e.g. abc123-3001.usw3.devtunnels.ms)'
@@ -862,18 +1235,18 @@ function Invoke-StageAll {
     # Stage 5
     Invoke-StageArtifacts
 
-    # Stage 6
-    $connResult = Invoke-StageConnectors
+    # Stage 6 — Connector solution import
+    Invoke-StageConnectors
 
-    if ($connResult.ContainsKey('gcf-unified-connector')) {
-        $script:UnifiedConnectorId = $connResult['gcf-unified-connector']
-    }
-    if ($connResult.ContainsKey('gcf-mcp-agent')) {
-        $script:McpConnectorId = $connResult['gcf-mcp-agent']
-    }
-
-    # Stage 7
+    # Stage 7 — FIC (MUST be after connectors, BEFORE agent)
     Invoke-StageFIC
+
+    # Stage 8 — Agent solution import (MUST be after FIC)
+    Write-Host "`n  ── Connection Setup Checkpoint ──" -ForegroundColor Yellow
+    Write-Host "  Before importing the agent, verify that connections can be" -ForegroundColor Yellow
+    Write-Host "  created for each connector in make.powerapps.com.`n" -ForegroundColor Yellow
+
+    Invoke-StageAgent
 
     Write-Host "`n╔══════════════════════════════════════════════════════╗" -ForegroundColor Green
     Write-Host "║  Installation Complete!                              ║" -ForegroundColor Green
@@ -896,5 +1269,6 @@ switch ($Stage) {
     'Artifacts'  { Invoke-StageArtifacts }
     'Connectors' { Invoke-StageConnectors }
     'FIC'        { Invoke-StageFIC }
+    'Agent'      { Invoke-StageAgent }
     'All'        { Invoke-StageAll }
 }

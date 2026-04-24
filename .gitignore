@@ -7,4 +7,5 @@ config/config.json
 output/
 cache/
 artifacts/connectors/prepared/
+artifacts/solutions/
 artifacts/fic-*.json
