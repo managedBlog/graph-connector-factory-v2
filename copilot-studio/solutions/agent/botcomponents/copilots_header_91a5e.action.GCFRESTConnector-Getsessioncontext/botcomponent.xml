@@ -1,0 +1,10 @@
+<botcomponent schemaname="copilots_header_91a5e.action.GCFRESTConnector-Getsessioncontext">
+  <componenttype>9</componenttype>
+  <iscustomizable>0</iscustomizable>
+  <name>GCF REST Connector - Get session context</name>
+  <parentbotid>
+    <schemaname>copilots_header_91a5e</schemaname>
+  </parentbotid>
+  <statecode>0</statecode>
+  <statuscode>1</statuscode>
+</botcomponent>

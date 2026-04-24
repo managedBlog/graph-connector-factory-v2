@@ -1,6 +1,3 @@
-mcs.metadata:
-  componentName: Thank you
-  description: This topic triggers when the user says thank you.
 kind: AdaptiveDialog
 beginDialog:
   kind: OnRecognizedIntent

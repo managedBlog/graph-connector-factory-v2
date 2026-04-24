@@ -1,8 +1,3 @@
-mcs.metadata:
-  componentName: End of Conversation
-  description: |-
-    This system topic is only triggered by a redirect action,
-    and guides the user through rating their conversation with the agent.
 kind: AdaptiveDialog
 startBehavior: CancelOtherTopics
 beginDialog:

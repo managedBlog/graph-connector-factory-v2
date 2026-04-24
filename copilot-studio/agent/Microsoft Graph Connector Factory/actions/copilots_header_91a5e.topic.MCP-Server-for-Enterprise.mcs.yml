@@ -1,6 +1,3 @@
-mcs.metadata:
-  componentName: MCP-Server-for-Enterprise
-  description: A Model Context Protocol (MCP) server that enables AI assistants to securely interact with Microsoft Graph API for enterprise identity and access management operations.
 kind: TaskDialog
 modelDisplayName: MCP-Server-for-Enterprise
 modelDescription: A Model Context Protocol (MCP) server that enables AI assistants to securely interact with Microsoft Graph API for enterprise identity and access management operations.

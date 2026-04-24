@@ -1,6 +1,3 @@
-mcs.metadata:
-  componentName: Fallback
-  description: This system topic triggers when the user's utterance does not match any existing topics.
 kind: AdaptiveDialog
 beginDialog:
   kind: OnUnknownIntent
