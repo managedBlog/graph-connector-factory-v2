@@ -341,25 +341,52 @@ function Invoke-StageEntra {
     Invoke-AzCli @('ad', 'app', 'update', '--id', $apiAppId, '--identifier-uris', "api://$apiAppId")
     Write-Success "Identifier URI: api://$apiAppId"
 
-    # Add MCP.access scope
+    # Add MCP.access scope via Graph PATCH (--set api.* fails on fresh apps)
     Write-Step 'Adding MCP.access scope…'
-    $scopeId = [guid]::NewGuid().ToString()
-    $scopeJson = @(
-        @{
-            id                       = $scopeId
-            isEnabled                = $true
-            type                     = 'User'
-            adminConsentDescription  = 'Access Graph Connector Factory MCP'
-            adminConsentDisplayName  = 'MCP.access'
-            userConsentDescription   = 'Access Graph Connector Factory MCP'
-            userConsentDisplayName   = 'MCP.access'
-            value                    = 'MCP.access'
-        }
-    ) | ConvertTo-Json -Depth 5 -Compress
 
-    # az ad app update expects the --set value as a single argument
-    Invoke-AzCli @('ad', 'app', 'update', '--id', $apiAppId, '--set', "api.oauth2PermissionScopes=$scopeJson")
-    Write-Success "MCP.access scope ID: $scopeId"
+    # Check if scope already exists
+    $appDetail = Invoke-AzCli @('rest', '--method', 'GET',
+        '--uri', "https://graph.microsoft.com/v1.0/applications/$apiObjectId",
+        '--headers', 'Content-Type=application/json')
+    $existingScopes = @()
+    if ($appDetail.api -and $appDetail.api.oauth2PermissionScopes) {
+        $existingScopes = @($appDetail.api.oauth2PermissionScopes)
+    }
+    $mcpScope = $existingScopes | Where-Object { $_.value -eq 'MCP.access' }
+
+    if ($mcpScope) {
+        $scopeId = $mcpScope.id
+        Write-Success "MCP.access scope already exists (ID: $scopeId)"
+    } else {
+        $scopeId = [guid]::NewGuid().ToString()
+        $scopeBody = @{
+            api = @{
+                oauth2PermissionScopes = @(
+                    @{
+                        id                       = $scopeId
+                        isEnabled                = $true
+                        type                     = 'User'
+                        adminConsentDescription  = 'Access Graph Connector Factory MCP'
+                        adminConsentDisplayName  = 'MCP.access'
+                        userConsentDescription   = 'Access Graph Connector Factory MCP'
+                        userConsentDisplayName   = 'MCP.access'
+                        value                    = 'MCP.access'
+                    }
+                )
+            }
+        } | ConvertTo-Json -Depth 5 -Compress
+        $tmpScopeFile = Join-Path $env:TEMP 'gcf-scope-body.json'
+        $scopeBody | Set-Content $tmpScopeFile -Encoding utf8 -NoNewline
+        try {
+            Invoke-AzCli @('rest', '--method', 'PATCH',
+                '--uri', "https://graph.microsoft.com/v1.0/applications/$apiObjectId",
+                '--body', "@$tmpScopeFile",
+                '--headers', 'Content-Type=application/json')
+            Write-Success "MCP.access scope ID: $scopeId"
+        } finally {
+            Remove-Item $tmpScopeFile -ErrorAction SilentlyContinue
+        }
+    }
 
     # Add Graph API permissions (Application type)
     Write-Step 'Adding Graph API permissions…'
@@ -391,7 +418,7 @@ function Invoke-StageEntra {
         Invoke-AzCli @('ad', 'sp', 'create', '--id', $apiAppId)
         Write-Success 'Service principal created'
     } catch {
-        if ($_.Exception.Message -match 'already exists') {
+        if ($_.Exception.Message -match 'already exists|already in use') {
             Write-Success 'Service principal already exists'
         } else { throw }
     }
@@ -437,7 +464,7 @@ function Invoke-StageEntra {
         Invoke-AzCli @('ad', 'sp', 'create', '--id', $clientAppId)
         Write-Success 'Service principal created'
     } catch {
-        if ($_.Exception.Message -match 'already exists') {
+        if ($_.Exception.Message -match 'already exists|already in use') {
             Write-Success 'Service principal already exists'
         } else { throw }
     }
@@ -488,17 +515,27 @@ function Invoke-StageEntra {
 
                 if ($grants.value -and $grants.value.Count -gt 0) {
                     $grantClientId = $grants.value[0].clientId
-                    $clientSpInfo = Invoke-AzCli @('rest', '--method', 'get',
-                        '--url', "https://graph.microsoft.com/v1.0/servicePrincipals/$grantClientId`?`$select=appId,displayName",
-                        '--output', 'json') 2>$null
+                    try {
+                        $clientSpInfo = Invoke-AzCli @('rest', '--method', 'get',
+                            '--url', "https://graph.microsoft.com/v1.0/servicePrincipals/$grantClientId`?`$select=appId,displayName",
+                            '--output', 'json')
+                    } catch {
+                        Write-Host "  Grant references SP $grantClientId which no longer exists — skipping" -ForegroundColor DarkGray
+                        $clientSpInfo = $null
+                    }
 
                     if ($clientSpInfo) {
-                        $appInfo = Invoke-AzCli @('ad', 'app', 'show', '--id', $clientSpInfo.appId)
+                        try {
+                            $appInfo = Invoke-AzCli @('ad', 'app', 'show', '--id', $clientSpInfo.appId)
+                        } catch {
+                            Write-Host "  App registration for $($clientSpInfo.appId) not found — skipping" -ForegroundColor DarkGray
+                            $appInfo = $null
+                        }
                         if ($appInfo -and $appInfo.displayName -match 'GCF|Graph Connector Factory|Enterprise') {
                             $enterpriseAppId       = $appInfo.appId
                             $enterpriseAppObjectId = $appInfo.id
                             Write-Success "Found existing enterprise app: $($appInfo.displayName) (appId: $enterpriseAppId)"
-                        } else {
+                        } elseif ($appInfo) {
                             Write-Host "  Found consented app ($($clientSpInfo.displayName)) but name doesn't match expected pattern — skipping" -ForegroundColor DarkGray
                         }
                     }
@@ -556,7 +593,7 @@ function Invoke-StageEntra {
                     Invoke-AzCli @('ad', 'sp', 'create', '--id', $enterpriseAppId)
                     Write-Success 'Enterprise app service principal created'
                 } catch {
-                    if ($_.Exception.Message -match 'already exists') {
+                    if ($_.Exception.Message -match 'already exists|already in use') {
                         Write-Success 'Enterprise app service principal already exists'
                     } else { throw }
                 }
@@ -871,9 +908,17 @@ function Invoke-StageFIC {
         foreach ($schema in $pendingSchemas) {
             Write-Host "    [$attempt/$maxRetries] Looking for: $($schema.SchemaName)" -ForegroundColor White
 
-            # Match connector by schema name (stable across environments)
+            # Match connector by schema name or display name
+            # The API encodes underscores as -5f (e.g. new_gcf → new-5fgcf)
+            # and lowercases everything. Also match by displayName as fallback.
+            $schemaPattern = $schema.SchemaName
+            $schemaPatternEncoded = ($schemaPattern -replace '_', '-5f').ToLower()
+            $schemaPatternLower = $schemaPattern.ToLower()
             $match = $allConnectors | Where-Object {
-                $_.name -like "*$($schema.SchemaName)*"
+                $_.name -ilike "*$schemaPattern*" -or
+                $_.name -ilike "*$schemaPatternEncoded*" -or
+                $_.name -ilike "*$schemaPatternLower*" -or
+                $_.properties.displayName -eq $schema.DisplayName
             }
 
             if (-not $match) {
@@ -944,7 +989,10 @@ function Invoke-StageFIC {
             Write-Host ''
         }
 
-        if ($stillPending.Count -eq 0) { break }
+        if ($stillPending.Count -eq 0) {
+            $pendingSchemas = $stillPending
+            break
+        }
 
         if ($attempt -lt $maxRetries) {
             $wait = $baseDelaySec * [math]::Pow(2, $attempt - 1)
@@ -1086,8 +1134,8 @@ function Invoke-StageFIC {
         $newUris = @($urisByApp[$appObjId] | Where-Object { $_ -notin $currentUris })
         if ($newUris.Count -gt 0) {
             $allUris = @($currentUris) + @($newUris)
-            Invoke-AzCli @('ad', 'app', 'update', '--id', $appObjId,
-                '--web-redirect-uris', ($allUris -join ' '))
+            $updateArgs = @('ad', 'app', 'update', '--id', $appObjId, '--web-redirect-uris') + $allUris
+            Invoke-AzCli $updateArgs
             foreach ($uri in $newUris) {
                 Write-Success "Redirect URI added ($label): $uri"
             }
@@ -1110,8 +1158,8 @@ function Invoke-StageFIC {
     } else {
         Write-Step "Adding base redirect URI: $redirectUri"
         $allUris = @($currentUris) + @($redirectUri)
-        Invoke-AzCli @('ad', 'app', 'update', '--id', $ClientAppObjectId,
-            '--web-redirect-uris', ($allUris -join ' '))
+        $updateArgs = @('ad', 'app', 'update', '--id', $ClientAppObjectId, '--web-redirect-uris') + $allUris
+        Invoke-AzCli $updateArgs
         Write-Success 'Base redirect URI added'
     }
 
