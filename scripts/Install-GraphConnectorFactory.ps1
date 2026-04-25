@@ -395,15 +395,6 @@ function Invoke-StageEntra {
         '--api-permissions', "$appReadWriteAllId=Role", "$appRoleAssignRWId=Role") | Out-Null
     Write-Success 'Graph API permissions added (Application.ReadWrite.All, AppRoleAssignment.ReadWrite.All)'
 
-    # Grant admin consent
-    Write-Step 'Granting admin consent for API app…'
-    try {
-        Invoke-AzCli @('ad', 'app', 'permission', 'admin-consent', '--id', $apiAppId) | Out-Null
-        Write-Success 'Admin consent granted'
-    } catch {
-        Write-Warning "Admin consent may require Global Admin. Grant manually if needed: az ad app permission admin-consent --id $apiAppId"
-    }
-
     # Create client secret
     Write-Step 'Creating client secret…'
     $secretResult = Invoke-AzCli @('ad', 'app', 'credential', 'reset', '--id', $apiAppId,
@@ -412,7 +403,7 @@ function Invoke-StageEntra {
     Write-Success 'Client secret created'
     Write-Warning 'Save this secret NOW — it will not be shown again.'
 
-    # Ensure service principal
+    # Ensure service principal (must exist BEFORE admin consent)
     Write-Step 'Ensuring service principal for API app…'
     try {
         Invoke-AzCli @('ad', 'sp', 'create', '--id', $apiAppId) | Out-Null
@@ -421,6 +412,15 @@ function Invoke-StageEntra {
         if ($_.Exception.Message -match 'already exists|already in use') {
             Write-Success 'Service principal already exists'
         } else { throw }
+    }
+
+    # Grant admin consent (requires SP to exist)
+    Write-Step 'Granting admin consent for API app…'
+    try {
+        Invoke-AzCli @('ad', 'app', 'permission', 'admin-consent', '--id', $apiAppId) | Out-Null
+        Write-Success 'Admin consent granted'
+    } catch {
+        Write-Warning "Admin consent may require Global Admin. Grant manually if needed: az ad app permission admin-consent --id $apiAppId"
     }
 
     # ── Client App ───────────────────────────────────────────────
@@ -449,16 +449,7 @@ function Invoke-StageEntra {
         '--api-permissions', "$scopeId=Scope") | Out-Null
     Write-Success 'MCP.access (Delegated) added to Client app'
 
-    # Grant admin consent for client app
-    Write-Step 'Granting admin consent for Client app…'
-    try {
-        Invoke-AzCli @('ad', 'app', 'permission', 'admin-consent', '--id', $clientAppId) | Out-Null
-        Write-Success 'Admin consent granted'
-    } catch {
-        Write-Warning "Admin consent may require Global Admin. Grant manually if needed: az ad app permission admin-consent --id $clientAppId"
-    }
-
-    # Ensure service principal for client app
+    # Ensure service principal for client app (must exist BEFORE admin consent)
     Write-Step 'Ensuring service principal for Client app…'
     try {
         Invoke-AzCli @('ad', 'sp', 'create', '--id', $clientAppId) | Out-Null
@@ -467,6 +458,15 @@ function Invoke-StageEntra {
         if ($_.Exception.Message -match 'already exists|already in use') {
             Write-Success 'Service principal already exists'
         } else { throw }
+    }
+
+    # Grant admin consent for client app (requires SP to exist)
+    Write-Step 'Granting admin consent for Client app…'
+    try {
+        Invoke-AzCli @('ad', 'app', 'permission', 'admin-consent', '--id', $clientAppId) | Out-Null
+        Write-Success 'Admin consent granted'
+    } catch {
+        Write-Warning "Admin consent may require Global Admin. Grant manually if needed: az ad app permission admin-consent --id $clientAppId"
     }
 
     # ── Power Platform management app registration ───────────────
