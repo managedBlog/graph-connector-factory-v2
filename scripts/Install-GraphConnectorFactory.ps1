@@ -54,11 +54,14 @@ param(
     # --- Config / Artifacts inputs ---
     [string] $ServerHost,
     [string] $EnvironmentId,
+    [string] $CertificatePath,
 
     # --- Agent stage ---
     [string] $SettingsFile,
 
     # --- Behaviour ---
+    [ValidateSet('ClientSecret', 'Certificate-OpenSSL', 'Certificate-SelfSigned')]
+    [string] $AuthMethod = 'ClientSecret',
     [switch] $NonInteractive
 )
 
@@ -277,6 +280,24 @@ function Invoke-StagePreflight {
     if (-not $ok) {
         throw 'Preflight checks failed. Fix the issues above and re-run.'
     }
+
+    # Certificate tool preflight (only when using certificate auth)
+    if ($AuthMethod -eq 'Certificate-OpenSSL') {
+        Write-Step 'Checking openssl (required for -AuthMethod Certificate-OpenSSL)…'
+        if (Test-Command 'openssl') {
+            Write-Success "openssl found"
+        } else {
+            throw 'openssl not found — required for Certificate-OpenSSL. Install OpenSSL or use -AuthMethod Certificate-SelfSigned.'
+        }
+    } elseif ($AuthMethod -eq 'Certificate-SelfSigned') {
+        Write-Step 'Checking New-SelfSignedCertificate (required for -AuthMethod Certificate-SelfSigned)…'
+        if (Get-Command 'New-SelfSignedCertificate' -ErrorAction SilentlyContinue) {
+            Write-Success "New-SelfSignedCertificate available"
+        } else {
+            throw 'New-SelfSignedCertificate not available — this cmdlet requires Windows. Use -AuthMethod Certificate-OpenSSL instead.'
+        }
+    }
+
     Write-Host "`n  All preflight checks passed." -ForegroundColor Green
 }
 
@@ -395,13 +416,86 @@ function Invoke-StageEntra {
         '--api-permissions', "$appReadWriteAllId=Role", "$appRoleAssignRWId=Role") | Out-Null
     Write-Success 'Graph API permissions added (Application.ReadWrite.All, AppRoleAssignment.ReadWrite.All)'
 
-    # Create client secret
-    Write-Step 'Creating client secret…'
-    $secretResult = Invoke-AzCli @('ad', 'app', 'credential', 'reset', '--id', $apiAppId,
-        '--display-name', 'GCF Server Secret', '--years', '2')
-    $apiSecret = $secretResult.password
-    Write-Success 'Client secret created'
-    Write-Warning 'Save this secret NOW — it will not be shown again.'
+    # ── Credential creation (secret OR certificate) ──
+    $apiSecret       = $null
+    $certificatePath = $null
+    $isCertAuth      = $AuthMethod -like 'Certificate-*'
+
+    if ($isCertAuth) {
+        Write-Step 'Generating self-signed certificate…'
+        $certDir      = Join-Path $repoRoot 'config'
+        $certPubPath  = Join-Path $certDir 'gcf-server-cert.pem'
+        $certKeyPath  = Join-Path $certDir 'gcf-server-key.pem'
+        $certCombined = Join-Path $certDir 'gcf-server.pem'
+
+        if ($AuthMethod -eq 'Certificate-OpenSSL') {
+            # Generate via OpenSSL (cross-platform)
+            & openssl req -x509 -newkey rsa:2048 -keyout $certKeyPath -out $certPubPath `
+                -days 730 -nodes -subj "/CN=GraphConnectorFactory" 2>&1 | Out-Null
+            if ($LASTEXITCODE -ne 0) {
+                throw 'OpenSSL certificate generation failed.'
+            }
+            # Combine key + cert into single PEM for Azure Identity SDK
+            Get-Content $certKeyPath, $certPubPath | Set-Content $certCombined -Encoding UTF8
+        } else {
+            # Generate via New-SelfSignedCertificate (Windows-native)
+            $cert = New-SelfSignedCertificate -Subject "CN=GraphConnectorFactory" `
+                -CertStoreLocation "Cert:\CurrentUser\My" `
+                -KeyExportPolicy Exportable `
+                -KeySpec Signature `
+                -KeyLength 2048 `
+                -NotAfter (Get-Date).AddYears(2)
+
+            # Export public cert as PEM
+            $pubBytes = $cert.Export([System.Security.Cryptography.X509Certificates.X509ContentType]::Cert)
+            $pubB64   = [Convert]::ToBase64String($pubBytes, 'InsertLineBreaks')
+            "-----BEGIN CERTIFICATE-----`n$pubB64`n-----END CERTIFICATE-----" | Set-Content $certPubPath -Encoding UTF8
+
+            # Export private key + cert as PFX, then convert to PEM via .NET
+            $pfxBytes = $cert.Export([System.Security.Cryptography.X509Certificates.X509ContentType]::Pfx, '')
+            $pfxPath  = Join-Path $certDir 'gcf-server-temp.pfx'
+            [IO.File]::WriteAllBytes($pfxPath, $pfxBytes)
+
+            # Load PFX and extract RSA private key as PEM
+            $pfxCert   = [System.Security.Cryptography.X509Certificates.X509Certificate2]::new($pfxPath, '', 'Exportable')
+            $rsaKey    = [System.Security.Cryptography.RSA]($pfxCert.PrivateKey)
+            $keyBytes  = $rsaKey.ExportRSAPrivateKey()
+            $keyB64    = [Convert]::ToBase64String($keyBytes, 'InsertLineBreaks')
+            "-----BEGIN RSA PRIVATE KEY-----`n$keyB64`n-----END RSA PRIVATE KEY-----" | Set-Content $certKeyPath -Encoding UTF8
+
+            # Combine key + cert into single PEM for Azure Identity SDK
+            Get-Content $certKeyPath, $certPubPath | Set-Content $certCombined -Encoding UTF8
+
+            # Clean up temp PFX and cert store entry
+            Remove-Item $pfxPath -ErrorAction SilentlyContinue
+            Remove-Item "Cert:\CurrentUser\My\$($cert.Thumbprint)" -ErrorAction SilentlyContinue
+        }
+
+        Write-Success "Certificate generated: $certCombined"
+
+        # Upload public cert to app registration (--append to preserve existing creds)
+        Write-Step 'Uploading certificate to API app registration…'
+        Invoke-AzCli @('ad', 'app', 'credential', 'reset', '--id', $apiAppId,
+            '--cert', "@$certPubPath", '--append') | Out-Null
+        Write-Success 'Certificate uploaded to app registration'
+
+        # Store absolute path for config generation
+        $certificatePath = (Resolve-Path $certCombined).Path
+
+        # Lock down private key files
+        if ($IsWindows -or $env:OS -match 'Windows') {
+            icacls $certKeyPath /inheritance:r /grant:r "${env:USERNAME}:(R)" 2>&1 | Out-Null
+            icacls $certCombined /inheritance:r /grant:r "${env:USERNAME}:(R)" 2>&1 | Out-Null
+        }
+        Write-Warning "Private key files are in config/. They are gitignored but keep them secure."
+    } else {
+        # ClientSecret path
+        Write-Step 'Creating client secret…'
+        $secretResult = Invoke-AzCli @('ad', 'app', 'credential', 'reset', '--id', $apiAppId,
+            '--display-name', 'GCF Server Secret', '--years', '2')
+        $apiSecret = $secretResult.password
+        Write-Success 'Client secret created'
+    }
 
     # Ensure service principal (must exist BEFORE admin consent)
     Write-Step 'Ensuring service principal for API app…'
@@ -759,6 +853,8 @@ function Invoke-StageEntra {
         ApiAppId          = $apiAppId
         ApiObjectId       = $apiObjectId
         ApiAppSecret      = $apiSecret
+        CertificatePath   = $certificatePath
+        AuthMethod        = $AuthMethod
         ClientAppId       = $clientAppId
         ClientObjectId    = $clientObjectId
         McpAccessScopeId  = $scopeId
@@ -782,11 +878,23 @@ function Invoke-StageConfig {
     Write-StageHeader 'Stage 4 · Config Generation'
 
     Assert-Parameter 'ApiAppId'      $ApiAppId      'Config'
-    Assert-Parameter 'ApiAppSecret'  $ApiAppSecret  'Config'
     Assert-Parameter 'ClientAppId'   $ClientAppId   'Config'
     Assert-Parameter 'TenantId'      $TenantId      'Config'
     Assert-Parameter 'ServerHost'    $ServerHost    'Config'
     Assert-Parameter 'EnvironmentId' $EnvironmentId 'Config'
+
+    # Auth-method-specific validation
+    $isCertAuth = $AuthMethod -like 'Certificate-*'
+    if ($isCertAuth) {
+        if ([string]::IsNullOrWhiteSpace($CertificatePath)) {
+            throw "Parameter -CertificatePath is required for Certificate auth. Run Stage 3 (Entra) with -AuthMethod Certificate first."
+        }
+        if (-not (Test-Path $CertificatePath)) {
+            throw "Certificate file not found: $CertificatePath"
+        }
+    } else {
+        Assert-Parameter 'ApiAppSecret' $ApiAppSecret 'Config'
+    }
 
     $templatePath = Join-Path $configDir 'config.template.json'
     $outputPath   = Join-Path $configDir 'config.json'
@@ -813,35 +921,66 @@ function Invoke-StageConfig {
         $content = $content.Replace($token, $replacements[$token])
     }
 
-    # Parse, inject secret inline (config.json is gitignored), and add server host
     $config = $content | ConvertFrom-Json
 
-    # Server host (stored but template doesn't have a dedicated placeholder)
+    # Server host
     if ($config.server.PSObject.Properties.Name -notcontains 'host') {
         $config.server | Add-Member -NotePropertyName 'host' -NotePropertyValue $ServerHost
     } else {
         $config.server.host = $ServerHost
     }
 
-    # Inject client secret for local dev (Power Platform auth section)
-    if ($config.powerPlatform.auth.PSObject.Properties.Name -notcontains 'clientSecret') {
-        $config.powerPlatform.auth | Add-Member -NotePropertyName 'clientSecret' -NotePropertyValue $ApiAppSecret
-    } else {
-        $config.powerPlatform.auth.clientSecret = $ApiAppSecret
-    }
+    # ── Auth configuration based on method ──
+    if ($isCertAuth) {
+        Write-Step 'Configuring certificate authentication…'
 
-    # Same for Graph API auth
-    if ($config.graphApi.auth.PSObject.Properties.Name -notcontains 'clientSecret') {
-        $config.graphApi.auth | Add-Member -NotePropertyName 'clientSecret' -NotePropertyValue $ApiAppSecret
+        # Set method to certificate on both auth sections
+        $config.powerPlatform.auth.method = 'certificate'
+        $config.graphApi.auth.method      = 'certificate'
+
+        # Add certificatePath
+        foreach ($section in @($config.powerPlatform.auth, $config.graphApi.auth)) {
+            if ($section.PSObject.Properties.Name -notcontains 'certificatePath') {
+                $section | Add-Member -NotePropertyName 'certificatePath' -NotePropertyValue $CertificatePath
+            } else {
+                $section.certificatePath = $CertificatePath
+            }
+            # Remove clientSecret if present from template
+            if ($section.PSObject.Properties.Name -contains 'clientSecret') {
+                $section.PSObject.Properties.Remove('clientSecret')
+            }
+        }
+
+        Write-Success "Auth method: certificate ($CertificatePath)"
     } else {
-        $config.graphApi.auth.clientSecret = $ApiAppSecret
+        Write-Step 'Configuring client secret authentication…'
+
+        # Set environment variable (current session + persisted)
+        $env:GCF_CLIENT_SECRET = $ApiAppSecret
+        [Environment]::SetEnvironmentVariable('GCF_CLIENT_SECRET', $ApiAppSecret, 'User')
+        Write-Success 'GCF_CLIENT_SECRET set in current session and persisted to user environment'
+
+        # Do NOT write secret to config.json — server reads from env var
+        # Remove clientSecret from config if present
+        foreach ($section in @($config.powerPlatform.auth, $config.graphApi.auth)) {
+            if ($section.PSObject.Properties.Name -contains 'clientSecret') {
+                $section.PSObject.Properties.Remove('clientSecret')
+            }
+        }
+
+        Write-Success 'Auth method: clientCredential (secret via GCF_CLIENT_SECRET env var)'
     }
 
     Write-Step "Writing config: $outputPath"
     $config | ConvertTo-Json -Depth 10 | Set-Content -Path $outputPath -Encoding UTF8
     Write-Success "config.json generated at: $outputPath"
 
-    Write-Warning 'config.json contains secrets — ensure it is listed in .gitignore.'
+    if ($isCertAuth) {
+        Write-Warning 'config.json references a local certificate file — ensure both are secured.'
+    } else {
+        Write-Host "  ℹ  Secret is NOT in config.json. It is stored in the GCF_CLIENT_SECRET" -ForegroundColor Cyan
+        Write-Host "     environment variable. Restart VS Code / terminals to pick it up." -ForegroundColor Cyan
+    }
 }
 
 # ─────────────────────────────────────────────────────────────────
@@ -1369,6 +1508,11 @@ function Invoke-StageAll {
     $script:ClientAppObjectId = $entraResult.ClientObjectId
     $script:TenantId          = $entraResult.TenantId
     $script:McpAccessScopeId  = $entraResult.McpAccessScopeId
+
+    # Propagate auth method outputs
+    if ($entraResult.ContainsKey('CertificatePath') -and $entraResult.CertificatePath) {
+        $script:CertificatePath = $entraResult.CertificatePath
+    }
 
     # Propagate enterprise values if present
     if ($entraResult.ContainsKey('EnterpriseAppId')) {

@@ -9,8 +9,10 @@ export type { CredentialProvider, TokenResult, TokenClaims } from "./types";
 
 import type { CredentialProvider, TokenResult } from "./types";
 import type { BackendAuthConfig } from "../config/types";
-import { DefaultAzureCredential, ClientSecretCredential } from "@azure/identity";
+import { DefaultAzureCredential, ClientSecretCredential, ClientCertificateCredential } from "@azure/identity";
 import { log } from "../logging/logger";
+import * as fs from "fs";
+import * as path from "path";
 
 /**
  * Create a credential provider based on backend auth config.
@@ -19,11 +21,16 @@ import { log } from "../logging/logger";
 export function createCredentialProvider(authConfig: BackendAuthConfig): CredentialProvider {
   switch (authConfig.method) {
     case "clientCredential": {
-      if (authConfig.clientSecret) {
+      // Resolve secret: config value → environment variable → absent
+      const secret = authConfig.clientSecret || process.env["GCF_CLIENT_SECRET"];
+      if (secret) {
+        log(authConfig.clientSecret
+          ? "clientCredential using inline config secret."
+          : "clientCredential using GCF_CLIENT_SECRET environment variable.");
         const cred = new ClientSecretCredential(
           authConfig.tenantId,
           authConfig.clientId,
-          authConfig.clientSecret
+          secret
         );
         return {
           method: "clientCredential",
@@ -36,9 +43,40 @@ export function createCredentialProvider(authConfig: BackendAuthConfig): Credent
           },
         };
       }
-      // Fall through to DefaultAzureCredential for Key Vault flow
-      log("clientCredential without inline secret — using DefaultAzureCredential for Key Vault access.");
+      // Fall through to DefaultAzureCredential for Key Vault / managed identity
+      log("clientCredential without secret — using DefaultAzureCredential.");
       return createDefaultCredentialProvider("clientCredential");
+    }
+
+    case "certificate": {
+      if (!authConfig.certificatePath) {
+        throw new Error(
+          "Auth method 'certificate' requires 'certificatePath' in config. " +
+          "Provide the path to a PEM file containing the private key and certificate."
+        );
+      }
+      const certFile = path.isAbsolute(authConfig.certificatePath)
+        ? authConfig.certificatePath
+        : path.resolve(process.cwd(), authConfig.certificatePath);
+      if (!fs.existsSync(certFile)) {
+        throw new Error(`Certificate file not found: ${certFile}`);
+      }
+      log(`certificate auth using: ${certFile}`);
+      const cred = new ClientCertificateCredential(
+        authConfig.tenantId,
+        authConfig.clientId,
+        certFile
+      );
+      return {
+        method: "certificate",
+        async getToken(scope: string): Promise<TokenResult> {
+          const result = await cred.getToken(scope);
+          return {
+            accessToken: result.token,
+            expiresOn: result.expiresOnTimestamp / 1000,
+          };
+        },
+      };
     }
 
     case "managedIdentity":
@@ -47,7 +85,6 @@ export function createCredentialProvider(authConfig: BackendAuthConfig): Credent
 
     case "appOnly":
     case "delegatedToken":
-    case "certificate":
     default:
       log(`Auth method '${authConfig.method}' — using DefaultAzureCredential fallback.`);
       return createDefaultCredentialProvider(authConfig.method);
