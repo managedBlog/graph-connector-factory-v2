@@ -472,14 +472,22 @@ function Invoke-StageEntra {
     # ── Power Platform management app registration ───────────────
     Write-Step 'Registering apps as Power Platform management apps…'
     try {
-        & pac admin register-management-app --application-id $apiAppId 2>&1 | Out-Null
-        Write-Success "API app registered as management app"
+        $regOutput = & pac admin application register --application-id $apiAppId 2>&1
+        if ($LASTEXITCODE -ne 0) {
+            Write-Warning "Could not register API app as management app: $regOutput"
+        } else {
+            Write-Success "API app registered as management app"
+        }
     } catch {
         Write-Warning "Could not register API app as management app: $_"
     }
     try {
-        & pac admin register-management-app --application-id $clientAppId 2>&1 | Out-Null
-        Write-Success "Client app registered as management app"
+        $regOutput = & pac admin application register --application-id $clientAppId 2>&1
+        if ($LASTEXITCODE -ne 0) {
+            Write-Warning "Could not register Client app as management app: $regOutput"
+        } else {
+            Write-Success "Client app registered as management app"
+        }
     } catch {
         Write-Warning "Could not register Client app as management app: $_"
     }
