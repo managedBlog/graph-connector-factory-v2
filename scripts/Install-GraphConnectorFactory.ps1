@@ -508,13 +508,28 @@ function Invoke-StageEntra {
         } else { throw }
     }
 
-    # Grant admin consent (requires SP to exist)
+    # Grant admin consent (requires SP to exist; may need propagation delay)
     Write-Step 'Granting admin consent for API app…'
-    try {
-        Invoke-AzCli @('ad', 'app', 'permission', 'admin-consent', '--id', $apiAppId) | Out-Null
-        Write-Success 'Admin consent granted'
-    } catch {
-        Write-Warning "Admin consent may require Global Admin. Grant manually if needed: az ad app permission admin-consent --id $apiAppId"
+    Start-Sleep -Seconds 5  # Allow SP to propagate in Entra ID
+    $consentAttempts = 3
+    $consentGranted = $false
+    for ($i = 1; $i -le $consentAttempts; $i++) {
+        try {
+            $consentOutput = Invoke-AzCli @('ad', 'app', 'permission', 'admin-consent', '--id', $apiAppId)
+            Write-Success 'Admin consent granted for API app'
+            $consentGranted = $true
+            break
+        } catch {
+            Write-Warning "Admin consent attempt $i/$consentAttempts failed: $($_.Exception.Message)"
+            if ($i -lt $consentAttempts) {
+                Write-Host "    Retrying in 10s…" -ForegroundColor DarkGray
+                Start-Sleep -Seconds 10
+            }
+        }
+    }
+    if (-not $consentGranted) {
+        Write-Warning "Admin consent could not be granted automatically. Grant manually:"
+        Write-Warning "  az ad app permission admin-consent --id $apiAppId"
     }
 
     # ── Client App ───────────────────────────────────────────────
@@ -556,11 +571,25 @@ function Invoke-StageEntra {
 
     # Grant admin consent for client app (requires SP to exist)
     Write-Step 'Granting admin consent for Client app…'
-    try {
-        Invoke-AzCli @('ad', 'app', 'permission', 'admin-consent', '--id', $clientAppId) | Out-Null
-        Write-Success 'Admin consent granted'
-    } catch {
-        Write-Warning "Admin consent may require Global Admin. Grant manually if needed: az ad app permission admin-consent --id $clientAppId"
+    Start-Sleep -Seconds 5
+    $consentGranted = $false
+    for ($i = 1; $i -le 3; $i++) {
+        try {
+            $consentOutput = Invoke-AzCli @('ad', 'app', 'permission', 'admin-consent', '--id', $clientAppId)
+            Write-Success 'Admin consent granted for Client app'
+            $consentGranted = $true
+            break
+        } catch {
+            Write-Warning "Admin consent attempt $i/3 failed: $($_.Exception.Message)"
+            if ($i -lt 3) {
+                Write-Host "    Retrying in 10s…" -ForegroundColor DarkGray
+                Start-Sleep -Seconds 10
+            }
+        }
+    }
+    if (-not $consentGranted) {
+        Write-Warning "Admin consent could not be granted automatically for Client app. Grant manually:"
+        Write-Warning "  az ad app permission admin-consent --id $clientAppId"
     }
 
     # ── Power Platform management app registration ───────────────
