@@ -338,7 +338,7 @@ function Invoke-StageEntra {
 
     # Set identifier URI
     Write-Step 'Setting identifier URI…'
-    Invoke-AzCli @('ad', 'app', 'update', '--id', $apiAppId, '--identifier-uris', "api://$apiAppId")
+    Invoke-AzCli @('ad', 'app', 'update', '--id', $apiAppId, '--identifier-uris', "api://$apiAppId") | Out-Null
     Write-Success "Identifier URI: api://$apiAppId"
 
     # Add MCP.access scope via Graph PATCH (--set api.* fails on fresh apps)
@@ -381,7 +381,7 @@ function Invoke-StageEntra {
             Invoke-AzCli @('rest', '--method', 'PATCH',
                 '--uri', "https://graph.microsoft.com/v1.0/applications/$apiObjectId",
                 '--body', "@$tmpScopeFile",
-                '--headers', 'Content-Type=application/json')
+                '--headers', 'Content-Type=application/json') | Out-Null
             Write-Success "MCP.access scope ID: $scopeId"
         } finally {
             Remove-Item $tmpScopeFile -ErrorAction SilentlyContinue
@@ -392,13 +392,13 @@ function Invoke-StageEntra {
     Write-Step 'Adding Graph API permissions…'
     Invoke-AzCli @('ad', 'app', 'permission', 'add', '--id', $apiAppId,
         '--api', $graphAppId,
-        '--api-permissions', "$appReadWriteAllId=Role", "$appRoleAssignRWId=Role")
+        '--api-permissions', "$appReadWriteAllId=Role", "$appRoleAssignRWId=Role") | Out-Null
     Write-Success 'Graph API permissions added (Application.ReadWrite.All, AppRoleAssignment.ReadWrite.All)'
 
     # Grant admin consent
     Write-Step 'Granting admin consent for API app…'
     try {
-        Invoke-AzCli @('ad', 'app', 'permission', 'admin-consent', '--id', $apiAppId)
+        Invoke-AzCli @('ad', 'app', 'permission', 'admin-consent', '--id', $apiAppId) | Out-Null
         Write-Success 'Admin consent granted'
     } catch {
         Write-Warning "Admin consent may require Global Admin. Grant manually if needed: az ad app permission admin-consent --id $apiAppId"
@@ -415,7 +415,7 @@ function Invoke-StageEntra {
     # Ensure service principal
     Write-Step 'Ensuring service principal for API app…'
     try {
-        Invoke-AzCli @('ad', 'sp', 'create', '--id', $apiAppId)
+        Invoke-AzCli @('ad', 'sp', 'create', '--id', $apiAppId) | Out-Null
         Write-Success 'Service principal created'
     } catch {
         if ($_.Exception.Message -match 'already exists|already in use') {
@@ -446,13 +446,13 @@ function Invoke-StageEntra {
     Write-Step 'Adding MCP.access delegated permission to Client app…'
     Invoke-AzCli @('ad', 'app', 'permission', 'add', '--id', $clientAppId,
         '--api', $apiAppId,
-        '--api-permissions', "$scopeId=Scope")
+        '--api-permissions', "$scopeId=Scope") | Out-Null
     Write-Success 'MCP.access (Delegated) added to Client app'
 
     # Grant admin consent for client app
     Write-Step 'Granting admin consent for Client app…'
     try {
-        Invoke-AzCli @('ad', 'app', 'permission', 'admin-consent', '--id', $clientAppId)
+        Invoke-AzCli @('ad', 'app', 'permission', 'admin-consent', '--id', $clientAppId) | Out-Null
         Write-Success 'Admin consent granted'
     } catch {
         Write-Warning "Admin consent may require Global Admin. Grant manually if needed: az ad app permission admin-consent --id $clientAppId"
@@ -461,7 +461,7 @@ function Invoke-StageEntra {
     # Ensure service principal for client app
     Write-Step 'Ensuring service principal for Client app…'
     try {
-        Invoke-AzCli @('ad', 'sp', 'create', '--id', $clientAppId)
+        Invoke-AzCli @('ad', 'sp', 'create', '--id', $clientAppId) | Out-Null
         Write-Success 'Service principal created'
     } catch {
         if ($_.Exception.Message -match 'already exists|already in use') {
@@ -485,11 +485,20 @@ function Invoke-StageEntra {
     }
 
     # ── Enterprise MCP Server for Enterprise ─────────────────────
-    # Separate Entra app registration for the enterprise connector.
+    # Per Microsoft docs, the MCP Server for Enterprise connector requires a
+    # dedicated client app registration named "MCP Server for Enterprise" with
+    # MCP.User.Read.All (delegated) + Graph User.Read permissions.
     # FIC for this connector routes to the enterprise app, NOT the Client app.
+    # Ref: https://learn.microsoft.com/en-us/graph/mcp-server/use-enterprise-mcp-server-copilot-studio
     $enterpriseAppId       = $EnterpriseAppId
     $enterpriseAppObjectId = $EnterpriseAppObjectId
     $skipEnt               = $SkipEnterprise.IsPresent
+
+    # Well-known scope IDs for required permissions
+    $ENTERPRISE_APP_DISPLAY_NAME = 'MCP Server for Enterprise'
+    $MCP_USER_READ_ALL_SCOPE_ID  = '98caa7ee-5b52-4b41-829f-c090dc6087f1'   # MCP.User.Read.All
+    $GRAPH_USER_READ_SCOPE_ID    = 'e1fe6dd8-ba31-4d61-89e7-88639da4683d'   # User.Read
+    $GRAPH_APP_ID                = '00000003-0000-0000-c000-000000000000'    # Microsoft Graph
 
     if (-not $skipEnt) {
         Write-Step 'Checking if MCP Server for Enterprise SP exists in tenant…'
@@ -506,107 +515,200 @@ function Invoke-StageEntra {
             $enterpriseSp = $enterpriseSpResult.value[0]
             Write-Success "MCP Server for Enterprise SP found: $($enterpriseSp.displayName)"
 
-            # Reverse lookup: find existing app reg with oauth2PermissionGrants
+            # Verify MCP.User.Read.All scope exists on the SP
+            $mcpUserReadAll = $enterpriseSp.oauth2PermissionScopes | Where-Object { $_.id -eq $MCP_USER_READ_ALL_SCOPE_ID }
+            if (-not $mcpUserReadAll) {
+                $mcpUserReadAll = $enterpriseSp.oauth2PermissionScopes | Where-Object { $_.value -eq 'MCP.User.Read.All' }
+            }
+            if ($mcpUserReadAll) {
+                Write-Success "MCP.User.Read.All scope confirmed (ID: $($mcpUserReadAll.id))"
+            } else {
+                Write-Warning 'MCP.User.Read.All scope not found on enterprise SP — permissions may be incomplete'
+            }
+
+            # ── Resolve enterprise app registration ──────────────────
+            # Priority: explicit -EnterpriseAppId > displayName search > oauth2PermissionGrants fallback > create new
+
             if ([string]::IsNullOrWhiteSpace($enterpriseAppId)) {
-                Write-Step 'Checking for existing enterprise app registrations…'
+                # Strategy 1: Search by exact displayName "MCP Server for Enterprise"
+                Write-Step "Searching for existing app registration: $ENTERPRISE_APP_DISPLAY_NAME…"
+                $nameSearchResult = Invoke-AzCli @('rest', '--method', 'get',
+                    '--url', "https://graph.microsoft.com/v1.0/applications?`$filter=displayName eq '$ENTERPRISE_APP_DISPLAY_NAME'&`$select=id,appId,displayName,requiredResourceAccess,web",
+                    '--output', 'json') 2>$null
+
+                $candidates = @()
+                if ($nameSearchResult.value -and $nameSearchResult.value.Count -gt 0) {
+                    # Exact displayName match only
+                    $candidates = @($nameSearchResult.value | Where-Object { $_.displayName -eq $ENTERPRISE_APP_DISPLAY_NAME })
+                }
+
+                if ($candidates.Count -eq 1) {
+                    $enterpriseAppId       = $candidates[0].appId
+                    $enterpriseAppObjectId = $candidates[0].id
+                    Write-Success "Found existing app: $ENTERPRISE_APP_DISPLAY_NAME (appId: $enterpriseAppId)"
+                } elseif ($candidates.Count -gt 1) {
+                    # Multiple matches — pick the one with expected MCP permissions
+                    $bestMatch = $candidates | Where-Object {
+                        $_.requiredResourceAccess | Where-Object { $_.resourceAppId -eq $ENTERPRISE_MCP_APP_ID }
+                    } | Select-Object -First 1
+
+                    if ($bestMatch) {
+                        $enterpriseAppId       = $bestMatch.appId
+                        $enterpriseAppObjectId = $bestMatch.id
+                        Write-Success "Found app with MCP permissions: $ENTERPRISE_APP_DISPLAY_NAME (appId: $enterpriseAppId)"
+                    } else {
+                        $enterpriseAppId       = $candidates[0].appId
+                        $enterpriseAppObjectId = $candidates[0].id
+                        Write-Warning "Multiple '$ENTERPRISE_APP_DISPLAY_NAME' apps found — using first: $enterpriseAppId"
+                    }
+                }
+            }
+
+            if ([string]::IsNullOrWhiteSpace($enterpriseAppId)) {
+                # Strategy 2: Fallback — reverse lookup via oauth2PermissionGrants
+                Write-Step 'Checking oauth2PermissionGrants for existing enterprise app…'
                 $grants = Invoke-AzCli @('rest', '--method', 'get',
                     '--url', "https://graph.microsoft.com/v1.0/oauth2PermissionGrants?`$filter=resourceId eq '$($enterpriseSp.id)'&`$select=clientId,scope",
                     '--output', 'json') 2>$null
 
                 if ($grants.value -and $grants.value.Count -gt 0) {
-                    $grantClientId = $grants.value[0].clientId
-                    try {
-                        $clientSpInfo = Invoke-AzCli @('rest', '--method', 'get',
-                            '--url', "https://graph.microsoft.com/v1.0/servicePrincipals/$grantClientId`?`$select=appId,displayName",
-                            '--output', 'json')
-                    } catch {
-                        Write-Host "  Grant references SP $grantClientId which no longer exists — skipping" -ForegroundColor DarkGray
-                        $clientSpInfo = $null
-                    }
-
-                    if ($clientSpInfo) {
+                    foreach ($grant in $grants.value) {
                         try {
-                            $appInfo = Invoke-AzCli @('ad', 'app', 'show', '--id', $clientSpInfo.appId)
+                            $grantSpInfo = Invoke-AzCli @('rest', '--method', 'get',
+                                '--url', "https://graph.microsoft.com/v1.0/servicePrincipals/$($grant.clientId)`?`$select=appId,displayName",
+                                '--output', 'json')
                         } catch {
-                            Write-Host "  App registration for $($clientSpInfo.appId) not found — skipping" -ForegroundColor DarkGray
-                            $appInfo = $null
+                            Write-Host "  Grant references SP $($grant.clientId) which no longer exists — skipping" -ForegroundColor DarkGray
+                            continue
                         }
-                        if ($appInfo -and $appInfo.displayName -match 'GCF|Graph Connector Factory|Enterprise') {
-                            $enterpriseAppId       = $appInfo.appId
-                            $enterpriseAppObjectId = $appInfo.id
-                            Write-Success "Found existing enterprise app: $($appInfo.displayName) (appId: $enterpriseAppId)"
-                        } elseif ($appInfo) {
-                            Write-Host "  Found consented app ($($clientSpInfo.displayName)) but name doesn't match expected pattern — skipping" -ForegroundColor DarkGray
+
+                        try {
+                            $grantAppInfo = Invoke-AzCli @('ad', 'app', 'show', '--id', $grantSpInfo.appId)
+                        } catch {
+                            Write-Host "  App registration for $($grantSpInfo.appId) not found — skipping" -ForegroundColor DarkGray
+                            continue
+                        }
+
+                        if ($grantAppInfo.displayName -eq $ENTERPRISE_APP_DISPLAY_NAME) {
+                            $enterpriseAppId       = $grantAppInfo.appId
+                            $enterpriseAppObjectId = $grantAppInfo.id
+                            Write-Success "Found via grant lookup: $($grantAppInfo.displayName) (appId: $enterpriseAppId)"
+                            break
                         }
                     }
-                } else {
-                    Write-Host '  No existing app registrations with granted access found.' -ForegroundColor DarkGray
+                }
+
+                if ([string]::IsNullOrWhiteSpace($enterpriseAppId)) {
+                    Write-Host '  No existing enterprise app found via grant lookup.' -ForegroundColor DarkGray
                 }
             }
 
-            # Create enterprise app if still not found
+            # Resolve full app object if we have an appId but not objectId (e.g. passed via param)
+            if (-not [string]::IsNullOrWhiteSpace($enterpriseAppId) -and [string]::IsNullOrWhiteSpace($enterpriseAppObjectId)) {
+                Write-Step 'Resolving enterprise app object ID…'
+                $resolvedApp = Invoke-AzCli @('ad', 'app', 'show', '--id', $enterpriseAppId)
+                $enterpriseAppObjectId = $resolvedApp.id
+                Write-Success "Resolved object ID: $enterpriseAppObjectId"
+            }
+
+            # ── Create if still not found ────────────────────────────
             if ([string]::IsNullOrWhiteSpace($enterpriseAppId)) {
-                Write-Step 'Creating enterprise app registration: GCF Enterprise MCP Client…'
-
-                # Find MCP.Users.Read scope on the enterprise SP
-                $mcpUsersReadScope = $enterpriseSp.oauth2PermissionScopes | Where-Object { $_.value -eq 'MCP.Users.Read' }
-                if (-not $mcpUsersReadScope) {
-                    Write-Warning 'MCP.Users.Read scope not found on enterprise SP. Creating app without specific scope.'
-                }
-
+                Write-Step "Creating app registration: $ENTERPRISE_APP_DISPLAY_NAME…"
                 $enterpriseApp = Invoke-AzCli @('ad', 'app', 'create',
-                    '--display-name', 'GCF Enterprise MCP Client',
+                    '--display-name', $ENTERPRISE_APP_DISPLAY_NAME,
                     '--web-redirect-uris', 'https://global.consent.azure-apim.net/redirect')
                 $enterpriseAppId       = $enterpriseApp.appId
                 $enterpriseAppObjectId = $enterpriseApp.id
-                Write-Success "Created enterprise app: $enterpriseAppId (objectId: $enterpriseAppObjectId)"
+                Write-Success "Created: $ENTERPRISE_APP_DISPLAY_NAME (appId: $enterpriseAppId, objectId: $enterpriseAppObjectId)"
+            }
 
-                # Add MCP.Users.Read delegated permission via Graph PATCH
-                if ($mcpUsersReadScope) {
-                    $entPermBody = @{
-                        requiredResourceAccess = @(
-                            @{
-                                resourceAppId  = $ENTERPRISE_MCP_APP_ID
-                                resourceAccess = @(
-                                    @{ id = $mcpUsersReadScope.id; type = 'Scope' }
-                                )
-                            }
-                        )
-                    } | ConvertTo-Json -Depth 5 -Compress
-                    $tmpEntPermFile = Join-Path $env:TEMP 'gcf-ent-perm-body.json'
-                    $entPermBody | Set-Content $tmpEntPermFile -Encoding utf8 -NoNewline
-                    try {
-                        Invoke-AzCli @('rest', '--method', 'PATCH',
-                            '--uri', "https://graph.microsoft.com/v1.0/applications/$enterpriseAppObjectId",
-                            '--body', "@$tmpEntPermFile",
-                            '--headers', 'Content-Type=application/json')
-                        Write-Success 'MCP.Users.Read permission added'
-                    } catch {
-                        Write-Warning "Failed to add MCP.Users.Read permission: $_"
-                    } finally {
-                        Remove-Item $tmpEntPermFile -ErrorAction SilentlyContinue
+            # ── Reconcile permissions (idempotent) ───────────────────
+            # Required: MCP.User.Read.All on enterprise SP + User.Read on MS Graph
+            Write-Step 'Reconciling API permissions on enterprise app…'
+            $currentApp = Invoke-AzCli @('rest', '--method', 'get',
+                '--url', "https://graph.microsoft.com/v1.0/applications/$enterpriseAppObjectId`?`$select=requiredResourceAccess,web",
+                '--output', 'json')
+            $existingAccess = @()
+            if ($currentApp.requiredResourceAccess) {
+                $existingAccess = @($currentApp.requiredResourceAccess)
+            }
+
+            # Build required permission entries
+            $requiredEntries = @(
+                @{ resourceAppId = $ENTERPRISE_MCP_APP_ID; scopeId = $MCP_USER_READ_ALL_SCOPE_ID; label = 'MCP.User.Read.All' },
+                @{ resourceAppId = $GRAPH_APP_ID;          scopeId = $GRAPH_USER_READ_SCOPE_ID;   label = 'User.Read' }
+            )
+
+            $permissionsChanged = $false
+            foreach ($req in $requiredEntries) {
+                $existingResource = $existingAccess | Where-Object { $_.resourceAppId -eq $req.resourceAppId }
+                if ($existingResource) {
+                    $hasScope = $existingResource.resourceAccess | Where-Object { $_.id -eq $req.scopeId }
+                    if (-not $hasScope) {
+                        $existingResource.resourceAccess += @(@{ id = $req.scopeId; type = 'Scope' })
+                        $permissionsChanged = $true
+                        Write-Host "    Adding missing permission: $($req.label)" -ForegroundColor DarkCyan
+                    } else {
+                        Write-Success "$($req.label) already present"
                     }
+                } else {
+                    $existingAccess += @(@{
+                        resourceAppId  = $req.resourceAppId
+                        resourceAccess = @(@{ id = $req.scopeId; type = 'Scope' })
+                    })
+                    $permissionsChanged = $true
+                    Write-Host "    Adding permission: $($req.label)" -ForegroundColor DarkCyan
                 }
+            }
 
-                # Ensure SP for enterprise app
+            if ($permissionsChanged) {
+                $entPermBody = @{ requiredResourceAccess = $existingAccess } | ConvertTo-Json -Depth 5 -Compress
+                $tmpEntPermFile = Join-Path $env:TEMP 'gcf-ent-perm-body.json'
+                $entPermBody | Set-Content $tmpEntPermFile -Encoding utf8 -NoNewline
                 try {
-                    Invoke-AzCli @('ad', 'sp', 'create', '--id', $enterpriseAppId)
-                    Write-Success 'Enterprise app service principal created'
+                    Invoke-AzCli @('rest', '--method', 'PATCH',
+                        '--uri', "https://graph.microsoft.com/v1.0/applications/$enterpriseAppObjectId",
+                        '--body', "@$tmpEntPermFile",
+                        '--headers', 'Content-Type=application/json') | Out-Null
+                    Write-Success 'API permissions updated'
                 } catch {
-                    if ($_.Exception.Message -match 'already exists|already in use') {
-                        Write-Success 'Enterprise app service principal already exists'
-                    } else { throw }
-                }
-
-                # Grant admin consent
-                try {
-                    Invoke-AzCli @('ad', 'app', 'permission', 'admin-consent', '--id', $enterpriseAppId)
-                    Write-Success 'Admin consent granted for enterprise app'
-                } catch {
-                    Write-Warning "Admin consent may require Global Admin. Grant manually: az ad app permission admin-consent --id $enterpriseAppId"
+                    Write-Warning "Failed to update permissions: $_"
+                } finally {
+                    Remove-Item $tmpEntPermFile -ErrorAction SilentlyContinue
                 }
             } else {
-                Write-Host "  Using existing enterprise app: $enterpriseAppId (objectId: $enterpriseAppObjectId)" -ForegroundColor DarkCyan
+                Write-Success 'All required API permissions already present'
+            }
+
+            # Ensure redirect URI
+            $baseRedirect = 'https://global.consent.azure-apim.net/redirect'
+            $currentWebUris = @()
+            if ($currentApp.web -and $currentApp.web.redirectUris) {
+                $currentWebUris = @($currentApp.web.redirectUris)
+            }
+            if ($currentWebUris -notcontains $baseRedirect) {
+                $allUris = @($currentWebUris) + @($baseRedirect)
+                $updateArgs = @('ad', 'app', 'update', '--id', $enterpriseAppObjectId, '--web-redirect-uris') + $allUris
+                Invoke-AzCli $updateArgs | Out-Null
+                Write-Success "Base redirect URI added to enterprise app"
+            }
+
+            # Ensure SP for enterprise app
+            try {
+                Invoke-AzCli @('ad', 'sp', 'create', '--id', $enterpriseAppId) | Out-Null
+                Write-Success 'Enterprise app service principal created'
+            } catch {
+                if ($_.Exception.Message -match 'already exists|already in use') {
+                    Write-Success 'Enterprise app service principal already exists'
+                } else { throw }
+            }
+
+            # Grant admin consent
+            try {
+                Invoke-AzCli @('ad', 'app', 'permission', 'admin-consent', '--id', $enterpriseAppId) | Out-Null
+                Write-Success 'Admin consent granted for enterprise app'
+            } catch {
+                Write-Warning "Admin consent may require Global Admin. Grant manually: az ad app permission admin-consent --id $enterpriseAppId"
             }
         }
     } else {
