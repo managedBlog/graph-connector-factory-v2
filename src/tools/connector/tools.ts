@@ -37,7 +37,8 @@ function getClient(config: AgentConfig): PowerAppsClient {
   if (!_client) {
     const credential = createCredentialProvider(config.powerPlatform.auth);
     const isServicePrincipal = config.powerPlatform.auth.method === "appOnly"
-      || config.powerPlatform.auth.method === "clientCredential";
+      || config.powerPlatform.auth.method === "clientCredential"
+      || config.powerPlatform.auth.method === "certificate";
     _client = new PowerAppsClient(credential, {
       powerAppsApiUrl: config.powerPlatform.powerAppsApiUrl,
       powerAppsApiVersion: config.powerPlatform.powerAppsApiVersion,
