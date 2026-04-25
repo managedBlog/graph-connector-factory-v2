@@ -4,7 +4,7 @@ dist/
 *.d.ts.map
 config/config.json
 .env
-output/
+/output/
 cache/
 artifacts/connectors/prepared/
 artifacts/solutions/
