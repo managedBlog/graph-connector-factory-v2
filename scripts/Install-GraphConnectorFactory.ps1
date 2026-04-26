@@ -24,13 +24,22 @@
     and before agent import (so connections can authenticate).
 
 .EXAMPLE
-    .\Install-GraphConnectorFactory.ps1 -Stage Plan
-    .\Install-GraphConnectorFactory.ps1 -Stage Preflight
-    .\Install-GraphConnectorFactory.ps1 -Stage Entra
+    # Full pipeline (recommended):
+    .\Install-GraphConnectorFactory.ps1 -Stage All -ServerHost <host> -EnvironmentId <eid>
+
+    # Stage-by-stage (copy Entra output values between steps):
+    .\Install-GraphConnectorFactory.ps1 -Stage Preflight [-AuthMethod Certificate-OpenSSL]
+    .\Install-GraphConnectorFactory.ps1 -Stage Build
+    .\Install-GraphConnectorFactory.ps1 -Stage Entra [-AuthMethod Certificate-OpenSSL]
     .\Install-GraphConnectorFactory.ps1 -Stage Config -ApiAppId <id> -ApiAppSecret <secret> `
         -ClientAppId <id> -TenantId <tid> -ServerHost <host> -EnvironmentId <eid>
+    .\Install-GraphConnectorFactory.ps1 -Stage Artifacts -ApiAppId <id> -ClientAppId <id> `
+        -TenantId <tid> -ServerHost <host> -EnterpriseAppId <eid>
+    .\Install-GraphConnectorFactory.ps1 -Stage Connectors -EnvironmentId <eid>
+    .\Install-GraphConnectorFactory.ps1 -Stage FIC -ApiAppId <id> -ClientAppId <id> `
+        -ClientAppObjectId <oid> -TenantId <tid> -EnvironmentId <eid> `
+        -EnterpriseAppId <eid> -EnterpriseAppObjectId <oid>
     .\Install-GraphConnectorFactory.ps1 -Stage Agent -EnvironmentId <eid>
-    .\Install-GraphConnectorFactory.ps1 -Stage All
 #>
 [CmdletBinding()]
 param(
@@ -209,15 +218,25 @@ function Invoke-StagePlan {
     .\Install-GraphConnectorFactory.ps1 -Stage Preflight
     .\Install-GraphConnectorFactory.ps1 -Stage Build
     .\Install-GraphConnectorFactory.ps1 -Stage Entra
-    # Copy output values, then:
-    .\Install-GraphConnectorFactory.ps1 -Stage Config -ApiAppId ... -ApiAppSecret ... `
-        -ClientAppId ... -TenantId ... -ServerHost ... -EnvironmentId ...
-    .\Install-GraphConnectorFactory.ps1 -Stage Artifacts -ApiAppId ... `
-        -ClientAppId ... -TenantId ... -ServerHost ... [-EnterpriseAppId ... | -SkipEnterprise]
-    .\Install-GraphConnectorFactory.ps1 -Stage Connectors -EnvironmentId ...
-    .\Install-GraphConnectorFactory.ps1 -Stage FIC -ClientAppObjectId ... -TenantId ... `
-        -EnvironmentId ... [-EnterpriseAppObjectId ...]
-    .\Install-GraphConnectorFactory.ps1 -Stage Agent -EnvironmentId ...
+    # Copy output values (ApiAppId, ApiAppSecret, ClientAppId, ClientAppObjectId,
+    # TenantId, EnterpriseAppId, EnterpriseAppObjectId), then:
+    .\Install-GraphConnectorFactory.ps1 -Stage Config -ApiAppId `$ApiAppId ``
+        -ApiAppSecret `$ApiAppSecret -ClientAppId `$ClientAppId ``
+        -TenantId `$TenantId -ServerHost `$ServerHost -EnvironmentId `$EnvId
+    .\Install-GraphConnectorFactory.ps1 -Stage Artifacts -ApiAppId `$ApiAppId ``
+        -ClientAppId `$ClientAppId -TenantId `$TenantId -ServerHost `$ServerHost ``
+        -EnterpriseAppId `$EnterpriseAppId
+    .\Install-GraphConnectorFactory.ps1 -Stage Connectors -EnvironmentId `$EnvId
+    .\Install-GraphConnectorFactory.ps1 -Stage FIC -ApiAppId `$ApiAppId ``
+        -ClientAppId `$ClientAppId -ClientAppObjectId `$ClientObjId ``
+        -TenantId `$TenantId -EnvironmentId `$EnvId ``
+        -EnterpriseAppId `$EnterpriseAppId ``
+        -EnterpriseAppObjectId `$EnterpriseObjId
+    .\Install-GraphConnectorFactory.ps1 -Stage Agent -EnvironmentId `$EnvId
+
+  NOTE: -EnterpriseAppId is required on Artifacts and FIC stages to
+  update the MCP Server for Enterprise connector with target tenant values.
+  Without it, the connector retains source-tenant IDs and will not work.
 "@ -ForegroundColor Gray
 }
 
