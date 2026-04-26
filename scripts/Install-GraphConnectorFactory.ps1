@@ -142,6 +142,16 @@ function Assert-Parameter {
     }
 }
 
+function Normalize-ServerHost {
+    param([string] $HostValue)
+    # Strip protocol prefix and trailing slashes
+    $HostValue = $HostValue -replace '^https?://', ''
+    $HostValue = $HostValue.TrimEnd('/')
+    # Strip any trailing path segments (e.g. /api)
+    $HostValue = ($HostValue -split '/')[0]
+    return $HostValue
+}
+
 function Invoke-AzCli {
     <# Run az CLI, capture JSON output, and convert. Throws on non-zero exit. #>
     param([string[]] $Arguments)
@@ -612,26 +622,38 @@ function Invoke-StageEntra {
     }
 
     # ── Power Platform management app registration ───────────────
+    # Validates that the app IDs look like GUIDs before calling PAC CLI.
+    # Surfaces the full error output if registration fails.
     Write-Step 'Registering apps as Power Platform management apps…'
-    try {
-        $regOutput = & pac admin application register --application-id $apiAppId 2>&1
-        if ($LASTEXITCODE -ne 0) {
-            Write-Warning "Could not register API app as management app: $regOutput"
-        } else {
-            Write-Success "API app registered as management app"
+    $guidPattern = '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
+
+    foreach ($entry in @(
+        @{ Label = 'API app';    AppId = $apiAppId },
+        @{ Label = 'Client app'; AppId = $clientAppId }
+    )) {
+        if ($entry.AppId -notmatch $guidPattern) {
+            Write-Warning "Skipping management app registration for $($entry.Label): '$($entry.AppId)' is not a valid GUID"
+            continue
         }
-    } catch {
-        Write-Warning "Could not register API app as management app: $_"
-    }
-    try {
-        $regOutput = & pac admin application register --application-id $clientAppId 2>&1
-        if ($LASTEXITCODE -ne 0) {
-            Write-Warning "Could not register Client app as management app: $regOutput"
-        } else {
-            Write-Success "Client app registered as management app"
+        Write-Step "  Registering $($entry.Label) ($($entry.AppId))…"
+        try {
+            $regOutput = & pac admin application register --application-id $entry.AppId 2>&1
+            if ($LASTEXITCODE -ne 0) {
+                $outputText = ($regOutput | Out-String).Trim()
+                if ($outputText -match 'already exists|already registered') {
+                    Write-Success "$($entry.Label) already registered as management app"
+                } else {
+                    Write-Failure "Could not register $($entry.Label) as management app"
+                    Write-Host "    PAC output: $outputText" -ForegroundColor Red
+                    Write-Host "    Manual fix: pac admin application register --application-id $($entry.AppId)" -ForegroundColor Yellow
+                }
+            } else {
+                Write-Success "$($entry.Label) registered as management app"
+            }
+        } catch {
+            Write-Failure "Could not register $($entry.Label) as management app: $_"
+            Write-Host "    Manual fix: pac admin application register --application-id $($entry.AppId)" -ForegroundColor Yellow
         }
-    } catch {
-        Write-Warning "Could not register Client app as management app: $_"
     }
 
     # ── Enterprise MCP Server for Enterprise ─────────────────────
@@ -931,6 +953,10 @@ function Invoke-StageConfig {
     Assert-Parameter 'ServerHost'    $ServerHost    'Config'
     Assert-Parameter 'EnvironmentId' $EnvironmentId 'Config'
 
+    # Normalize ServerHost (strip protocol/trailing slashes)
+    $ServerHost = Normalize-ServerHost $ServerHost
+    $script:ServerHost = $ServerHost
+
     # Auth-method-specific validation
     $isCertAuth = $AuthMethod -like 'Certificate-*'
     if ($isCertAuth) {
@@ -1042,6 +1068,10 @@ function Invoke-StageArtifacts {
     Assert-Parameter 'ClientAppId' $ClientAppId 'Artifacts'
     Assert-Parameter 'TenantId'   $TenantId   'Artifacts'
     Assert-Parameter 'ServerHost' $ServerHost 'Artifacts'
+
+    # Normalize ServerHost (strip protocol/trailing slashes)
+    $ServerHost = Normalize-ServerHost $ServerHost
+    $script:ServerHost = $ServerHost
 
     $oauthResourceUri = "api://$ApiAppId"
     $prepareScript    = Join-Path $PSScriptRoot 'Prepare-Artifacts.ps1'
@@ -1575,6 +1605,9 @@ function Invoke-StageAll {
     if ([string]::IsNullOrWhiteSpace($ServerHost)) {
         $script:ServerHost = Read-HostIfInteractive 'Enter server host (e.g. abc123-3001.usw3.devtunnels.ms)'
     }
+    # Normalize ServerHost (strip protocol/trailing slashes)
+    $script:ServerHost = Normalize-ServerHost $ServerHost
+
     if ([string]::IsNullOrWhiteSpace($EnvironmentId)) {
         $script:EnvironmentId = Read-HostIfInteractive 'Enter Power Platform environment ID'
     }
