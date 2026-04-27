@@ -200,7 +200,7 @@ async function fetchSwaggerFromUrl(url: string): Promise<Record<string, unknown>
     log(`Detected gist HTML URL — resolving raw content via API for gist ${gistId}`);
     const apiUrl = `https://api.github.com/gists/${gistId}`;
     const apiResp = await fetch(apiUrl, {
-      headers: { Accept: "application/vnd.github+json", "User-Agent": "connector-deploy-agent" },
+      headers: { Accept: "application/vnd.github+json", "User-Agent": "graph-connector-factory" },
     });
     if (!apiResp.ok) {
       throw new Error(`Failed to fetch gist metadata (${apiResp.status}): ${apiUrl}`);

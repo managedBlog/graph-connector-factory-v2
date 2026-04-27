@@ -18,6 +18,7 @@ export interface GistResult {
 }
 
 export const GIST_TOKEN_ENV_VAR = "GRAPH_CONNECTOR_GIST_TOKEN";
+// Backward compat: earlier builds used GIST_GITHUB_TOKEN
 const LEGACY_GIST_TOKEN_ENV_VAR = "GIST_GITHUB_TOKEN";
 
 export async function publishToGist(

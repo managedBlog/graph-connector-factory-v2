@@ -37,7 +37,7 @@ const POWERAPPS_BASE_PATH = "providers/Microsoft.PowerApps";
 const FLOW_BASE_PATH = "providers/Microsoft.ProcessSimple";
 const BAP_ADMIN_BASE = "https://api.bap.microsoft.com";
 const BAP_ADMIN_ENV_PATH = "providers/Microsoft.BusinessAppPlatform/scopes/admin/environments";
-const ORIGIN_HEADER = "connector-deploy-agent";
+const ORIGIN_HEADER = "graph-connector-factory";
 
 /** Exponential backoff delay (ms) for retries. */
 function backoffDelay(attempt: number): number {

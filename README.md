@@ -275,7 +275,6 @@ config/
 
 artifacts/
   connectors/                 # Swagger + apiProperties templates (tokenized)
-    manifest.json             # Connector definitions for token replacement
     prepared/                 # Token-replaced output (gitignored)
   solutions/                  # Packed solution zips (gitignored)
 

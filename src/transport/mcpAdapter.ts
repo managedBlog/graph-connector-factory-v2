@@ -64,8 +64,8 @@ export interface JsonRpcResponse {
 }
 
 const SERVER_INFO = {
-  name: "graph-connector-agent",
-  version: "0.1.0",
+  name: "graph-connector-factory",
+  version: "1.0.0-alpha.1",
 };
 
 const SERVER_CAPABILITIES = {

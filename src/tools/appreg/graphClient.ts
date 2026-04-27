@@ -47,7 +47,7 @@ export interface GraphClientOptions {
   readonly scope: string;
 }
 
-const ORIGIN_HEADER = "app-registration-agent";
+const ORIGIN_HEADER = "graph-connector-factory";
 
 /** Exponential backoff delay (ms) for retries. */
 function backoffDelay(attempt: number): number {
