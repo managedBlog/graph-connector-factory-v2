@@ -11,3 +11,5 @@ cache/
 artifacts/connectors/prepared/
 artifacts/solutions/
 artifacts/fic-*.json
+server.log
+server-err.log
