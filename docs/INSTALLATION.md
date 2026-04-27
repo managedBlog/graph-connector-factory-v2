@@ -3,8 +3,8 @@
 This guide covers the full deployment of Graph Connector Factory v2 to a Power Platform
 environment, including Entra ID app registrations, connector import, and agent setup.
 
-For development-only setup (running the server locally without Power Platform deployment),
-see the [Quick Start](../README.md#quick-start) section of the README.
+For VS Code MCP usage (no Power Platform deployment), see the
+[VS Code setup](../README.md#use-with-vs-code-mcp) in the README.
 
 ## Overview
 

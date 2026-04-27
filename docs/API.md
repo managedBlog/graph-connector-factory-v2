@@ -1,8 +1,13 @@
 # API Reference
 
 Graph Connector Factory v2 exposes REST endpoints for Copilot Studio topic actions
-and an MCP endpoint for AI tool invocation. All endpoints are served from a single
-Express server on port 3001 (configurable).
+and an MCP endpoint for AI tool invocation. The server supports two transports:
+
+- **HTTP** (`MCP_TRANSPORT=http`, default) — Express server on port 3001 with REST endpoints + streamable HTTP MCP
+- **Stdio** (`MCP_TRANSPORT=stdio`) — Newline-delimited JSON-RPC over stdin/stdout for VS Code MCP
+
+When using stdio transport (VS Code), only the MCP tools are available — REST endpoints
+are not served. See the [VS Code setup](../README.md#use-with-vs-code-mcp) in the README.
 
 ## Authentication
 
