@@ -6,6 +6,7 @@ import { loadConfig } from "./config";
 import { setDebugLogging } from "./logging/logger";
 import { log } from "./logging/logger";
 import { startHttpServer } from "./transport/httpHost";
+import { startStdioServer } from "./transport/stdioHost";
 
 function main(): void {
   const config = loadConfig();
@@ -19,11 +20,12 @@ function main(): void {
 
   const transport = process.env["MCP_TRANSPORT"] ?? "http";
 
-  if (transport === "http") {
+  if (transport === "stdio") {
+    startStdioServer();
+  } else if (transport === "http") {
     startHttpServer({ config });
   } else {
-    // Stdio transport for MCP — future implementation
-    log("Stdio transport not yet implemented in unified server. Use MCP_TRANSPORT=http.");
+    log(`Unknown transport: ${transport}. Use MCP_TRANSPORT=http or MCP_TRANSPORT=stdio.`);
     process.exit(1);
   }
 }

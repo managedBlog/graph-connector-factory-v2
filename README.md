@@ -4,28 +4,88 @@ A unified MCP server and Copilot Studio agent for creating Power Platform custom
 from Microsoft Graph API endpoints.
 
 Graph Connector Factory (GCF) lets you research Graph API endpoints, generate
-Swagger 2.0 connector definitions, and deploy them to Power Platform — all
-orchestrated through a Copilot Studio conversational agent or direct REST calls.
+Swagger 2.0 connector definitions, and deploy them to Power Platform — either
+through a Copilot Studio conversational agent, direct REST calls, or as an
+MCP server in VS Code.
+
+## Use with VS Code (MCP)
+
+The fastest way to get started — use GCF as an MCP server directly in VS Code
+with GitHub Copilot. No Power Platform setup required.
+
+[<img alt="Install in VS Code" src="https://img.shields.io/badge/VS_Code-Install_MCP_Server-0078d4?logo=visual-studio-code&logoColor=white" />](https://insiders.vscode.dev/redirect?url=vscode%3Amcp%2Finstall%3F%7B%22graph-connector-factory%22%3A%7B%22command%22%3A%22node%22%2C%22args%22%3A%5B%22dist%2Findex.js%22%5D%2C%22env%22%3A%7B%22MCP_TRANSPORT%22%3A%22stdio%22%7D%7D%7D)
+
+### Setup
+
+```bash
+git clone https://github.com/managedBlog/graph-connector-factory-v2.git
+cd graph-connector-factory-v2
+npm install
+npm run build
+```
+
+Then either:
+
+- **Click the badge above** to configure the MCP server in VS Code, or
+- **Open this repo in VS Code** — it will auto-discover the server from `.vscode/mcp.json`
+
+### What you get
+
+Three MCP tools available to GitHub Copilot in VS Code:
+
+| Tool | Purpose |
+|------|---------|
+| `graph_listOperations` | Research Graph API endpoints — fetches CSDL metadata, returns available HTTP operations |
+| `graph_generateConnector` | Generate a Swagger 2.0 connector definition from selected operations |
+| `graph_setDesignContext` | Persist design decisions (naming, auth type, scope) for the session |
+
+No config file needed — the server works with zero configuration for Graph API research.
+CSDL metadata is fetched from the public `graph.microsoft.com/$metadata` endpoint.
+
+### Manual VS Code configuration
+
+If you prefer to configure manually, add to your VS Code settings or `.vscode/mcp.json`:
+
+```json
+{
+  "servers": {
+    "graph-connector-factory": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["dist/index.js"],
+      "cwd": "/path/to/graph-connector-factory-v2",
+      "env": {
+        "MCP_TRANSPORT": "stdio"
+      }
+    }
+  }
+}
+```
+
+---
+
+## Use with Copilot Studio (Full Deployment)
+
+For the full experience — a conversational Copilot Studio agent that researches,
+generates, and deploys connectors to Power Platform.
 
 ## Architecture
 
 ```
-┌──────────────────────────────┐
-│   Copilot Studio Agent       │  Conversational UI
-│   (topics + actions)         │  ─ researches Graph endpoints
-│                              │  ─ generates connectors
-│                              │  ─ deploys to Power Platform
-└──────┬──────────┬────────────┘
-       │ REST     │ MCP (Streamable HTTP)
-       ▼          ▼
-┌──────────────────────────────┐
-│   GCF Server (Node.js)       │  Single process, port 3001
-│   ─ 10 REST API endpoints    │  ─ topic actions for agent
-│   ─ MCP JSON-RPC endpoint    │  ─ AI tool invocation
-│   ─ Graph CSDL parser        │  ─ metadata → operations
-│   ─ Swagger 2.0 generator    │  ─ operations → connector
-│   ─ Deploy pipeline          │  ─ connector → Power Platform
-└──────────────────────────────┘
+┌──────────────────────────────┐   ┌──────────────────────────┐
+│   Copilot Studio Agent       │   │   VS Code + Copilot      │
+│   (topics + actions)         │   │   (MCP via stdio)        │
+└──────┬──────────┬────────────┘   └────────────┬─────────────┘
+       │ REST     │ MCP (HTTP)                   │ MCP (stdio)
+       ▼          ▼                              ▼
+┌──────────────────────────────────────────────────────────────┐
+│   GCF Server (Node.js)                                       │
+│   ─ 10 REST API endpoints    ─ topic actions for agent       │
+│   ─ MCP JSON-RPC endpoint    ─ AI tool invocation            │
+│   ─ Graph CSDL parser        ─ metadata → operations         │
+│   ─ Swagger 2.0 generator    ─ operations → connector        │
+│   ─ Deploy pipeline          ─ connector → Power Platform    │
+└──────────────────────────────────────────────────────────────┘
        │
        ▼
 ┌──────────────────────────────┐
@@ -37,13 +97,15 @@ orchestrated through a Copilot Studio conversational agent or direct REST calls.
 
 **Key design decisions:**
 
-- **Single server** — replaces the legacy 5-app A2A architecture with direct function calls
-- **HTTP transport** — Express server exposing REST endpoints + streamable HTTP MCP endpoint
+- **Single server** — one Node.js process serving both MCP (stdio + HTTP) and REST endpoints
+- **Two transports** — stdio for VS Code MCP, HTTP for Copilot Studio (REST + streamable HTTP MCP)
 - **Two-app Entra pattern** — API app (server credentials, Graph permissions) + Client app (connector OAuth, redirect URIs, FICs)
 - **Two-solution import** — connector solution (tokenized, packed at deploy time) + agent solution (static, connectors stripped)
 - **Federated Identity Credentials** — avoids client secrets in connectors; uses FICs discovered after connector import
 
 ## Prerequisites
+
+For Copilot Studio deployment, you need:
 
 | Tool | Version | Purpose |
 |------|---------|---------|
@@ -105,7 +167,7 @@ The config file is gitignored — it contains tenant-specific IDs but no secrets
 
 | Variable | Purpose |
 |----------|---------|
-| `MCP_TRANSPORT` | Transport mode: `http` (default) |
+| `MCP_TRANSPORT` | Transport mode: `http` (default) or `stdio` (VS Code MCP) |
 | `MCP_CONFIG_PATH` | Override config file path (default: `./config/config.json`) |
 | `MCP_DEBUG` | Set to `1` for debug logging |
 | `GCF_CLIENT_SECRET` | Client secret for server auth (avoids storing in config) |
@@ -201,11 +263,15 @@ src/
       pipeline.ts             # Three-step deploy: app reg → connector → FIC
   transport/
     httpHost.ts               # Express server — all REST + MCP routes
+    stdioHost.ts              # Stdio MCP transport for VS Code
     mcpAdapter.ts             # MCP JSON-RPC 2.0 adapter
 
 config/
   config.template.json        # Configuration template (copy to config.json)
   config.json                 # Runtime config (gitignored)
+
+.vscode/
+  mcp.json                    # VS Code MCP server auto-discovery
 
 artifacts/
   connectors/                 # Swagger + apiProperties templates (tokenized)

@@ -605,6 +605,12 @@ export function startHttpServer(options: HttpHostOptions): void {
 
       const response = await adapter.handleUnknownRequest(req.body);
 
+      // Notifications return null — acknowledge with 204 No Content
+      if (response === null) {
+        res.status(204).end();
+        return;
+      }
+
       // Post-processing interceptors for tools/call
       if (
         rpcReq?.["method"] === "tools/call" &&

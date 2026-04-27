@@ -9,6 +9,7 @@ Power Platform environment.
 ## Architecture
 
 - **Single Node.js server** on port 3001 — Express HTTP serving REST endpoints + streamable HTTP MCP
+- **Stdio MCP transport** — for VS Code / GitHub Copilot direct usage (MCP_TRANSPORT=stdio)
 - **Two custom connectors**: GCF REST Connector (10 topic action operations), GCF MCP Agent (AI research via MCP)
 - **Two first-party MCP connectors**: MCP Server for Enterprise, Microsoft Learn Docs MCP
 - **Two-solution-import pattern**: connector solution (tokenized, packed at deploy) → agent solution (static)
@@ -37,6 +38,7 @@ src/
   auth/                       # Token validation, credential providers (secret, cert, managed identity)
   config/                     # Config loader with zero-config defaults
   transport/httpHost.ts       # Express server — 16 routes (10 API + 6 infra)
+  transport/stdioHost.ts      # Stdio MCP transport for VS Code
   transport/mcpAdapter.ts     # MCP JSON-RPC 2.0 adapter
   tools/registry.ts           # Unified tool dispatcher (graph_*, connector_*, appreg_*)
   tools/graph/                # CSDL parsing, Swagger 2.0 generation, schema normalization
@@ -66,7 +68,7 @@ npm run dev          # TypeScript watch mode
 
 ## Key Environment Variables
 
-- `MCP_TRANSPORT` — `http` (default)
+- `MCP_TRANSPORT` — `http` (default) or `stdio` (VS Code MCP)
 - `MCP_CONFIG_PATH` — config file path (default: `./config/config.json`)
 - `MCP_DEBUG` — set to `1` for verbose logging
 - `GCF_CLIENT_SECRET` — client secret for server auth (avoids storing in config)

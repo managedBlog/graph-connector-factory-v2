@@ -89,7 +89,7 @@ function makeSuccessResponse(
 }
 
 export interface McpAdapter {
-  handleUnknownRequest: (rawRequest: unknown) => Promise<JsonRpcResponse>;
+  handleUnknownRequest: (rawRequest: unknown) => Promise<JsonRpcResponse | null>;
 }
 
 export function createMcpTransportAdapter(
@@ -258,7 +258,7 @@ export function createMcpTransportAdapter(
   // ────────────────────────────────────────────────────────────────────────
   async function handleUnknownRequest(
     rawRequest: unknown
-  ): Promise<JsonRpcResponse> {
+  ): Promise<JsonRpcResponse | null> {
     // Validate JSON-RPC envelope
     if (
       typeof rawRequest !== "object" ||
@@ -283,7 +283,7 @@ export function createMcpTransportAdapter(
       /* Notifications (no response expected per JSON-RPC 2.0) */
       case "notifications/initialized":
       case "notifications/cancelled": {
-        return makeSuccessResponse(id, {});
+        return null;
       }
 
       case "tools/list": {
@@ -345,15 +345,27 @@ export function createMcpTransportAdapter(
 
           if (invocationResult.ok) {
             const textSummary = formatToolResult(invocationResult.toolName, invocationResult.result);
+            const content: Array<{ type: string; text: string }> = [
+              { type: "text", text: textSummary },
+            ];
 
-            return makeSuccessResponse(id, {
-              content: [
-                {
+            // Include full connector file contents for MCP clients (VS Code etc.)
+            if (invocationResult.toolName === "graph_generateConnector" && invocationResult.result) {
+              const r = invocationResult.result as Record<string, unknown>;
+              const files = Array.isArray(r["connectorFiles"])
+                ? (r["connectorFiles"] as Array<Record<string, unknown>>)
+                : [];
+              for (const file of files) {
+                const filename = String(file["filename"] ?? "unknown");
+                const fileContent = String(file["content"] ?? "");
+                content.push({
                   type: "text",
-                  text: textSummary,
-                },
-              ],
-            });
+                  text: `--- ${filename} ---\n${fileContent}`,
+                });
+              }
+            }
+
+            return makeSuccessResponse(id, { content });
           } else {
             return makeSuccessResponse(id, {
               content: [

@@ -1,0 +1,13 @@
+{
+  "servers": {
+    "graph-connector-factory": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["dist/index.js"],
+      "cwd": "${workspaceFolder}",
+      "env": {
+        "MCP_TRANSPORT": "stdio"
+      }
+    }
+  }
+}
