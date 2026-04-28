@@ -42,6 +42,10 @@ import { invokeTool as invokeAppregTool, toolRegistry as appregToolRegistry } fr
 // Deploy pipeline (direct function calls — replaces A2A orchestrator)
 import { executeDeployPipeline, retryAppRegistration } from "./deploy/pipeline";
 
+// CUA test plan generation
+import { generateTestPlan } from "./testing/testPlanGenerator";
+import type { TestPlanInput } from "./testing/types";
+
 // ─── Hash naming utilities ─────────────────────────────────────────────────
 
 const HASH_SUFFIX_RE = /_[0-9a-f]{4}$/;
@@ -75,6 +79,7 @@ const MCP_VISIBLE_TOOLS = new Set([
   "graph_listOperations",
   "graph_generateConnector",
   "graph_setDesignContext",
+  "graph_generateTestPlan",
 ]);
 
 /**
@@ -204,6 +209,25 @@ const graphToolDefinitions: AvailableTool[] = [
         graphApiScopes: { type: "array", items: { type: "string" } },
       },
       required: ["connectorId"],
+    },
+  },
+  {
+    name: "graph_generateTestPlan",
+    description: "Generate a structured CUA test plan for a deployed connector.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        connectorId: { type: "string", description: "Connector ID from deploy result." },
+        environmentId: { type: "string", description: "Power Platform environment ID." },
+        displayName: { type: "string", description: "Connector display name." },
+        deployStatus: { type: "string", enum: ["success", "partial", "failed"], description: "Deploy pipeline status." },
+        authType: { type: "string", description: "Connector auth type (OAuthAAD, NoAuth, etc.)." },
+        baseName: { type: "string", description: "Cache key to resolve swagger. Optional if swagger is provided." },
+        swagger: { type: "string", description: "Inline swagger JSON. Alternative to baseName." },
+        includeWriteOps: { type: "boolean", description: "Include POST/PATCH/DELETE test steps. Default false." },
+        portalHost: { type: "string", description: "Portal base host override. Default: make.powerapps.com." },
+      },
+      required: ["connectorId", "environmentId", "displayName", "deployStatus", "authType"],
     },
   },
 ];
@@ -471,7 +495,43 @@ async function invokeGraphTool(
         config,
       );
 
-      return { ok: pipelineResult.status !== "failed", toolName, result: pipelineResult };
+      // Auto-generate test plan on successful deploy if swagger is available
+      let testPlan: unknown = undefined;
+      if (pipelineResult.status !== "failed" && pipelineResult.connector) {
+        try {
+          // Resolve swagger for test plan from cache
+          let testSwagger: string | Record<string, unknown> | undefined;
+          const cacheKey = typedInput.baseName;
+          const cached = cacheKey ? generatedSwaggerCache.get(cacheKey) : undefined;
+          if (cached) {
+            testSwagger = cached.swagger;
+          } else if (swagger) {
+            testSwagger = swagger;
+          }
+
+          if (testSwagger) {
+            const plan = generateTestPlan({
+              connectorId: pipelineResult.connector.connectorId,
+              environmentId: pipelineResult.connector.environmentId,
+              displayName: pipelineResult.connector.displayName,
+              deployStatus: pipelineResult.status,
+              authType: pipelineResult.connector.authType ?? "OAuthAAD",
+              swagger: testSwagger,
+            });
+            testPlan = plan;
+            log(`[Deploy Pipeline] Auto-generated test plan: ${plan.summary.totalSteps} steps`);
+          }
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          log(`[Deploy Pipeline] Test plan auto-generation skipped: ${msg}`);
+        }
+      }
+
+      return {
+        ok: pipelineResult.status !== "failed",
+        toolName,
+        result: { ...pipelineResult, ...(testPlan ? { testPlan } : {}) },
+      };
     }
 
     case "graph_setDesignContext": {
@@ -500,6 +560,39 @@ async function invokeGraphTool(
         config,
       );
       return { ok: retryResult.configured, toolName, result: retryResult };
+    }
+
+    case "graph_generateTestPlan": {
+      const typedInput = input as Record<string, unknown>;
+
+      // Resolve swagger from cache if baseName provided but no inline swagger
+      let swagger = typedInput["swagger"] as string | Record<string, unknown> | undefined;
+      if (!swagger && typedInput["baseName"]) {
+        const cached = generatedSwaggerCache.get(typedInput["baseName"] as string);
+        if (cached) {
+          swagger = cached.swagger;
+        }
+      }
+      if (!swagger && generatedSwaggerCache.size > 0) {
+        const lastEntry = [...generatedSwaggerCache.values()].pop()!;
+        swagger = lastEntry.swagger;
+      }
+
+      const testPlanInput: TestPlanInput = {
+        connectorId: typedInput["connectorId"] as string,
+        environmentId: typedInput["environmentId"] as string,
+        displayName: typedInput["displayName"] as string,
+        deployStatus: typedInput["deployStatus"] as "success" | "partial" | "failed",
+        authType: typedInput["authType"] as string,
+        baseName: typedInput["baseName"] as string | undefined,
+        swagger,
+        includeWriteOps: typedInput["includeWriteOps"] as boolean | undefined,
+        portalHost: typedInput["portalHost"] as string | undefined,
+      };
+
+      const testPlan = generateTestPlan(testPlanInput);
+      log(`[TestPlan] Generated ${testPlan.summary.totalSteps} steps for "${testPlan.connectorName}"`);
+      return { ok: true, toolName, result: { testPlan } };
     }
 
     default:

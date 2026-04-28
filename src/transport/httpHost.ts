@@ -15,6 +15,8 @@
  *   POST /api/graph/connector/batch — Batch generate
  *   POST /api/graph/deploy       — Deploy with response flattening
  *   POST /api/graph/deploy/batch — Batch deploy
+ *   GET  /api/graph/deploy/status — Deploy status (long-poll)
+ *   POST /api/graph/test-plan    — Generate CUA test plan
  *   GET  /download/:id/:filename — Serve generated files
  *   POST /api/graph/test/batch-echo — Test endpoint
  */
@@ -1690,6 +1692,46 @@ export function startHttpServer(options: HttpHostOptions): void {
       })();
 
       res.status(202).json(flattenDeployJob(job));
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      res.status(500).json({ error: message });
+    }
+  });
+
+  // ─── REST: Generate CUA test plan ───────────────────────────────────────
+
+  app.post("/api/graph/test-plan", async (req, res) => {
+    try {
+      const body = req.body as Record<string, unknown>;
+      log(`[TestPlan REST] connectorId="${String(body["connectorId"] ?? "")}", displayName="${String(body["displayName"] ?? "")}"`);
+
+      if (!body["connectorId"] || !body["environmentId"] || !body["displayName"]) {
+        res.status(400).json({ error: "connectorId, environmentId, and displayName are required." });
+        return;
+      }
+
+      const result = await invokeTool(
+        "graph_generateTestPlan",
+        {
+          connectorId: body["connectorId"],
+          environmentId: body["environmentId"],
+          displayName: body["displayName"],
+          deployStatus: body["deployStatus"] ?? "success",
+          authType: body["authType"] ?? "OAuthAAD",
+          baseName: body["baseName"],
+          swagger: body["swagger"],
+          includeWriteOps: body["includeWriteOps"],
+          portalHost: body["portalHost"],
+        },
+        config,
+      );
+
+      if (!result.ok) {
+        res.status(400).json({ error: result.error ?? "Test plan generation failed" });
+        return;
+      }
+
+      res.json(result.result);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       res.status(500).json({ error: message });
