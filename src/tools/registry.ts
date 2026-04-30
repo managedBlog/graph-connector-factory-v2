@@ -44,7 +44,8 @@ import { executeDeployPipeline, retryAppRegistration } from "./deploy/pipeline";
 
 // CUA test plan generation
 import { generateTestPlan } from "./testing/testPlanGenerator";
-import type { TestPlanInput } from "./testing/types";
+import { generateMultiConnectorTestPlan } from "./testing/multiConnectorPlan";
+import type { TestPlanInput, MultiConnectorTestInput } from "./testing/types";
 
 // ─── Hash naming utilities ─────────────────────────────────────────────────
 
@@ -80,6 +81,7 @@ const MCP_VISIBLE_TOOLS = new Set([
   "graph_generateConnector",
   "graph_setDesignContext",
   "graph_generateTestPlan",
+  "testing_generateMultiPlan",
 ]);
 
 /**
@@ -230,6 +232,39 @@ const graphToolDefinitions: AvailableTool[] = [
       required: ["connectorId", "environmentId", "displayName", "deployStatus", "authType"],
     },
   },
+  {
+    name: "testing_generateMultiPlan",
+    description: "Generate a multi-connector CUA test plan — lean operation manifest for testing multiple connectors.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        environmentId: { type: "string", description: "Power Platform environment ID." },
+        connectors: {
+          type: "array",
+          description: "Connectors to test.",
+          items: {
+            type: "object",
+            properties: {
+              displayName: { type: "string", description: "Connector display name (CUA opens by name)." },
+              scope: {
+                description: "Operations to test: 'all', 'crud', or array of operation IDs.",
+                oneOf: [
+                  { type: "string", enum: ["all", "crud"] },
+                  { type: "array", items: { type: "string" } },
+                ],
+              },
+              swagger: { type: "string", description: "Inline swagger JSON for operation resolution." },
+              baseName: { type: "string", description: "Cache key to resolve swagger from server cache." },
+              bodyOverrides: { type: "object", description: "Override body templates keyed by entity set name." },
+            },
+            required: ["displayName", "scope"],
+          },
+        },
+        variables: { type: "object", description: "Top-level variables for template substitution (e.g., tenantDomain)." },
+      },
+      required: ["environmentId", "connectors"],
+    },
+  },
 ];
 
 // ─── Unified dispatcher ────────────────────────────────────────────────────
@@ -245,7 +280,7 @@ export async function invokeTool(
 ): Promise<ToolInvocationResult> {
   try {
     // Route by prefix
-    if (toolName.startsWith("graph_")) {
+    if (toolName.startsWith("graph_") || toolName.startsWith("testing_")) {
       return await invokeGraphTool(toolName, input, config);
     }
 
@@ -592,6 +627,39 @@ async function invokeGraphTool(
 
       const testPlan = generateTestPlan(testPlanInput);
       log(`[TestPlan] Generated ${testPlan.summary.totalSteps} steps for "${testPlan.connectorName}"`);
+      return { ok: true, toolName, result: { testPlan } };
+    }
+
+    case "testing_generateMultiPlan": {
+      const typedInput = input as Record<string, unknown>;
+      const connectors = typedInput["connectors"] as Array<Record<string, unknown>> | undefined;
+
+      if (!connectors || connectors.length === 0) {
+        return { ok: false, toolName, error: "At least one connector is required" };
+      }
+
+      // Resolve swagger from cache for any connector that specifies baseName
+      const multiInput: MultiConnectorTestInput = {
+        environmentId: typedInput["environmentId"] as string,
+        connectors: connectors.map((c) => {
+          let swagger = c["swagger"] as string | Record<string, unknown> | undefined;
+          if (!swagger && c["baseName"]) {
+            const cached = generatedSwaggerCache.get(c["baseName"] as string);
+            if (cached) swagger = cached.swagger;
+          }
+          return {
+            displayName: c["displayName"] as string,
+            scope: c["scope"] as "all" | "crud" | readonly string[],
+            swagger,
+            baseName: c["baseName"] as string | undefined,
+            bodyOverrides: c["bodyOverrides"] as Record<string, Record<string, unknown>> | undefined,
+          };
+        }),
+        variables: typedInput["variables"] as Record<string, string> | undefined,
+      };
+
+      const testPlan = generateMultiConnectorTestPlan(multiInput);
+      log(`[MultiPlan] Generated ${testPlan.summary.totalOperations} operations across ${testPlan.summary.totalConnectors} connectors`);
       return { ok: true, toolName, result: { testPlan } };
     }
 

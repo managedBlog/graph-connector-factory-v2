@@ -17,6 +17,7 @@
  *   POST /api/graph/deploy/batch — Batch deploy
  *   GET  /api/graph/deploy/status — Deploy status (long-poll)
  *   POST /api/graph/test-plan    — Generate CUA test plan
+ *   POST /api/testing/multi-plan — Generate multi-connector CUA test plan
  *   GET  /download/:id/:filename — Serve generated files
  *   POST /api/graph/test/batch-echo — Test endpoint
  */
@@ -1728,6 +1729,40 @@ export function startHttpServer(options: HttpHostOptions): void {
 
       if (!result.ok) {
         res.status(400).json({ error: result.error ?? "Test plan generation failed" });
+        return;
+      }
+
+      res.json(result.result);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      res.status(500).json({ error: message });
+    }
+  });
+
+  // ─── REST: Multi-connector test plan ───────────────────────────────────
+
+  app.post("/api/testing/multi-plan", async (req, res) => {
+    try {
+      const body = req.body as Record<string, unknown>;
+      log(`[MultiPlan REST] connectors=${JSON.stringify((body["connectors"] as unknown[])?.map((c: any) => c?.displayName) ?? [])}`);
+
+      if (!body["environmentId"] || !body["connectors"]) {
+        res.status(400).json({ error: "environmentId and connectors are required." });
+        return;
+      }
+
+      const result = await invokeTool(
+        "testing_generateMultiPlan",
+        {
+          environmentId: body["environmentId"],
+          connectors: body["connectors"],
+          variables: body["variables"],
+        },
+        config,
+      );
+
+      if (!result.ok) {
+        res.status(400).json({ error: result.error ?? "Multi-plan generation failed" });
         return;
       }
 

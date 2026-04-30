@@ -8,7 +8,79 @@
  * the fields it needs — no optional-field soup.
  */
 
-// ─── Test Plan Input ────────────────────────────────────────────────────────
+// ─── Multi-Connector Test Plan Input ────────────────────────────────────────
+
+/** Top-level input for generating a test plan across multiple connectors. */
+export interface MultiConnectorTestInput {
+  /** Power Platform environment ID. */
+  readonly environmentId: string;
+  /** Connectors to include in the test plan. */
+  readonly connectors: readonly ConnectorTestSpec[];
+  /** Top-level variables the CUA can reference (e.g., tenantDomain). */
+  readonly variables?: Record<string, string> | undefined;
+}
+
+/** Per-connector specification within a multi-connector test plan. */
+export interface ConnectorTestSpec {
+  /** Connector display name — CUA opens this connector by name in the portal. */
+  readonly displayName: string;
+  /** Which operations to test: "all", "crud" (list+get+post+patch+delete per entity), or specific IDs. */
+  readonly scope: "all" | "crud" | readonly string[];
+  /** Inline swagger JSON for operation resolution. */
+  readonly swagger?: string | Record<string, unknown> | undefined;
+  /** Cache key to resolve swagger from generatedSwaggerCache (alternative to inline swagger). */
+  readonly baseName?: string | undefined;
+  /** Override body templates for specific entity sets (keyed by entity set name, e.g., "users"). */
+  readonly bodyOverrides?: Record<string, Record<string, unknown>> | undefined;
+}
+
+// ─── Multi-Connector Test Plan Output ───────────────────────────────────────
+
+/** Lean operation manifest the CUA consumes from chat. */
+export interface MultiConnectorTestPlan {
+  readonly schemaVersion: string;
+  readonly environmentId: string;
+  readonly generatedAt: string;
+  readonly connectors: readonly ConnectorTestPlanEntry[];
+  /** Top-level variables for template substitution. */
+  readonly variables: Record<string, string>;
+  readonly summary: MultiConnectorSummary;
+}
+
+export interface ConnectorTestPlanEntry {
+  readonly displayName: string;
+  readonly operations: readonly OperationTestStep[];
+}
+
+/**
+ * A single operation the CUA should execute in the connector test tab.
+ * Uses `{{OperationId.captureKey}}` for dynamic value references.
+ */
+export interface OperationTestStep {
+  readonly operationId: string;
+  readonly method: string;
+  readonly description: string;
+  /** Query/path parameters to fill in the test UI. */
+  readonly parameters?: Record<string, string> | undefined;
+  /** JSON body for POST/PATCH/PUT operations. */
+  readonly body?: Record<string, unknown> | undefined;
+  /** Values to capture from the response for use in subsequent operations. */
+  readonly capture?: Record<string, string> | undefined;
+  /** Operation IDs this step depends on (for ordering). */
+  readonly dependsOn?: readonly string[] | undefined;
+  readonly expectedResponse: {
+    readonly statusCode: number;
+    readonly valueIsArray?: boolean;
+  };
+}
+
+export interface MultiConnectorSummary {
+  readonly totalConnectors: number;
+  readonly totalOperations: number;
+  readonly operationsByMethod: Record<string, number>;
+}
+
+// ─── Single-Connector Test Plan Input (legacy) ─────────────────────────────
 
 export interface TestPlanInput {
   /** Connector ID from deploy result (e.g., "shared_contoso-users_abc123"). */
@@ -53,6 +125,13 @@ export interface CreateConnectionStep {
   readonly action: "createConnection";
   readonly description: string;
   readonly authType: string;
+  /** Deep link to the new-connection page. */
+  readonly url: string;
+  /** Fallback UI navigation when deep link is stale. */
+  readonly fallback: {
+    readonly searchPath: string;
+    readonly searchTerm: string;
+  };
   readonly expectedPrompt: string;
   readonly successIndicator: string;
 }
@@ -98,8 +177,12 @@ export interface ManualInputStep {
   readonly reason: string;
   /** Known required fields from schema/KNOWN_REQUIRED_FIELDS. */
   readonly requiredFields?: readonly string[];
+  /** Pre-built JSON body template for the CUA to paste (switch to JSON input view). */
+  readonly bodyTemplate?: Record<string, unknown> | undefined;
   /** Lifecycle hint for the CUA (e.g., "create", "update", "cleanup"). */
   readonly lifecycleHint?: string | undefined;
+  /** Operation IDs this step depends on (e.g., DELETE depends on POST's created ID). */
+  readonly dependsOn?: readonly string[] | undefined;
   /** Whether the CUA can skip this step. */
   readonly skippable: boolean;
 }
