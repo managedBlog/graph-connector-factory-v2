@@ -9,7 +9,7 @@
  * Key design decisions:
  * - Output is self-contained JSON — no server lookups at CUA runtime.
  * - Write ops include inline JSON bodies (from KNOWN_BODY_TEMPLATES or overrides).
- * - Dynamic value chaining uses {{c<N>.<OperationId>.<captureKey>}} placeholders.
+ * - Dynamic value chaining uses [c<N>.<OperationId>.<captureKey>] placeholders.
  * - A run nonce is appended to created resources to avoid collisions on repeat runs.
  */
 
@@ -33,9 +33,9 @@ const KNOWN_BODY_TEMPLATES: Record<string, (nonce: string) => Record<string, unk
     mailNickname: `gcf-test-user-${nonce}`,
     passwordProfile: {
       forceChangePasswordNextSignIn: true,
-      password: "{{testUserPassword}}",
+      password: "[testUserPassword]",
     },
-    userPrincipalName: `gcf-test-user-${nonce}@{{tenantDomain}}`,
+    userPrincipalName: `gcf-test-user-${nonce}@[tenantDomain]`,
   }),
   groups: (nonce) => ({
     displayName: `GCF Test Group ${nonce}`,
@@ -47,7 +47,7 @@ const KNOWN_BODY_TEMPLATES: Record<string, (nonce: string) => Record<string, unk
     displayName: `GCF Test Application ${nonce}`,
   }),
   serviceprincipals: () => ({
-    appId: "{{testAppId}}",
+    appId: "[testAppId]",
   }),
   teams: (nonce) => ({
     "template@odata.bind": "https://graph.microsoft.com/v1.0/teamsTemplates('standard')",
@@ -379,7 +379,7 @@ function buildSingleStep(
       if (isWriteMethod(method) && method !== "POST") {
         const postRef = postOpRefs.get(entitySet);
         if (postRef) {
-          params[param.name] = `{{${postRef}.newId}}`;
+          params[param.name] = `[${postRef}.newId]`;
           if (!dependsOn.includes(postRef)) dependsOn.push(postRef);
           continue;
         }
@@ -388,7 +388,7 @@ function buildSingleStep(
       const listRef = listOpRefs.get(entitySet);
       if (listRef) {
         const singular = singularize(entitySet);
-        params[param.name] = `{{${listRef}.${singular}Id}}`;
+        params[param.name] = `[${listRef}.${singular}Id]`;
         if (!dependsOn.includes(listRef)) dependsOn.push(listRef);
       } else {
         params[param.name] = `<provide-${param.name}>`;
@@ -471,7 +471,7 @@ function resolveBody(
     const templateFn = KNOWN_BODY_TEMPLATES[entitySet];
     if (templateFn) return templateFn(nonce);
     // No template — return a placeholder
-    return { "{{note}}": `Provide POST body for ${entitySet}` };
+    return { "[note]": `Provide POST body for ${entitySet}` };
   }
 
   if (method === "PATCH" || method === "PUT") {

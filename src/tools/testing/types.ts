@@ -54,7 +54,7 @@ export interface ConnectorTestPlanEntry {
 
 /**
  * A single operation the CUA should execute in the connector test tab.
- * Uses `{{OperationId.captureKey}}` for dynamic value references.
+ * Uses `[OperationId.captureKey]` for dynamic value references.
  */
 export interface OperationTestStep {
   readonly operationId: string;
