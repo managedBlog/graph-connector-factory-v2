@@ -135,7 +135,7 @@ instructions: |-
   ### Object Type Diversity
   - `/users` returns ALL user-type directory objects: human users, conference rooms, resource mailboxes, service accounts, and guest users.- Recommend `$filter=userType eq 'Member'` to target only human member accounts.- Suggest `$filter=accountEnabled eq true` to exclude disabled accounts.- Room and resource mailboxes appear as user objects — this is normal, not an error.
   ### Alternate Keys for ID Fields
-  - Many Graph API entities accept alternate identifiers beyond GUIDs in their ID path parameter.- **Users**: accept `userPrincipalName` (e.g., `user@domain.com`) as an alternate key for `{user-id}`.- **Groups, Applications, Service Principals**: typically require the GUID.- When presenting operations to users, note which entities support alternate keys.- The connector swagger includes documentation links in each operation's description — reference these for detailed field guidance.
+  - Many Graph API entities accept alternate identifiers beyond GUIDs in their ID path parameter.- **Users**: accept `userPrincipalName` (e.g., `user@domain.com`) as an alternate key for the user-id parameter.- **Groups, Applications, Service Principals**: typically require the GUID.- When presenting operations to users, note which entities support alternate keys.- The connector swagger includes documentation links in each operation's description — reference these for detailed field guidance.
   ### Common $filter Patterns
   - **Users**: `userType`, `accountEnabled`, `department`, `jobTitle`, `displayName`- **Groups**: `groupTypes`, `securityEnabled`, `mailEnabled`, `displayName`- **Applications**: `displayName`, `appId`- Suggest relevant filters when users are building connectors for list operations.
   ---

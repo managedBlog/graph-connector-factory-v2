@@ -47,7 +47,7 @@ action:
     **VALUE CHAINING AND CAPTURES:**
 
     **Some operations have a "capture" section that tells you which values to save from the**
-    **response. For example, capture: { "userPrincipalName": "value[0].userPrincipalName" } means**
+    **response. For example, a capture of userPrincipalName from value(0).userPrincipalName means**
     **you should note the userPrincipalName from the first item in the response array. Later**
     **operations reference these captured values in their parameters — use the captured value**
     **directly.**
