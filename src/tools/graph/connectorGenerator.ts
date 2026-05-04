@@ -6,7 +6,7 @@
  * Power Platform constraints, and auto-splits if limits are exceeded.
  */
 
-import { GraphOperationInfo, ConnectorAuthConfig, ConnectorFile, ConnectorOutputFormat } from "./types";
+import { GraphOperationInfo, ConnectorAuthConfig, ConnectorFile, ConnectorOutputFormat, RequestBodyProperty } from "./types";
 import { normalizeDefinitions, SwaggerDefinitions } from "./schemaNormalizer";
 import { convertSwagger20ToOpenApi30 } from "./openapi3Converter";
 import * as yaml from "js-yaml";
@@ -176,6 +176,74 @@ function buildSwaggerParameters(op: GraphOperationInfo): unknown[] {
   return params;
 }
 
+/**
+ * Recursively convert a RequestBodyProperty into a Swagger 2.0 property definition.
+ * Handles nested objects, arrays of objects, enums, and primitives.
+ */
+function toSwaggerPropertyDef(bp: RequestBodyProperty): Record<string, unknown> {
+  const isNullable = bp.nullable !== false;
+  const visibility = isNullable ? "advanced" : "important";
+
+  // Nested object with sub-properties
+  if (bp.type === "object" && bp.properties && bp.properties.length > 0) {
+    const nestedProps: Record<string, unknown> = {};
+    for (const child of bp.properties) {
+      nestedProps[child.name] = toSwaggerPropertyDef(child);
+    }
+
+    if (bp.isArray) {
+      return {
+        type: "array",
+        items: { type: "object", properties: nestedProps },
+        description: bp.description,
+        "x-ms-summary": bp.description,
+        "x-ms-visibility": visibility,
+      };
+    }
+
+    return {
+      type: "object",
+      properties: nestedProps,
+      description: bp.description,
+      "x-ms-summary": bp.description,
+      "x-ms-visibility": visibility,
+    };
+  }
+
+  // Array of primitives/enums
+  if (bp.isArray) {
+    const itemDef: Record<string, unknown> = { type: bp.type };
+    if (bp.enum && bp.enum.length > 0) {
+      itemDef["enum"] = bp.enum;
+    }
+    return {
+      type: "array",
+      items: itemDef,
+      description: bp.description,
+      "x-ms-summary": bp.description,
+      "x-ms-visibility": visibility,
+    };
+  }
+
+  // Scalar (primitive or enum)
+  const propDef: Record<string, unknown> = {
+    type: bp.type,
+    description: bp.description,
+    "x-ms-summary": bp.description,
+    "x-ms-visibility": visibility,
+  };
+
+  if (bp.enum && bp.enum.length > 0) {
+    propDef["enum"] = bp.enum;
+    propDef["x-ms-enum-values"] = bp.enum.map((v) => ({
+      displayName: v.replace(/([a-z])([A-Z])/g, "$1 $2").replace(/^./, (c: string) => c.toUpperCase()),
+      value: v,
+    }));
+  }
+
+  return propDef;
+}
+
 function buildSwaggerResponses(
   op: GraphOperationInfo,
   definitions: SwaggerDefinitions
@@ -252,40 +320,7 @@ function buildSwaggerResponses(
     if (op.requestBodyProperties && op.requestBodyProperties.length > 0) {
       const props: Record<string, unknown> = {};
       for (const bp of op.requestBodyProperties) {
-        const isNullable = bp.nullable !== false; // default to nullable if not set
-
-        // NOTE: We intentionally do NOT derive "required" from CSDL Nullable.
-        // Nullable="false" means the stored value cannot be null, but the server
-        // often provides defaults (e.g. deviceEnrollmentLimit=5, birthday=epoch).
-        // Truly required creation fields (displayName, accountEnabled, etc.)
-        // are documented in Graph API docs, not derivable from CSDL metadata.
-        // We use x-ms-visibility to surface non-nullable fields prominently
-        // while letting the server validate required fields at runtime.
-        const propDef: Record<string, unknown> = bp.isArray
-          ? {
-              type: "array",
-              items: { type: bp.type },
-              description: bp.description,
-              "x-ms-summary": bp.description,
-              "x-ms-visibility": isNullable ? "advanced" : "important",
-            }
-          : {
-              type: bp.type,
-              description: bp.description,
-              "x-ms-summary": bp.description,
-              "x-ms-visibility": isNullable ? "advanced" : "important",
-            };
-
-        // Include enum values so connectors show a dropdown picker
-        if (bp.enum && bp.enum.length > 0) {
-          propDef["enum"] = bp.enum;
-          propDef["x-ms-enum-values"] = bp.enum.map((v) => ({
-            displayName: v.replace(/([a-z])([A-Z])/g, "$1 $2").replace(/^./, (c: string) => c.toUpperCase()),
-            value: v,
-          }));
-        }
-
-        props[bp.name] = propDef;
+        props[bp.name] = toSwaggerPropertyDef(bp);
       }
       bodyDef["properties"] = props;
     }

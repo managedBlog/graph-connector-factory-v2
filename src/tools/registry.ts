@@ -339,6 +339,7 @@ async function invokeGraphTool(
         csdlCacheTtlHours: config.graphResearch.csdlCacheTtlHours,
         hidiCliPath: null,
         forceRefresh: typedInput.forceRefresh ?? false,
+        enrichComplexTypes: config.graphResearch.enrichComplexTypes ?? false,
       };
 
       const allOperations: GraphOperationInfo[] = [];

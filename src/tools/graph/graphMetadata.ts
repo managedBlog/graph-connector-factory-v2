@@ -216,6 +216,111 @@ function toSwaggerType(edmType: string): string {
   return typeMap[base] ?? "string";
 }
 
+const MAX_COMPLEX_DEPTH = 3;
+
+/**
+ * Resolve a CSDL property type into a RequestBodyProperty (without name/description).
+ * Handles primitives, enums, and complex types with recursive resolution.
+ * When enrichComplexTypes is false, complex types fall back to "string" (legacy behavior).
+ */
+function resolvePropertySchema(
+  edmType: string,
+  complexTypes: Map<string, CsdlEntityType>,
+  enumTypes: Map<string, string[]>,
+  enrichComplexTypes: boolean,
+  ancestors: Set<string> = new Set(),
+  depth: number = 0
+): Partial<RequestBodyProperty> {
+  const isCollection = edmType.startsWith("Collection(");
+  const innerType = isCollection
+    ? edmType.replace("Collection(", "").replace(/\)$/, "")
+    : edmType;
+
+  // Primitive types
+  const primitiveResult = toSwaggerType(innerType);
+  const strippedBase = innerType.replace("Edm.", "");
+  const PRIMITIVES = new Set([
+    "String", "Int32", "Int64", "Boolean", "DateTimeOffset", "Guid",
+    "Binary", "Stream", "Double", "Single", "Decimal", "Int16",
+    "Byte", "Duration", "Date", "TimeOfDay",
+  ]);
+  if (innerType.startsWith("Edm.") || PRIMITIVES.has(strippedBase)) {
+    return {
+      type: primitiveResult,
+      ...(isCollection ? { isArray: true } : {}),
+    };
+  }
+
+  // Enum types
+  const enumName = entityNameFromType(innerType);
+  const enumValues = enumTypes.get(enumName);
+  if (enumValues && enumValues.length > 0) {
+    const filtered = enumValues.filter((v) => v !== "unknownFutureValue");
+    return {
+      type: "string",
+      enum: filtered,
+      ...(isCollection ? { isArray: true } : {}),
+    };
+  }
+
+  // Complex types — only resolve when enrichment is enabled
+  if (enrichComplexTypes) {
+    const complexName = entityNameFromType(innerType);
+    const complexType = complexTypes.get(complexName) ?? complexTypes.get(innerType);
+
+    if (complexType) {
+      // Cycle detection: if we've seen this type in our ancestry, stop
+      if (ancestors.has(complexName) || depth >= MAX_COMPLEX_DEPTH) {
+        if (ancestors.has(complexName)) {
+          logDebug(`Complex type cycle detected: ${complexName} (ancestors: ${[...ancestors].join(" → ")})`);
+        } else {
+          logDebug(`Complex type depth limit reached at ${complexName} (depth=${depth})`);
+        }
+        return {
+          type: "string",
+          ...(isCollection ? { isArray: true } : {}),
+        };
+      }
+
+      // Resolve nested properties
+      const childAncestors = new Set(ancestors);
+      childAncestors.add(complexName);
+
+      const props = ensureArray(complexType.Property);
+      const resolvedProps: RequestBodyProperty[] = props.map((p) => {
+        const childResult = resolvePropertySchema(
+          p["@_Type"],
+          complexTypes,
+          enumTypes,
+          enrichComplexTypes,
+          childAncestors,
+          depth + 1
+        );
+        return {
+          name: p["@_Name"],
+          description: formatParamDescription(p["@_Name"]),
+          type: childResult.type ?? "string",
+          ...(childResult.enum ? { enum: childResult.enum } : {}),
+          ...(childResult.isArray ? { isArray: true } : {}),
+          ...(childResult.properties ? { properties: childResult.properties } : {}),
+        };
+      });
+
+      return {
+        type: "object",
+        properties: resolvedProps,
+        ...(isCollection ? { isArray: true } : {}),
+      };
+    }
+  }
+
+  // Fallback: unknown type → "string"
+  return {
+    type: "string",
+    ...(isCollection ? { isArray: true } : {}),
+  };
+}
+
 function entityNameFromType(fullType: string): string {
   const parts = fullType.split(".");
   return parts[parts.length - 1] ?? fullType;
@@ -229,7 +334,9 @@ function entityNameFromType(fullType: string): string {
 function buildEntityBodyProperties(
   entityTypeName: string,
   entityTypes: Map<string, CsdlEntityType>,
-  enumTypes: Map<string, string[]>
+  enumTypes: Map<string, string[]>,
+  complexTypes: Map<string, CsdlEntityType> = new Map(),
+  enrichComplexTypes: boolean = false
 ): RequestBodyProperty[] {
   const entityType = entityTypes.get(entityTypeName);
   if (!entityType) return [];
@@ -276,24 +383,20 @@ function buildEntityBodyProperties(
         nullable = !isCollection; // collections default non-nullable, scalars default nullable
       }
 
-      const prop: RequestBodyProperty = {
+      // Use shared resolver for type resolution (handles primitives, enums, complex types)
+      const resolved = resolvePropertySchema(
+        edmType, complexTypes, enumTypes, enrichComplexTypes
+      );
+
+      return {
         name: p["@_Name"],
-        type: toSwaggerType(edmType),
+        type: resolved.type ?? "string",
         description: formatParamDescription(p["@_Name"]),
         nullable,
-        ...(isCollection ? { isArray: true } : {}),
+        ...(resolved.isArray ? { isArray: true } : {}),
+        ...(resolved.enum ? { enum: resolved.enum } : {}),
+        ...(resolved.properties ? { properties: resolved.properties } : {}),
       };
-
-      // Resolve enum values from CSDL EnumType definitions
-      const rawType = p["@_Type"].replace("Collection(", "").replace(")", "");
-      const enumName = entityNameFromType(rawType);
-      const enumValues = enumTypes.get(enumName);
-      if (enumValues && enumValues.length > 0) {
-        const filtered = enumValues.filter((v) => v !== "unknownFutureValue");
-        return { ...prop, enum: filtered };
-      }
-
-      return prop;
     });
 }
 
@@ -302,7 +405,9 @@ function buildOperationsFromEntitySet(
   entityTypeName: string,
   entityTypes: Map<string, CsdlEntityType>,
   version: string,
-  enumTypes: Map<string, string[]> = new Map()
+  enumTypes: Map<string, string[]> = new Map(),
+  complexTypes: Map<string, CsdlEntityType> = new Map(),
+  enrichComplexTypes: boolean = false
 ): GraphOperationInfo[] {
   const operations: GraphOperationInfo[] = [];
   const basePath = `/${setName}`;
@@ -349,7 +454,7 @@ function buildOperationsFromEntitySet(
   });
 
   // POST create
-  const bodyProps = buildEntityBodyProperties(entityTypeName, entityTypes, enumTypes);
+  const bodyProps = buildEntityBodyProperties(entityTypeName, entityTypes, enumTypes, complexTypes, enrichComplexTypes);
   const createOp: GraphOperationInfo = {
     operationId: `${setName}.create`,
     method: "POST",
@@ -531,7 +636,9 @@ function buildBoundActionOperations(
   namespaces: string[],
   aliases: string[] = [],
   enumTypes: Map<string, string[]> = new Map(),
-  isSingleton: boolean = false
+  isSingleton: boolean = false,
+  complexTypes: Map<string, CsdlEntityType> = new Map(),
+  enrichComplexTypes: boolean = false
 ): GraphOperationInfo[] {
   const operations: GraphOperationInfo[] = [];
 
@@ -586,23 +693,17 @@ function buildBoundActionOperations(
       : null;
 
     const bodyProperties: RequestBodyProperty[] = nonBindingParams.map((p) => {
-      const prop: RequestBodyProperty = {
+      const resolved = resolvePropertySchema(
+        p["@_Type"], complexTypes, enumTypes, enrichComplexTypes
+      );
+      return {
         name: p["@_Name"],
-        type: toSwaggerType(p["@_Type"]),
+        type: resolved.type ?? "string",
         description: formatParamDescription(p["@_Name"]),
+        ...(resolved.isArray ? { isArray: true } : {}),
+        ...(resolved.enum ? { enum: resolved.enum } : {}),
+        ...(resolved.properties ? { properties: resolved.properties } : {}),
       };
-
-      // Resolve enum values from CSDL EnumType definitions
-      const rawType = p["@_Type"].replace("Collection(", "").replace(")", "");
-      const enumName = entityNameFromType(rawType);
-      const enumValues = enumTypes.get(enumName);
-      if (enumValues && enumValues.length > 0) {
-        // Filter out unknownFutureValue sentinel
-        const filtered = enumValues.filter((v) => v !== "unknownFutureValue");
-        return { ...prop, enum: filtered };
-      }
-
-      return prop;
     });
 
     const baseOp = {
@@ -712,7 +813,8 @@ function inferScopes(
 
 export function parseCsdlToOperations(
   xml: string,
-  endpointFilter: string
+  endpointFilter: string,
+  enrichComplexTypes: boolean = false
 ): { operations: GraphOperationInfo[]; warnings: string[] } {
   const parser = new XMLParser({
     ignoreAttributes: false,
@@ -740,6 +842,8 @@ export function parseCsdlToOperations(
   
   // Collect entity types
   const entityTypes = new Map<string, CsdlEntityType>();
+  // Collect complex types (same structure as entity types: have Property elements)
+  const complexTypes = new Map<string, CsdlEntityType>();
   // Collect namespaces AND aliases for action binding resolution
   const namespaces: string[] = [];
   const aliases: string[] = [];
@@ -762,6 +866,16 @@ export function parseCsdlToOperations(
       // Store by short name — prefer microsoft.graph namespace on conflicts
       if (!entityTypes.has(shortName) || ns === "microsoft.graph") {
         entityTypes.set(shortName, et);
+      }
+    }
+
+    // Collect complex types (reuse CsdlEntityType — both have Property elements)
+    const ctypes = ensureArray(schema["ComplexType"] as CsdlEntityType | CsdlEntityType[] | undefined);
+    for (const ct of ctypes) {
+      const shortName = ct["@_Name"];
+      if (ns) complexTypes.set(`${ns}.${shortName}`, ct);
+      if (!complexTypes.has(shortName) || ns === "microsoft.graph") {
+        complexTypes.set(shortName, ct);
       }
     }
 
@@ -815,7 +929,9 @@ export function parseCsdlToOperations(
           resolution.entityTypeName,
           entityTypes,
           enumTypes,
-          resolution.isContained
+          resolution.isContained,
+          complexTypes,
+          enrichComplexTypes
         );
         allOperations.push(...ops);
 
@@ -835,7 +951,10 @@ export function parseCsdlToOperations(
           resolution.collectionSegment,
           namespaces,
           aliases,
-          enumTypes
+          enumTypes,
+          false,
+          complexTypes,
+          enrichComplexTypes
         );
         allOperations.push(...actionOps);
       } else {
@@ -861,7 +980,9 @@ export function parseCsdlToOperations(
           namespaces,
           aliases,
           enumTypes,
-          true // singleton — no {id} segment in action paths
+          true, // singleton — no {id} segment in action paths
+          complexTypes,
+          enrichComplexTypes
         );
         allOperations.push(...singletonActionOps);
       }
@@ -874,7 +995,7 @@ export function parseCsdlToOperations(
       const setNameLower = setName.toLowerCase();
       if (filterLower === "" || setNameLower.startsWith(filterLower) || filterLower.startsWith(setNameLower)) {
         const entityTypeName = entityNameFromType(fullType);
-        const ops = buildOperationsFromEntitySet(setName, entityTypeName, entityTypes, "v1.0", enumTypes);
+        const ops = buildOperationsFromEntitySet(setName, entityTypeName, entityTypes, "v1.0", enumTypes, complexTypes, enrichComplexTypes);
         allOperations.push(...ops);
 
         // Discover bound actions for this entity type
@@ -885,7 +1006,10 @@ export function parseCsdlToOperations(
           setName,
           namespaces,
           aliases,
-          enumTypes
+          enumTypes,
+          false,
+          complexTypes,
+          enrichComplexTypes
         );
         allOperations.push(...actionOps);
       }
@@ -937,7 +1061,9 @@ function buildOperationsFromNavigationPath(
   entityTypeName: string,
   entityTypes: Map<string, CsdlEntityType>,
   enumTypes: Map<string, string[]> = new Map(),
-  isContained: boolean = false
+  isContained: boolean = false,
+  complexTypes: Map<string, CsdlEntityType> = new Map(),
+  enrichComplexTypes: boolean = false
 ): GraphOperationInfo[] {
   const operations: GraphOperationInfo[] = [];
   const idParam = `${singularize(collectionSegment)}-id`;
@@ -987,7 +1113,7 @@ function buildOperationsFromNavigationPath(
   });
 
   // POST create
-  const bodyProps = buildEntityBodyProperties(entityTypeName, entityTypes, enumTypes);
+  const bodyProps = buildEntityBodyProperties(entityTypeName, entityTypes, enumTypes, complexTypes, enrichComplexTypes);
   const createOp: GraphOperationInfo = {
     operationId: `${collectionSegment}.create`,
     method: "POST",
@@ -1068,6 +1194,8 @@ export interface MetadataProviderConfig {
   readonly csdlCacheTtlHours: number;
   readonly hidiCliPath: string | null;
   readonly forceRefresh: boolean;
+  /** When true, resolve CSDL ComplexTypes into nested schemas instead of flattening to "string". */
+  readonly enrichComplexTypes?: boolean;
 }
 
 export async function getOperationsForEndpoint(
@@ -1100,7 +1228,7 @@ export async function getOperationsForEndpoint(
   }
 
   // Pure-TS fallback
-  const { operations, warnings } = parseCsdlToOperations(xml, endpoint);
+  const { operations, warnings } = parseCsdlToOperations(xml, endpoint, config.enrichComplexTypes ?? false);
   return { operations, cacheAge, warnings };
 }
 

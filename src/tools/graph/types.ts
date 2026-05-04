@@ -40,6 +40,8 @@ export interface RequestBodyProperty {
   readonly isArray?: boolean;
   /** True when the CSDL property has Nullable="false" or is a non-nullable collection. */
   readonly nullable?: boolean;
+  /** Nested properties for complex type fields (type: "object"). */
+  readonly properties?: readonly RequestBodyProperty[];
 }
 
 export interface GraphOperationInfo {

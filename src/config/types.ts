@@ -38,6 +38,8 @@ export interface GraphResearchConfig {
   readonly autoFlatten: boolean;
   /** Maximum operations per generated connector. */
   readonly maxOperationsPerConnector: number;
+  /** Resolve CSDL ComplexTypes into nested object schemas (default: false). */
+  readonly enrichComplexTypes?: boolean;
 }
 
 // ─── Power Platform (CDA) ──────────────────────────────────────────
