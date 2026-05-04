@@ -1,6 +1,8 @@
+mcs.metadata:
+  componentName: GCF REST Connector - Get session context
 kind: TaskDialog
 modelDisplayName: Get session context
-modelDescription: "Returns the full session context including explored endpoints and design decisions captured via graph_setDesignContext. Flat response: all endpoint tracking fields plus all design context fields merged at top level."
+modelDescription: Returns the full session context including explored endpoints and design decisions captured via graph_setDesignContext. Flat response: all endpoint tracking fields plus all design context fields merged at top level.
 outputs:
   - propertyName: appRegistrationStrategy
 
@@ -40,7 +42,7 @@ outputs:
 
 action:
   kind: InvokeConnectorTaskAction
-  connectionReference: copilots_header_91a5e.shared_new-5fgcf-20rest-20connector-5f251f982b189de9d2.52f1402e515247c1ae6cdbfa6793c46d
+  connectionReference: copilots_header_91a5e.shared_new-5fgcf-20rest-20connector-5f251f982b189de9d2.b895ed5158d0473eaba1be82299811ac
   connectionProperties:
     mode: Invoker
 

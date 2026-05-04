@@ -41,6 +41,45 @@ const KNOWN_REQUIRED_FIELDS: Record<string, readonly string[]> = {
   exportjobs: ["reportName"],
 };
 
+/**
+ * Body templates for known Graph entity sets.
+ * Values use `{{inputName}}` for CUA-declared inputs (tenantDomain, etc.).
+ * The CUA renderer will substitute or prompt for these.
+ */
+const KNOWN_BODY_TEMPLATES: Record<string, Record<string, unknown>> = {
+  users: {
+    accountEnabled: true,
+    displayName: "GCF Test User",
+    mailNickname: "gcf-test-user",
+    passwordProfile: {
+      forceChangePasswordNextSignIn: true,
+      password: "{{testUserPassword}}",
+    },
+    userPrincipalName: "gcf-test-user@{{tenantDomain}}",
+  },
+  groups: {
+    displayName: "GCF Test Group",
+    mailEnabled: false,
+    mailNickname: "gcf-test-group",
+    securityEnabled: true,
+  },
+  applications: {
+    displayName: "GCF Test Application",
+  },
+  serviceprincipals: {
+    appId: "{{testAppId}}",
+  },
+  teams: {
+    "template@odata.bind": "https://graph.microsoft.com/v1.0/teamsTemplates('standard')",
+    displayName: "GCF Test Team",
+    description: "Created by GCF test plan",
+  },
+  channels: {
+    displayName: "GCF Test Channel",
+    description: "Created by GCF test plan",
+  },
+};
+
 // ─── Public API ─────────────────────────────────────────────────────────────
 
 /**
@@ -114,6 +153,8 @@ export function generateTestPlan(input: TestPlanInput): TestPlan {
       action: "createConnection",
       description: `Create a new connection for '${input.displayName}'`,
       authType: input.authType,
+      url: connUrl.url,
+      fallback: connUrl.fallback,
       expectedPrompt: authPromptForType(input.authType),
       successIndicator: "Connection status shows 'Connected'",
     } satisfies CreateConnectionStep);
@@ -121,6 +162,9 @@ export function generateTestPlan(input: TestPlanInput): TestPlan {
 
   // Build a map of resource paths → list operation IDs for variable resolution
   const listOpsByResource = buildListOperationMap(ordered);
+
+  // Track POST operation IDs by entity set for write-op lifecycle dependencies
+  const postOpsByEntity = new Map<string, string>();
 
   // Step 3+: Per-operation test steps
   const hasWriteOps = ordered.some((op) => isWriteMethod(op.method));
@@ -131,19 +175,33 @@ export function generateTestPlan(input: TestPlanInput): TestPlan {
     if (isWrite && !includeWriteOps) {
       // Emit manual-input step for write operations
       const method = op.method.toUpperCase();
+      const entitySet = entitySetNameFromPath(op.path);
 
       // DELETE doesn't need body fields; PATCH/PUT use schema fields;
       // POST uses KNOWN_REQUIRED_FIELDS or schema
       let requiredFields: readonly string[] | undefined;
+      let bodyTemplate: Record<string, unknown> | undefined;
+      let dependsOnWrite: string[] | undefined;
+
       if (method === "DELETE") {
         // DELETE only needs path params — no body fields
         const pathParams = op.parameters.filter((p) => p.in === "path").map((p) => p.name);
         requiredFields = pathParams.length > 0 ? pathParams : undefined;
-      } else {
-        const entitySet = entitySetNameFromPath(op.path);
-        requiredFields = (method === "POST" ? KNOWN_REQUIRED_FIELDS[entitySet] : undefined)
-          ?? extractRequiredFieldsFromSchema(op);
+        // DELETE depends on the POST that created the resource
+        const postOp = postOpsByEntity.get(entitySet);
+        if (postOp) dependsOnWrite = [postOp];
+      } else if (method === "POST") {
+        requiredFields = KNOWN_REQUIRED_FIELDS[entitySet] ?? extractRequiredFieldsFromSchema(op);
         if (requiredFields.length === 0) requiredFields = undefined;
+        bodyTemplate = KNOWN_BODY_TEMPLATES[entitySet];
+        // Track this POST for PATCH/DELETE dependency resolution
+        postOpsByEntity.set(entitySet, op.operationId);
+      } else {
+        // PATCH/PUT — depends on POST for the created resource ID
+        requiredFields = extractRequiredFieldsFromSchema(op);
+        if (requiredFields.length === 0) requiredFields = undefined;
+        const postOp = postOpsByEntity.get(entitySet);
+        if (postOp) dependsOnWrite = [postOp];
       }
 
       steps.push({
@@ -156,14 +214,25 @@ export function generateTestPlan(input: TestPlanInput): TestPlan {
           ? "Delete operations permanently remove resources — use only on test objects you created"
           : "Write operations require explicit test data to avoid unintended changes",
         ...(requiredFields ? { requiredFields } : {}),
+        ...(bodyTemplate ? { bodyTemplate } : {}),
         lifecycleHint: lifecycleHintForMethod(op.method),
+        ...(dependsOnWrite ? { dependsOn: dependsOnWrite } : {}),
         skippable: true,
       } satisfies ManualInputStep);
       continue;
     }
 
+    // For included write ops, also track POST and build proper dependencies
+    if (isWrite && includeWriteOps) {
+      const method = op.method.toUpperCase();
+      const entitySet = entitySetNameFromPath(op.path);
+      if (method === "POST") postOpsByEntity.set(entitySet, op.operationId);
+    }
+
     // Build test parameters and dependencies
-    const { params, outputCapture, dependsOn } = buildTestParams(op, listOpsByResource);
+    // For PATCH/DELETE write ops, prefer the POST-created resource over list results
+    const writePostDep = isWrite ? postOpsByEntity.get(entitySetNameFromPath(op.path)) : undefined;
+    const { params, outputCapture, dependsOn } = buildTestParams(op, listOpsByResource, writePostDep);
 
     const expectedResponse = buildExpectedResponse(op);
 
@@ -337,6 +406,7 @@ interface TestParamResult {
 function buildTestParams(
   op: SwaggerOperation,
   listOpsByResource: Map<string, string>,
+  writePostDep?: string | undefined,
 ): TestParamResult {
   const params: Record<string, string> = {};
   const outputCapture: OutputCaptureInstruction[] = [];
@@ -350,25 +420,30 @@ function buildTestParams(
     if (param.in === "header") continue;
 
     if (param.in === "path") {
-      // Try to find a list operation for the parent resource
-      const parentPath = normalizeResourcePath(op.path);
-      let listOpId = listOpsByResource.get(parentPath);
-
-      // Fallback: try matching by entity set name extracted from the param
-      // e.g., "user-id" → "user" → look up "users" entity set
-      if (!listOpId) {
-        const paramEntity = param.name.replace(/-id$/i, "");
-        const pluralGuess = paramEntity + "s";
-        listOpId = listOpsByResource.get(pluralGuess);
-      }
-
-      if (listOpId) {
-        // Instruct the CUA to copy the value from the prior step's response console
+      // For write ops (PATCH/DELETE), prefer the POST-created resource ID
+      if (writePostDep && isWriteMethod(op.method)) {
         params[param.name] =
-          `[From ${listOpId} response] Copy the 'id' value of the first item in the response`;
-        if (!dependsOn.includes(listOpId)) dependsOn.push(listOpId);
+          `[From ${writePostDep} response] Copy the 'id' value from the resource you just created`;
+        if (!dependsOn.includes(writePostDep)) dependsOn.push(writePostDep);
       } else {
-        params[param.name] = `<provide-${param.name}>`;
+        // Try to find a list operation for the parent resource
+        const parentPath = normalizeResourcePath(op.path);
+        let listOpId = listOpsByResource.get(parentPath);
+
+        // Fallback: try matching by entity set name extracted from the param
+        if (!listOpId) {
+          const paramEntity = param.name.replace(/-id$/i, "");
+          const pluralGuess = paramEntity + "s";
+          listOpId = listOpsByResource.get(pluralGuess);
+        }
+
+        if (listOpId) {
+          params[param.name] =
+            `[From ${listOpId} response] Copy the 'id' value of the first item in the response`;
+          if (!dependsOn.includes(listOpId)) dependsOn.push(listOpId);
+        } else {
+          params[param.name] = `<provide-${param.name}>`;
+        }
       }
     } else if (param.in === "query") {
       if (param.name === "$top") {

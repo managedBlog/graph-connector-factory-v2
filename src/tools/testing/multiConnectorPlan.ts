@@ -439,10 +439,15 @@ function buildSingleStep(
 
   const isCollection = isListOp || hasValueArray(op.responseSchema);
 
+  // Generate Microsoft Learn docs URL for this operation
+  const hasPathParam = op.parameters.some((p) => p.in === "path");
+  const docsUrl = entitySet ? buildGraphDocsUrl(entitySet, method, hasPathParam) : undefined;
+
   return {
     operationId: op.operationId,
     method,
     description: op.summary || `${method} ${op.path}`,
+    ...(docsUrl ? { docsUrl } : {}),
     ...(Object.keys(params).length > 0 ? { parameters: params } : {}),
     ...(body ? { body } : {}),
     ...(capture ? { capture } : {}),
@@ -494,6 +499,22 @@ function singularize(plural: string): string {
   if (plural.endsWith("ses") || plural.endsWith("xes")) return plural.slice(0, -2);
   if (plural.endsWith("s")) return plural.slice(0, -1);
   return plural;
+}
+
+/**
+ * Generate a Microsoft Learn docs URL for a Graph API operation.
+ */
+function buildGraphDocsUrl(entitySet: string, method: string, hasPathParam: boolean): string {
+  const entity = singularize(entitySet);
+  let verb: string;
+  switch (method.toUpperCase()) {
+    case "GET": verb = hasPathParam ? "get" : "list"; break;
+    case "POST": verb = "create"; break;
+    case "PATCH": case "PUT": verb = "update"; break;
+    case "DELETE": verb = "delete"; break;
+    default: verb = method.toLowerCase();
+  }
+  return `https://learn.microsoft.com/en-us/graph/api/${entity}-${verb}?view=graph-rest-1.0`;
 }
 
 function isWriteMethod(method: string): boolean {

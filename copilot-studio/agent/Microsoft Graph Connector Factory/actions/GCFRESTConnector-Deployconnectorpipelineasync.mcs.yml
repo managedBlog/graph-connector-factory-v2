@@ -1,6 +1,8 @@
+mcs.metadata:
+  componentName: GCF REST Connector - Deploy connector pipeline (async)
 kind: TaskDialog
 modelDisplayName: Deploy connector pipeline (async)
-modelDescription: "Start an asynchronous deploy of a Power Platform custom connector. Returns a jobId immediately. Poll graph_deployStatus with the jobId to track progress and get results."
+modelDescription: Start an asynchronous deploy of a Power Platform custom connector. Returns a jobId immediately. Poll graph_deployStatus with the jobId to track progress and get results.
 outputs:
   - propertyName: appRegistrationAppId
 
@@ -13,6 +15,16 @@ outputs:
   - propertyName: appRegistrationSkipped
 
   - propertyName: appRegistrationSkipReason
+
+  - propertyName: batchCompleted
+
+  - propertyName: batchCurrentBaseName
+
+  - propertyName: batchResultsJson
+
+  - propertyName: batchSucceeded
+
+  - propertyName: batchTotal
 
   - propertyName: connectorAuthType
 
@@ -42,7 +54,7 @@ outputs:
 
 action:
   kind: InvokeConnectorTaskAction
-  connectionReference: copilots_header_91a5e.shared_new-5fgcf-20rest-20connector-5f251f982b189de9d2.52f1402e515247c1ae6cdbfa6793c46d
+  connectionReference: copilots_header_91a5e.shared_new-5fgcf-20rest-20connector-5f251f982b189de9d2.b895ed5158d0473eaba1be82299811ac
   connectionProperties:
     mode: Invoker
 

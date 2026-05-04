@@ -13,3 +13,6 @@ artifacts/solutions/
 artifacts/fic-*.json
 server.log
 server-err.log
+
+# Server certificates (private keys)
+certs/

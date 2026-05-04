@@ -32,6 +32,28 @@ const KNOWN_REQUIRED_FIELDS: Record<string, readonly string[]> = {
   exportjobs: ["reportName"],
 };
 
+// ─── Known required sub-properties within complex types (operation-scoped) ──
+//
+// Key format: "entitySet.METHOD.propertyName" (lowercase entitySet).
+// Only applies when the parent property IS in KNOWN_REQUIRED_FIELDS and the
+// operation method matches. PATCH operations are intentionally excluded —
+// complex type sub-properties are optional on partial updates.
+
+const KNOWN_NESTED_REQUIRED: Record<string, readonly string[]> = {
+  "users.POST.passwordProfile": ["password", "forceChangePasswordNextSignIn"],
+};
+
+// ─── Known descriptions for complex type sub-properties ─────────────────────
+//
+// Provides helpful tooltip text on the Power Platform definition page and
+// in flow designer inputs. Falls back to formatParamDescription() for unmapped.
+
+const KNOWN_DESCRIPTIONS: Record<string, string> = {
+  "passwordProfile.password": "The password for the user. Must meet tenant password complexity requirements.",
+  "passwordProfile.forceChangePasswordNextSignIn": "If true, the user must change their password at next login.",
+  "passwordProfile.forceChangePasswordNextSignInWithMfa": "If true, the user must perform MFA then change their password at next login.",
+};
+
 /**
  * Derive the entity set name from the operation's path.
  * E.g. "/users" → "users", "/groups/{group-id}/members" → "members"
@@ -48,6 +70,33 @@ function entitySetNameFromPath(path: string): string {
 const MAX_FILE_SIZE_BYTES = 1_000_000; // 1 MB
 const MAX_OPERATIONS = 256;
 const MAX_BODY_SCHEMAS = 512;
+
+// ─── Graph docs URL helper ─────────────────────────────────────────────────
+
+function singularizeEntity(name: string): string {
+  if (name.endsWith("ies")) return name.slice(0, -3) + "y";
+  if (name.endsWith("ses") || name.endsWith("xes") || name.endsWith("zes")) return name.slice(0, -2);
+  if (name.endsWith("s") && !name.endsWith("ss")) return name.slice(0, -1);
+  return name;
+}
+
+/**
+ * Generate a Microsoft Learn docs URL for a Graph API operation.
+ * Works for any Graph endpoint — no curated map needed.
+ */
+function buildGraphDocsUrl(entitySet: string, method: string, hasPathParam: boolean, version: string): string {
+  const entity = singularizeEntity(entitySet);
+  let verb: string;
+  switch (method.toUpperCase()) {
+    case "GET": verb = hasPathParam ? "get" : "list"; break;
+    case "POST": verb = "create"; break;
+    case "PATCH": case "PUT": verb = "update"; break;
+    case "DELETE": verb = "delete"; break;
+    default: verb = method.toLowerCase();
+  }
+  const versionTag = version === "beta" ? "graph-rest-beta" : "graph-rest-1.0";
+  return `https://learn.microsoft.com/en-us/graph/api/${entity}-${verb}?view=${versionTag}`;
+}
 
 // ─── Swagger 2.0 document builder ──────────────────────────────────────────
 
@@ -81,10 +130,17 @@ function buildSwaggerDocument(
     }
 
     const method = op.method.toLowerCase();
+    const hasPathParam = op.parameters.some((p) => p.in === "path");
+    const entitySet = entitySetNameFromPath(op.path);
+    const docsUrl = entitySet ? buildGraphDocsUrl(entitySet, op.method, hasPathParam, version) : "";
+    const descriptionWithDocs = docsUrl
+      ? `${op.description} Docs: ${docsUrl}`
+      : op.description;
+
     const operation: Record<string, unknown> = {
       operationId: op.operationId,
       summary: op.summary,
-      description: op.description,
+      description: descriptionWithDocs,
       "x-ms-summary": op.summary,
       parameters: buildSwaggerParameters(op),
       responses: buildSwaggerResponses(op, definitions),
@@ -177,37 +233,82 @@ function buildSwaggerParameters(op: GraphOperationInfo): unknown[] {
 }
 
 /**
+ * Context passed to toSwaggerPropertyDef for operation-aware visibility and required.
+ */
+interface PropertyEmitContext {
+  /** The entity set name (lowercase), e.g. "users" */
+  readonly entitySet?: string | undefined;
+  /** The HTTP method, e.g. "POST", "PATCH" */
+  readonly operationMethod?: string | undefined;
+  /** The parent property name (for nested required/description lookups) */
+  readonly parentName?: string | undefined;
+  /** Whether this property is a known-required field on the current operation */
+  readonly isRequired?: boolean | undefined;
+}
+
+/**
  * Recursively convert a RequestBodyProperty into a Swagger 2.0 property definition.
  * Handles nested objects, arrays of objects, enums, and primitives.
+ * Uses operation context for visibility, required arrays, and descriptions.
  */
-function toSwaggerPropertyDef(bp: RequestBodyProperty): Record<string, unknown> {
+function toSwaggerPropertyDef(bp: RequestBodyProperty, ctx: PropertyEmitContext = {}): Record<string, unknown> {
   const isNullable = bp.nullable !== false;
-  const visibility = isNullable ? "advanced" : "important";
+
+  // Determine visibility: required fields get "important", others follow nullable
+  const visibility = ctx.isRequired ? "important" : (isNullable ? "advanced" : "important");
+
+  // Look up known description override (parentName.childName)
+  const descKey = ctx.parentName ? `${ctx.parentName}.${bp.name}` : "";
+  const description = (descKey && KNOWN_DESCRIPTIONS[descKey]) || bp.description;
+  const summary = bp.description; // x-ms-summary stays as the formatted property name
 
   // Nested object with sub-properties
   if (bp.type === "object" && bp.properties && bp.properties.length > 0) {
+    // Look up nested required fields (operation-scoped)
+    const nestedReqKey = ctx.entitySet && ctx.operationMethod
+      ? `${ctx.entitySet}.${ctx.operationMethod}.${bp.name}`
+      : "";
+    const nestedRequired = nestedReqKey ? (KNOWN_NESTED_REQUIRED[nestedReqKey] ?? []) : [];
+    const nestedRequiredSet = new Set(nestedRequired);
+
     const nestedProps: Record<string, unknown> = {};
     for (const child of bp.properties) {
-      nestedProps[child.name] = toSwaggerPropertyDef(child);
+      nestedProps[child.name] = toSwaggerPropertyDef(child, {
+        entitySet: ctx.entitySet,
+        operationMethod: ctx.operationMethod,
+        parentName: bp.name,
+        isRequired: nestedRequiredSet.has(child.name),
+      });
+    }
+
+    const objectDef: Record<string, unknown> = {
+      type: "object",
+      properties: nestedProps,
+      description,
+      "x-ms-summary": summary,
+      "x-ms-visibility": visibility,
+    };
+
+    // Add required array for nested object if we have known-required sub-properties
+    if (nestedRequired.length > 0) {
+      // Only include required fields that actually exist in the emitted properties
+      const applicable = nestedRequired.filter((f) => nestedProps[f] !== undefined);
+      if (applicable.length > 0) {
+        objectDef["required"] = applicable;
+      }
     }
 
     if (bp.isArray) {
       return {
         type: "array",
-        items: { type: "object", properties: nestedProps },
-        description: bp.description,
-        "x-ms-summary": bp.description,
+        items: objectDef,
+        description,
+        "x-ms-summary": summary,
         "x-ms-visibility": visibility,
       };
     }
 
-    return {
-      type: "object",
-      properties: nestedProps,
-      description: bp.description,
-      "x-ms-summary": bp.description,
-      "x-ms-visibility": visibility,
-    };
+    return objectDef;
   }
 
   // Array of primitives/enums
@@ -219,8 +320,8 @@ function toSwaggerPropertyDef(bp: RequestBodyProperty): Record<string, unknown> 
     return {
       type: "array",
       items: itemDef,
-      description: bp.description,
-      "x-ms-summary": bp.description,
+      description,
+      "x-ms-summary": summary,
       "x-ms-visibility": visibility,
     };
   }
@@ -228,8 +329,8 @@ function toSwaggerPropertyDef(bp: RequestBodyProperty): Record<string, unknown> 
   // Scalar (primitive or enum)
   const propDef: Record<string, unknown> = {
     type: bp.type,
-    description: bp.description,
-    "x-ms-summary": bp.description,
+    description,
+    "x-ms-summary": summary,
     "x-ms-visibility": visibility,
   };
 
@@ -318,9 +419,19 @@ function buildSwaggerResponses(
     }
 
     if (op.requestBodyProperties && op.requestBodyProperties.length > 0) {
+      const entitySet = entitySetNameFromPath(op.path);
+      const requiredSet = new Set(
+        isCreateOp && KNOWN_REQUIRED_FIELDS[entitySet]
+          ? KNOWN_REQUIRED_FIELDS[entitySet]
+          : []
+      );
       const props: Record<string, unknown> = {};
       for (const bp of op.requestBodyProperties) {
-        props[bp.name] = toSwaggerPropertyDef(bp);
+        props[bp.name] = toSwaggerPropertyDef(bp, {
+          entitySet,
+          operationMethod: op.method,
+          isRequired: requiredSet.has(bp.name),
+        });
       }
       bodyDef["properties"] = props;
     }

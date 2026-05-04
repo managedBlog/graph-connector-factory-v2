@@ -130,6 +130,15 @@ instructions: |-
   ### Phase 5 — Iterate
   After the ConnectorPipeline topic completes (all groups built in one pass), the user can say `Build another connector` to start a new research cycle for different endpoints, or `View results` to see the last generated connector summary. "Build another" means a **new set of connectors for different endpoints** — not continuing a partially-built multi-connector set.
   ---
+  ## ⚠️ Graph API Behavioral Notes
+  When advising users about connector operations, be aware of these common Graph API behaviors:
+  ### Object Type Diversity
+  - `/users` returns ALL user-type directory objects: human users, conference rooms, resource mailboxes, service accounts, and guest users.- Recommend `$filter=userType eq 'Member'` to target only human member accounts.- Suggest `$filter=accountEnabled eq true` to exclude disabled accounts.- Room and resource mailboxes appear as user objects — this is normal, not an error.
+  ### Alternate Keys for ID Fields
+  - Many Graph API entities accept alternate identifiers beyond GUIDs in their ID path parameter.- **Users**: accept `userPrincipalName` (e.g., `user@domain.com`) as an alternate key for `{user-id}`.- **Groups, Applications, Service Principals**: typically require the GUID.- When presenting operations to users, note which entities support alternate keys.- The connector swagger includes documentation links in each operation's description — reference these for detailed field guidance.
+  ### Common $filter Patterns
+  - **Users**: `userType`, `accountEnabled`, `department`, `jobTitle`, `displayName`- **Groups**: `groupTypes`, `securityEnabled`, `mailEnabled`, `displayName`- **Applications**: `displayName`, `appId`- Suggest relevant filters when users are building connectors for list operations.
+  ---
   ## 🏷️ baseName Naming Convention
   The ConnectorPipeline topic asks the user for a connector name. The name propagates through the pipeline:
   - Connector: baseName + contextual suffix (suffix auto‑derived: CRUD, Actions, Management, Read, Write)- App Registration: baseName + " ‑ App Registration"- Pass `baseName` to all tool calls so downstream agents maintain naming coherence.

@@ -1415,6 +1415,32 @@ export function startHttpServer(options: HttpHostOptions): void {
 
       const successCount = results.filter((r) => r.status === "success").length;
       log(`[BatchGenerate] Complete: ${successCount}/${results.length} succeeded`);
+
+      // Sync session context baseNames with actual names used during generation
+      if (successCount > 0) {
+        try {
+          const tracking = resolveSessionKeyForRequest(req, {});
+          if (tracking.key) {
+            const resolved = resolveContextKey(tracking.key);
+            if (resolved) {
+              const dc = resolved.ctx.designContext;
+              const cGroups = dc && Array.isArray(dc["connectorGroups"])
+                ? dc["connectorGroups"] as Array<Record<string, unknown>>
+                : [];
+              if (cGroups.length > 0 && cGroups.length === groups.length) {
+                for (let i = 0; i < groups.length; i++) {
+                  const newName = groups[i]!.baseName?.trim();
+                  if (newName) cGroups[i]!["baseName"] = newName;
+                }
+                log(`[BatchGenerate] Updated session context baseNames: ${cGroups.map((g) => g["baseName"]).join(", ")}`);
+              }
+            }
+          }
+        } catch (syncErr) {
+          log(`[BatchGenerate] [WARN] Failed to sync session baseNames: ${syncErr instanceof Error ? syncErr.message : String(syncErr)}`);
+        }
+      }
+
       res.json({
         groupCount: results.length,
         successCount,
@@ -1767,6 +1793,69 @@ export function startHttpServer(options: HttpHostOptions): void {
       }
 
       res.json(result.result);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      res.status(500).json({ error: message });
+    }
+  });
+
+  // ─── REST: Generate test plan (Copilot Studio friendly) ────────────────
+
+  app.post("/api/testing/generate-plan", async (req, res) => {
+    try {
+      const body = req.body as Record<string, unknown>;
+      log(`[TestPlanCS REST] scopeMode="${String(body["scopeMode"] ?? "")}", connectorsJson length=${String(body["connectorsJson"] ?? "").length}`);
+
+      const environmentId = (body["environmentId"] as string)?.trim();
+      const environmentName = (body["environmentName"] as string)?.trim() || "";
+      const connectorsJson = (body["connectorsJson"] as string)?.trim();
+
+      if (!environmentId || !connectorsJson) {
+        res.status(400).json({ error: "environmentId and connectorsJson are required." });
+        return;
+      }
+
+      // Parse the JSON-string envelope
+      let connectors: Array<Record<string, unknown>>;
+      try {
+        connectors = JSON.parse(connectorsJson) as Array<Record<string, unknown>>;
+      } catch {
+        res.status(400).json({ error: "connectorsJson is not valid JSON." });
+        return;
+      }
+
+      if (!Array.isArray(connectors) || connectors.length === 0) {
+        res.status(400).json({ error: "connectorsJson must be a non-empty array." });
+        return;
+      }
+
+      const variables = body["variables"] ? JSON.parse(body["variables"] as string) as Record<string, string> : undefined;
+
+      const result = await invokeTool(
+        "testing_generateMultiPlan",
+        { environmentId, connectors, variables },
+        config,
+      );
+
+      if (!result.ok) {
+        res.status(400).json({ error: result.error ?? "Test plan generation failed" });
+        return;
+      }
+
+      // Flatten for Copilot Studio consumption
+      const plan = result.result as Record<string, unknown>;
+      const summary = plan["summary"] as Record<string, unknown> | undefined;
+      // Inject environment name into the plan so CUA can verify context
+      if (environmentName) {
+        (plan as Record<string, unknown>)["environmentName"] = environmentName;
+      }
+      res.json({
+        totalConnectors: summary?.["totalConnectors"] ?? 0,
+        totalOperations: summary?.["totalOperations"] ?? 0,
+        readOps: summary?.["readOps"] ?? 0,
+        writeOps: summary?.["writeOps"] ?? 0,
+        testPlanJson: JSON.stringify(plan),
+      });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       res.status(500).json({ error: message });

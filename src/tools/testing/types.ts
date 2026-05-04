@@ -60,6 +60,8 @@ export interface OperationTestStep {
   readonly operationId: string;
   readonly method: string;
   readonly description: string;
+  /** Microsoft Learn documentation URL for this operation. */
+  readonly docsUrl?: string | undefined;
   /** Query/path parameters to fill in the test UI. */
   readonly parameters?: Record<string, string> | undefined;
   /** JSON body for POST/PATCH/PUT operations. */
@@ -68,6 +70,8 @@ export interface OperationTestStep {
   readonly capture?: Record<string, string> | undefined;
   /** Operation IDs this step depends on (for ordering). */
   readonly dependsOn?: readonly string[] | undefined;
+  /** Step-specific guidance for the CUA (entity/operation quirks). */
+  readonly notes?: readonly string[] | undefined;
   readonly expectedResponse: {
     readonly statusCode: number;
     readonly valueIsArray?: boolean;

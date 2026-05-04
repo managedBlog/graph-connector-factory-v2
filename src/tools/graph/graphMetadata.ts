@@ -444,7 +444,7 @@ function buildOperationsFromEntitySet(
         in: "path",
         required: true,
         type: "string",
-        description: `The unique identifier of the ${entityTypeName}.`,
+        description: buildPathParamDescription(entityTypeName),
       },
       ...buildStandardQueryParams(),
     ],
@@ -485,7 +485,7 @@ function buildOperationsFromEntitySet(
         in: "path",
         required: true,
         type: "string",
-        description: `The unique identifier of the ${entityTypeName}.`,
+        description: buildPathParamDescription(entityTypeName),
       },
     ],
     requiredScopes: inferScopes(entityTypeName, setName, "write"),
@@ -511,7 +511,7 @@ function buildOperationsFromEntitySet(
         in: "path",
         required: true,
         type: "string",
-        description: `The unique identifier of the ${entityTypeName}.`,
+        description: buildPathParamDescription(entityTypeName),
       },
     ],
     requiredScopes: inferScopes(entityTypeName, setName, "write"),
@@ -681,7 +681,7 @@ function buildBoundActionOperations(
         in: "path" as const,
         required: true,
         type: "string",
-        description: `The unique identifier of the ${friendlyEntity.toLowerCase()}.`,
+        description: buildPathParamDescription(friendlyEntity.toLowerCase()),
       });
     }
 
@@ -742,6 +742,31 @@ function singularize(name: string): string {
   if (name.endsWith("ses") || name.endsWith("xes") || name.endsWith("zes")) return name.slice(0, -2);
   if (name.endsWith("s") && !name.endsWith("ss")) return name.slice(0, -1);
   return name;
+}
+
+/**
+ * Generate a Microsoft Learn docs URL for a Graph API operation.
+ * Pattern: https://learn.microsoft.com/en-us/graph/api/{entity}-{verb}?view=graph-rest-{version}
+ */
+export function graphDocsUrl(entitySetName: string, method: string, hasPathParam: boolean, version: string = "1.0"): string {
+  const entity = singularize(entitySetName.toLowerCase());
+  let verb: string;
+  switch (method.toUpperCase()) {
+    case "GET": verb = hasPathParam ? "get" : "list"; break;
+    case "POST": verb = "create"; break;
+    case "PATCH": case "PUT": verb = "update"; break;
+    case "DELETE": verb = "delete"; break;
+    default: verb = method.toLowerCase();
+  }
+  return `https://learn.microsoft.com/en-us/graph/api/${entity}-${verb}?view=graph-rest-${version}`;
+}
+
+/**
+ * Build a description for a path parameter that hints at alternate key support.
+ * Generic enough to work across all 27,000+ Graph endpoints.
+ */
+function buildPathParamDescription(entityTypeName: string): string {
+  return `The unique identifier of the ${entityTypeName}. Some entities also accept alternate keys (e.g., userPrincipalName for users). See operation docs for accepted values.`;
 }
 
 function formatActionName(name: string): string {
@@ -1103,7 +1128,7 @@ function buildOperationsFromNavigationPath(
         in: "path",
         required: true,
         type: "string",
-        description: `The unique identifier of the ${entityTypeName}.`,
+        description: buildPathParamDescription(entityTypeName),
       },
       ...buildStandardQueryParams(),
     ],
@@ -1147,7 +1172,7 @@ function buildOperationsFromNavigationPath(
         in: "path",
         required: true,
         type: "string",
-        description: `The unique identifier of the ${entityTypeName}.`,
+        description: buildPathParamDescription(entityTypeName),
       },
     ],
     requiredScopes: inferScopes(entityTypeName, collectionSegment, "write"),
@@ -1175,7 +1200,7 @@ function buildOperationsFromNavigationPath(
         in: "path",
         required: true,
         type: "string",
-        description: `The unique identifier of the ${entityTypeName}.`,
+        description: buildPathParamDescription(entityTypeName),
       },
     ],
     requiredScopes: inferScopes(entityTypeName, collectionSegment, "write"),

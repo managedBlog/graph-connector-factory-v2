@@ -1,0 +1,429 @@
+mcs.metadata:
+  componentName: TestPlanGenerator
+kind: AdaptiveDialog
+beginDialog:
+  kind: OnRecognizedIntent
+  id: main
+  intent:
+    displayName: Test Plan Generator
+    includeInOnSelectIntent: false
+    triggerQueries:
+      - Generate test plan
+      - Test my connectors
+      - Create test plan
+      - Run tests
+      - Test plan
+      - Generate CUA test plan
+
+  actions:
+    # ── Step 1: Get session context (reuse connector group data) ──
+
+    - kind: SetVariable
+      id: setVar_userObjectId
+      variable: Topic.userObjectId
+      value: =System.User.Id
+
+    - kind: BeginDialog
+      id: beginDialog_sessionContext
+      dialog: copilots_header_91a5e.action.GCFRESTConnector-Getsessioncontext
+      output:
+        binding:
+          baseName: Topic.baseName
+          connectorCount: Topic.connectorCount
+          connectorGroupsJson: Topic.connectorGroupsJson
+          environmentId: Topic.environmentId
+          group1Json: Topic.group1Json
+          group2Json: Topic.group2Json
+          group3Json: Topic.group3Json
+          hasDesignContext: Topic.hasDesignContext
+
+    # ── Guard: Require at least one connector group ──
+
+    - kind: ConditionGroup
+      id: check_hasGroups
+      conditions:
+        - id: noGroups
+          condition: =!Topic.hasDesignContext Or Topic.connectorCount < 1 Or IsBlank(Topic.group1Json)
+          actions:
+            - kind: SendActivity
+              id: sendMsg_noGroups
+              activity: |-
+                ❌ **No connector groups found in session context.**
+
+                Generate test plans after building connectors. Use the research tools to explore endpoints and build connectors first, then come back here.
+
+            - kind: EndDialog
+              id: end_noGroups
+
+    # ── Step 1b: Get environment name for CUA context verification ──
+
+    - kind: BeginDialog
+      id: beginDialog_getEnvs
+      dialog: copilots_header_91a5e.action.GCFRESTConnector-ListPowerPlatformenvironments
+      output:
+        binding:
+          environments: Topic.environments
+
+    - kind: SetVariable
+      id: setVar_envName
+      variable: Topic.environmentName
+      value: =If(!IsBlank(Topic.environments) And CountRows(Topic.environments) > 0, LookUp(Topic.environments, id = Topic.environmentId, displayName), "")
+
+    # ── Step 2: Prepare connector names for display ──
+
+    - kind: SetVariable
+      id: setVar_g1Name
+      variable: Topic.g1Name
+      value: =Text(ParseJSON(Topic.group1Json).baseName)
+
+    - kind: SetVariable
+      id: setVar_g2Name
+      variable: Topic.g2Name
+      value: =If(Topic.connectorCount >= 2 And !IsBlank(Topic.group2Json), Text(ParseJSON(Topic.group2Json).baseName), Blank())
+
+    - kind: SetVariable
+      id: setVar_g3Name
+      variable: Topic.g3Name
+      value: =If(Topic.connectorCount >= 3 And !IsBlank(Topic.group3Json), Text(ParseJSON(Topic.group3Json).baseName), Blank())
+
+    # ── Step 3: Scope selection card ──
+
+    - kind: AdaptiveCardPrompt
+      id: adaptiveCard_scopeSelection
+      card: |-
+        ={
+          type: "AdaptiveCard",
+          '$schema': "https://adaptivecards.io/schemas/adaptive-card.json",
+          version: "1.5",
+          body: [
+            {
+              type: "TextBlock",
+              text: "🧪 Test Plan Generator",
+              weight: "Bolder",
+              size: "Large",
+              wrap: true
+            },
+            {
+              type: "TextBlock",
+              text: Concatenate("Generate a CUA test plan for ", Text(Topic.connectorCount), " connector(s)."),
+              wrap: true,
+              isSubtle: true
+            },
+            {
+              type: "TextBlock",
+              text: Concatenate("**Connectors:** ", Topic.g1Name, If(!IsBlank(Topic.g2Name), Concatenate(", ", Topic.g2Name), ""), If(!IsBlank(Topic.g3Name), Concatenate(", ", Topic.g3Name), "")),
+              wrap: true,
+              spacing: "Small"
+            },
+            {
+              type: "Input.ChoiceSet",
+              id: "scopeMode",
+              label: "Test Scope",
+              style: "expanded",
+              value: "all",
+              choices: [
+                { title: "All Operations — test every operation in the connector(s)", value: "all" },
+                { title: "CRUD Only — test Create, Read, Update, Delete lifecycle", value: "crud" },
+                { title: "Selected Operations — choose specific operations to test", value: "selected" }
+              ]
+            },
+            {
+              type: "Input.ChoiceSet",
+              id: "targetConnector",
+              label: "Target Connector(s)",
+              style: "compact",
+              value: "all",
+              choices: ForAll(
+                Filter(
+                  Table(
+                    {title: Concatenate("All (", Text(Topic.connectorCount), " connectors)"), value: "all"},
+                    {title: Topic.g1Name, value: "g1"},
+                    {title: If(!IsBlank(Topic.g2Name), Topic.g2Name, ""), value: "g2"},
+                    {title: If(!IsBlank(Topic.g3Name), Topic.g3Name, ""), value: "g3"}
+                  ),
+                  title <> ""
+                ),
+                {title: title, value: value}
+              )
+            }
+          ],
+          actions: [
+            {
+              type: "Action.Submit",
+              title: "Next →"
+            }
+          ]
+        }
+      output:
+        binding:
+          actionSubmitId: Topic.scopeActionId
+          scopeMode: Topic.scopeMode
+          targetConnector: Topic.targetConnector
+
+      outputType:
+        properties:
+          actionSubmitId: String
+          scopeMode: String
+          targetConnector: String
+
+    # ── Step 4: Branch — if "selected", show operation picker ──
+
+    - kind: ConditionGroup
+      id: check_scopeMode
+      conditions:
+        - id: scopeIsSelected
+          condition: =Topic.scopeMode = "selected"
+          actions:
+            # Show operation selection card with toggles (similar to ConnectorPipeline)
+            - kind: AdaptiveCardPrompt
+              id: adaptiveCard_operationPicker
+              card: |-
+                ={
+                  type: "AdaptiveCard",
+                  '$schema': "https://adaptivecards.io/schemas/adaptive-card.json",
+                  version: "1.5",
+                  body: [
+                    {
+                      type: "TextBlock",
+                      text: "Select Operations to Test",
+                      weight: "Bolder",
+                      size: "Medium",
+                      wrap: true
+                    },
+                    {
+                      type: "TextBlock",
+                      text: "Toggle operations on/off. Only selected operations will be included in the test plan.",
+                      wrap: true,
+                      isSubtle: true
+                    },
+                    {
+                      type: "TextBlock",
+                      text: Concatenate("**", Topic.g1Name, "**"),
+                      weight: "Bolder",
+                      color: "Accent",
+                      spacing: "Medium"
+                    },
+                    {
+                      type: "Container",
+                      spacing: "None",
+                      items: ForAll(
+                        Table(ParseJSON(Topic.group1Json).operations),
+                        {
+                          type: "ColumnSet",
+                          spacing: "None",
+                          columns: [
+                            { type: "Column", width: "auto", verticalContentAlignment: "Center", items: [{ type: "Input.Toggle", id: Concatenate("tp_g1_", Substitute(Text(Value.operationId), ".", "_")), title: "", valueOn: Text(Value.operationId), valueOff: "", value: Text(Value.operationId) }] },
+                            { type: "Column", width: "auto", verticalContentAlignment: "Center", items: [{ type: "Badge", text: If(Upper(Text(Value.method)) = "DELETE", "DEL", Upper(Text(Value.method))), style: Switch(Upper(Text(Value.method)), "GET", "good", "POST", "accent", "DELETE", "attention", "PATCH", "warning", "default"), appearance: "tint", shape: "rounded" }] },
+                            { type: "Column", width: "stretch", verticalContentAlignment: "Center", items: [{ type: "TextBlock", text: Concatenate(Text(Value.operationId), " — ", Text(Value.summary)), wrap: true }] }
+                          ]
+                        }
+                      )
+                    },
+                    If(Topic.connectorCount >= 2 And !IsBlank(Topic.group2Json) And (Topic.targetConnector = "all" Or Topic.targetConnector = "g2"),
+                      {
+                        type: "TextBlock",
+                        text: Concatenate("**", Topic.g2Name, "**"),
+                        weight: "Bolder",
+                        color: "Accent",
+                        spacing: "Medium"
+                      }
+                    ),
+                    If(Topic.connectorCount >= 2 And !IsBlank(Topic.group2Json) And (Topic.targetConnector = "all" Or Topic.targetConnector = "g2"),
+                      {
+                        type: "Container",
+                        spacing: "None",
+                        items: ForAll(
+                          Table(ParseJSON(Topic.group2Json).operations),
+                          {
+                            type: "ColumnSet",
+                            spacing: "None",
+                            columns: [
+                              { type: "Column", width: "auto", verticalContentAlignment: "Center", items: [{ type: "Input.Toggle", id: Concatenate("tp_g2_", Substitute(Text(Value.operationId), ".", "_")), title: "", valueOn: Text(Value.operationId), valueOff: "", value: Text(Value.operationId) }] },
+                              { type: "Column", width: "auto", verticalContentAlignment: "Center", items: [{ type: "Badge", text: If(Upper(Text(Value.method)) = "DELETE", "DEL", Upper(Text(Value.method))), style: Switch(Upper(Text(Value.method)), "GET", "good", "POST", "accent", "DELETE", "attention", "PATCH", "warning", "default"), appearance: "tint", shape: "rounded" }] },
+                              { type: "Column", width: "stretch", verticalContentAlignment: "Center", items: [{ type: "TextBlock", text: Concatenate(Text(Value.operationId), " — ", Text(Value.summary)), wrap: true }] }
+                            ]
+                          }
+                        )
+                      }
+                    ),
+                    If(Topic.connectorCount >= 3 And !IsBlank(Topic.group3Json) And (Topic.targetConnector = "all" Or Topic.targetConnector = "g3"),
+                      {
+                        type: "TextBlock",
+                        text: Concatenate("**", Topic.g3Name, "**"),
+                        weight: "Bolder",
+                        color: "Accent",
+                        spacing: "Medium"
+                      }
+                    ),
+                    If(Topic.connectorCount >= 3 And !IsBlank(Topic.group3Json) And (Topic.targetConnector = "all" Or Topic.targetConnector = "g3"),
+                      {
+                        type: "Container",
+                        spacing: "None",
+                        items: ForAll(
+                          Table(ParseJSON(Topic.group3Json).operations),
+                          {
+                            type: "ColumnSet",
+                            spacing: "None",
+                            columns: [
+                              { type: "Column", width: "auto", verticalContentAlignment: "Center", items: [{ type: "Input.Toggle", id: Concatenate("tp_g3_", Substitute(Text(Value.operationId), ".", "_")), title: "", valueOn: Text(Value.operationId), valueOff: "", value: Text(Value.operationId) }] },
+                              { type: "Column", width: "auto", verticalContentAlignment: "Center", items: [{ type: "Badge", text: If(Upper(Text(Value.method)) = "DELETE", "DEL", Upper(Text(Value.method))), style: Switch(Upper(Text(Value.method)), "GET", "good", "POST", "accent", "DELETE", "attention", "PATCH", "warning", "default"), appearance: "tint", shape: "rounded" }] },
+                              { type: "Column", width: "stretch", verticalContentAlignment: "Center", items: [{ type: "TextBlock", text: Concatenate(Text(Value.operationId), " — ", Text(Value.summary)), wrap: true }] }
+                            ]
+                          }
+                        )
+                      }
+                    )
+                  ],
+                  actions: [
+                    {
+                      type: "Action.Submit",
+                      title: "Generate Test Plan"
+                    }
+                  ]
+                }
+              output:
+                binding:
+                  actionSubmitId: Topic.opPickerActionId
+
+              outputType:
+                properties:
+                  actionSubmitId: String
+
+            # Extract selected operation IDs from the raw card submission
+            - kind: SetVariable
+              id: setVar_selectedOpsRaw
+              variable: Topic.selectedOpsRaw
+              value: =Topic.opPickerActionId
+
+    # ── Step 5: Build connectorsJson for the API call ──
+
+    - kind: SetVariable
+      id: setVar_buildConnectorsJson
+      variable: Topic.connectorsJson
+      value: |-
+        =If(
+          Topic.scopeMode = "selected",
+          Concatenate(
+            "[",
+            If(Topic.targetConnector = "all" Or Topic.targetConnector = "g1",
+              Concatenate("{""displayName"":""", Topic.g1Name, """,""scope"":[", 
+                Concat(
+                  Filter(
+                    ForAll(Table(ParseJSON(Topic.group1Json).operations), {opId: Text(Value.operationId), searchFor: Concatenate("""tp_g1_", Substitute(Text(Value.operationId), ".", "_"), """:""", Text(Value.operationId), """")}),
+                    !IsBlank(Find(searchFor, Topic.selectedOpsRaw))
+                  ),
+                  Concatenate("""", opId, """"), ","
+                ),
+                "],""baseName"":""", Topic.g1Name, """}"),
+              ""
+            ),
+            If(Topic.connectorCount >= 2 And !IsBlank(Topic.g2Name) And (Topic.targetConnector = "all" Or Topic.targetConnector = "g2"),
+              Concatenate(
+                If(Topic.targetConnector = "all" Or Topic.targetConnector <> "g2", ",", ""),
+                "{""displayName"":""", Topic.g2Name, """,""scope"":[",
+                Concat(
+                  Filter(
+                    ForAll(Table(ParseJSON(Topic.group2Json).operations), {opId: Text(Value.operationId), searchFor: Concatenate("""tp_g2_", Substitute(Text(Value.operationId), ".", "_"), """:""", Text(Value.operationId), """")}),
+                    !IsBlank(Find(searchFor, Topic.selectedOpsRaw))
+                  ),
+                  Concatenate("""", opId, """"), ","
+                ),
+                "],""baseName"":""", Topic.g2Name, """}"),
+              ""
+            ),
+            If(Topic.connectorCount >= 3 And !IsBlank(Topic.g3Name) And (Topic.targetConnector = "all" Or Topic.targetConnector = "g3"),
+              Concatenate(",{""displayName"":""", Topic.g3Name, """,""scope"":[",
+                Concat(
+                  Filter(
+                    ForAll(Table(ParseJSON(Topic.group3Json).operations), {opId: Text(Value.operationId), searchFor: Concatenate("""tp_g3_", Substitute(Text(Value.operationId), ".", "_"), """:""", Text(Value.operationId), """")}),
+                    !IsBlank(Find(searchFor, Topic.selectedOpsRaw))
+                  ),
+                  Concatenate("""", opId, """"), ","
+                ),
+                "],""baseName"":""", Topic.g3Name, """}"),
+              ""
+            ),
+            "]"
+          ),
+          Concatenate(
+            "[",
+            If(Topic.targetConnector = "all" Or Topic.targetConnector = "g1",
+              Concatenate("{""displayName"":""", Topic.g1Name, """,""scope"":""", Topic.scopeMode, """,""baseName"":""", Topic.g1Name, """}"),
+              ""
+            ),
+            If(Topic.connectorCount >= 2 And !IsBlank(Topic.g2Name) And (Topic.targetConnector = "all" Or Topic.targetConnector = "g2"),
+              Concatenate(",{""displayName"":""", Topic.g2Name, """,""scope"":""", Topic.scopeMode, """,""baseName"":""", Topic.g2Name, """}"),
+              ""
+            ),
+            If(Topic.connectorCount >= 3 And !IsBlank(Topic.g3Name) And (Topic.targetConnector = "all" Or Topic.targetConnector = "g3"),
+              Concatenate(",{""displayName"":""", Topic.g3Name, """,""scope"":""", Topic.scopeMode, """,""baseName"":""", Topic.g3Name, """}"),
+              ""
+            ),
+            "]"
+          )
+        )
+
+    # ── Step 6: Call the test plan generator action ──
+
+    - kind: BeginDialog
+      id: beginDialog_generatePlan
+      input:
+        binding:
+          environmentId: =Topic.environmentId
+          environmentName: =Topic.environmentName
+          connectorsJson: =Topic.connectorsJson
+      dialog: copilots_header_91a5e.action.GCFRESTConnector-GenerateCUAtestplan
+      output:
+        binding:
+          totalConnectors: Topic.resultTotalConnectors
+          totalOperations: Topic.resultTotalOperations
+          readOps: Topic.resultReadOps
+          writeOps: Topic.resultWriteOps
+          testPlanJson: Topic.resultTestPlanJson
+
+    # ── Step 7: Display results ──
+
+    - kind: SendActivity
+      id: sendMsg_results
+      activity:
+        attachments:
+          - kind: AdaptiveCardTemplate
+            cardContent: |-
+              ={
+                type: "AdaptiveCard",
+                '$schema': "https://adaptivecards.io/schemas/adaptive-card.json",
+                version: "1.5",
+                body: [
+                  {
+                    type: "TextBlock",
+                    text: "✅ Test Plan Generated",
+                    weight: "Bolder",
+                    size: "Large",
+                    color: "Good",
+                    wrap: true
+                  },
+                  {
+                    type: "FactSet",
+                    facts: [
+                      { title: "Connectors", value: Text(Topic.resultTotalConnectors) },
+                      { title: "Operations", value: Text(Topic.resultTotalOperations) },
+                      { title: "Read Ops", value: Text(Topic.resultReadOps) },
+                      { title: "Write Ops", value: Text(Topic.resultWriteOps) },
+                      { title: "Scope", value: Topic.scopeMode }
+                    ]
+                  },
+                  {
+                    type: "TextBlock",
+                    text: "The test plan has been generated and is ready for the Computer Use Agent. Send the plan to your CUA agent to execute the tests in the Power Platform portal.",
+                    wrap: true,
+                    spacing: "Medium"
+                  }
+                ]
+              }
+
+    - kind: SendActivity
+      id: sendMsg_planHint
+      activity: |-
+        💡 **Next steps:**
+        - Send the test plan to the **Computer Using Agent** to execute automated portal testing
+        - Or say **"Show test plan"** to view the raw plan JSON

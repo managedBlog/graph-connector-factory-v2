@@ -9,7 +9,7 @@
       "url": "https://github.com/managedBlog/graph-connector-factory-v2"
     }
   },
-  "host": "__SERVER_HOST__",
+  "host": "5qgmmvlb-3001.use.devtunnels.ms",
   "basePath": "/",
   "schemes": [
     "https"
@@ -323,6 +323,86 @@
                       }
                     }
                   }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/testing/generate-plan": {
+      "post": {
+        "operationId": "testing_generateMultiPlan",
+        "summary": "Generate CUA test plan",
+        "description": "Generate a structured test plan for one or more deployed connectors. Accepts a JSON string of connector specs (each with displayName, scope, and baseName) and returns a test plan for Computer Use Agent execution.",
+        "x-ms-visibility": "important",
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "type": "object",
+              "required": [
+                "environmentId",
+                "connectorsJson"
+              ],
+              "properties": {
+                "environmentId": {
+                  "type": "string",
+                  "description": "Target Power Platform environment ID (GUID).",
+                  "x-ms-summary": "Environment ID"
+                },
+                "environmentName": {
+                  "type": "string",
+                  "description": "Display name of the target Power Platform environment. Included in the test plan so the CUA can verify it is in the correct environment.",
+                  "x-ms-summary": "Environment Name"
+                },
+                "connectorsJson": {
+                  "type": "string",
+                  "description": "JSON string array of connector specs. Each item: {\"displayName\":\"...\",\"scope\":\"all|crud\",\"baseName\":\"...\"}. For selected ops use {\"scope\":[\"op1\",\"op2\"]}.",
+                  "x-ms-summary": "Connectors JSON"
+                },
+                "variables": {
+                  "type": "string",
+                  "description": "Optional JSON string of key-value variables for test data (e.g. {\"tenantDomain\":\"contoso.com\"}).",
+                  "x-ms-summary": "Variables JSON",
+                  "x-ms-visibility": "advanced"
+                }
+              }
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Test plan generated successfully",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "totalConnectors": {
+                  "type": "integer",
+                  "description": "Number of connectors in the test plan.",
+                  "x-ms-summary": "Total Connectors"
+                },
+                "totalOperations": {
+                  "type": "integer",
+                  "description": "Total operations to test.",
+                  "x-ms-summary": "Total Operations"
+                },
+                "readOps": {
+                  "type": "integer",
+                  "description": "Number of read (GET) operations.",
+                  "x-ms-summary": "Read Operations"
+                },
+                "writeOps": {
+                  "type": "integer",
+                  "description": "Number of write (POST/PATCH/DELETE) operations.",
+                  "x-ms-summary": "Write Operations"
+                },
+                "testPlanJson": {
+                  "type": "string",
+                  "description": "Full test plan as JSON string. Parse with Parse value node for detailed step data.",
+                  "x-ms-summary": "Test Plan JSON"
                 }
               }
             }

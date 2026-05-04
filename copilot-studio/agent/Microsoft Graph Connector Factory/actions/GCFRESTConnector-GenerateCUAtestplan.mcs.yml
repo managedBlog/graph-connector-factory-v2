@@ -1,0 +1,25 @@
+mcs.metadata:
+  componentName: GCF REST Connector - Generate CUA test plan
+kind: TaskDialog
+modelDisplayName: Generate CUA test plan
+modelDescription: Generate a structured test plan for one or more deployed connectors. Accepts a JSON string of connector specs (each with displayName, scope, and baseName) and returns a test plan for Computer Use Agent execution.
+outputs:
+  - propertyName: readOps
+
+  - propertyName: testPlanJson
+
+  - propertyName: totalConnectors
+
+  - propertyName: totalOperations
+
+  - propertyName: writeOps
+
+action:
+  kind: InvokeConnectorTaskAction
+  connectionReference: copilots_header_91a5e.shared_new-5fgcf-20rest-20connector-5f251f982b189de9d2.b895ed5158d0473eaba1be82299811ac
+  connectionProperties:
+    mode: Invoker
+
+  operationId: testing_generateMultiPlan
+
+outputMode: All
