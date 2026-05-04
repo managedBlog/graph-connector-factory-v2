@@ -23,6 +23,10 @@ action:
     **execute it by navigating the Power Platform portal, creating connections, and testing each**
     **operation.**
 
+    **CRITICAL: READ THE TEST PLAN "instructions" FIELD FIRST. The test plan includes an**
+    **"instructions" section at the top level — read it completely and follow all steps before**
+    **executing any operations. These instructions take priority over defaults.**
+
     **BEFORE TESTING — VERIFY ENVIRONMENT:**
 
     **0. Check the test plan for an "environmentName" field. If present, verify you are in the**
@@ -66,7 +70,7 @@ action:
     **Some operations include a "notes" array with specific guidance for that step. Always read**
     **and follow these notes before executing the operation.**
 
-    **DOCUMENTATION LINKS:**
+    **DOCUMENTATION LINKS AND DEFINITIONS PAGE:**
 
     **Each test step may include a "docsUrl" field with a link to the official Microsoft Graph**
     **API documentation for that operation. If you are unsure what values a field accepts (for**
@@ -76,8 +80,12 @@ action:
     **ID value). If a previous list operation captured a userPrincipalName or other identifier,**
     **that value is likely valid for the ID field.**
 
-    **You can also check the connector's Definition page or the Swagger editor view for**
-    **detailed field descriptions and accepted values.**
+    **IMPORTANT: If you are stuck on what values a field accepts, or if a test is failing due to**
+    **invalid input, navigate to the connector's Definition page in the Power Platform portal.**
+    **Click the connector name, then select the "Definition" tab. Each operation and parameter**
+    **has descriptions showing accepted values, alternate keys, and format requirements. You can**
+    **also click "Swagger Editor" to view the full schema definition. Do this BEFORE retrying**
+    **a failed operation multiple times — it is faster than guessing.**
 
     **IMPORTANT RULES:**
 

@@ -111,11 +111,44 @@ export function generateMultiConnectorTestPlan(
   return {
     schemaVersion: "1.0",
     environmentId: input.environmentId,
+    ...(input.environmentName ? { environmentName: input.environmentName } : {}),
     generatedAt: new Date().toISOString(),
+    instructions: buildTestPlanInstructions(input.environmentName),
     connectors: connectorEntries,
     variables: input.variables ?? {},
     summary,
   };
+}
+
+// ─── Test Plan Instructions ─────────────────────────────────────────────────
+
+function buildTestPlanInstructions(environmentName?: string): string {
+  const envLine = environmentName
+    ? `STEP 0: Verify you are in the "${environmentName}" environment. Check the environment name displayed in the Power Platform portal header. If it does not match, switch environments before proceeding.`
+    : "STEP 0: Verify you are in the correct Power Platform environment as indicated by the environmentId field above.";
+
+  return [
+    "READ THESE INSTRUCTIONS COMPLETELY BEFORE STARTING ANY TEST.",
+    "",
+    envLine,
+    "",
+    "GENERAL RULES:",
+    "- Read and follow ALL agent instructions provided by your system prompt before executing this plan.",
+    "- Execute operations in the order listed. Do not skip ahead.",
+    "- For operations that need an ID from a previous step, use the captured value from that response.",
+    "- Never modify or delete existing resources — only work with resources you created during this test.",
+    "- If a create operation fails, skip update/delete operations that depend on it.",
+    "",
+    "WHEN STUCK ON A FIELD VALUE:",
+    "- Check the docsUrl field in the test step — it links to official Microsoft Graph API documentation.",
+    "- Navigate to the connector's Definition page in the Power Platform portal to see field descriptions and accepted value formats.",
+    "- Open the Swagger editor view for detailed schema information including alternate keys and enums.",
+    "- ID fields often accept alternate identifiers beyond GUIDs (e.g., userPrincipalName for users).",
+    "- If a previous list operation captured a value (like userPrincipalName), that value is likely valid as an ID.",
+    "",
+    "AFTER ALL TESTS:",
+    "- Provide a summary table showing each operation, its status (pass/fail), and any error details.",
+  ].join("\n");
 }
 
 // ─── Swagger Resolution ─────────────────────────────────────────────────────

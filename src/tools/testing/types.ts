@@ -14,6 +14,8 @@
 export interface MultiConnectorTestInput {
   /** Power Platform environment ID. */
   readonly environmentId: string;
+  /** Power Platform environment display name (for CUA to verify correct environment). */
+  readonly environmentName?: string | undefined;
   /** Connectors to include in the test plan. */
   readonly connectors: readonly ConnectorTestSpec[];
   /** Top-level variables the CUA can reference (e.g., tenantDomain). */
@@ -40,7 +42,10 @@ export interface ConnectorTestSpec {
 export interface MultiConnectorTestPlan {
   readonly schemaVersion: string;
   readonly environmentId: string;
+  readonly environmentName?: string;
   readonly generatedAt: string;
+  /** Instructions the CUA must read and follow before executing any test steps. */
+  readonly instructions: string;
   readonly connectors: readonly ConnectorTestPlanEntry[];
   /** Top-level variables for template substitution. */
   readonly variables: Record<string, string>;

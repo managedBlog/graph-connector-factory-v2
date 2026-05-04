@@ -16,3 +16,4 @@ server-err.log
 
 # Server certificates (private keys)
 certs/
+csdl-cache/
