@@ -4,15 +4,11 @@ kind: TaskDialog
 modelDisplayName: Generate CUA test plan
 modelDescription: Generate a structured test plan for one or more deployed connectors. Accepts a JSON string of connector specs (each with displayName, scope, and baseName) and returns a test plan for Computer Use Agent execution.
 outputs:
-  - propertyName: readOps
-
-  - propertyName: testPlanJson
+  - propertyName: testPlanMarkdown
 
   - propertyName: totalConnectors
 
   - propertyName: totalOperations
-
-  - propertyName: writeOps
 
 action:
   kind: InvokeConnectorTaskAction

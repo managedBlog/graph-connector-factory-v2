@@ -377,7 +377,7 @@ beginDialog:
         binding:
           totalConnectors: Topic.resultTotalConnectors
           totalOperations: Topic.resultTotalOperations
-          testPlanJson: Topic.resultTestPlanJson
+          testPlanMarkdown: Topic.resultTestPlanMarkdown
 
     # ── Step 7: Display results ──
 
