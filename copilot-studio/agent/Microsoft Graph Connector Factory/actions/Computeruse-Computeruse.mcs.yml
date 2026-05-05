@@ -29,16 +29,17 @@ action:
 
     **BEFORE TESTING — VERIFY ENVIRONMENT:**
 
-    **0. Check the test plan for an "environmentName" field. If present, verify you are in the**
-    **correct Power Platform environment by checking the environment name displayed in the portal.**
-    **If you are in the wrong environment, switch to the correct one before proceeding. The**
-    **environment selector is in the top-right of the Power Platform maker portal.**
+    **0. Open https://make.powerapps.com. Check the environment name displayed in the top-right**
+    **header of the portal. The test plan includes an "environmentName" field — verify the portal**
+    **shows that exact environment name. If it does not match, click the environment picker in the**
+    **top-right and select the correct environment by its displayed name. Do NOT use environment IDs**
+    **to navigate — always use the visible environment name on screen.**
 
     **For each connector in the test plan:**
 
-    **1. Go to Custom Connectors in the Power Platform portal**
-    **2. Find and open the connector by name**
-    **3. Go to the Security tab and verify authentication is configured**
+    **1. Navigate to Custom connectors (left nav → More → Discover all → Custom connectors)**
+    **2. Find the connector by its displayed name (from the test plan)**
+    **3. Click Edit on the connector**
     **4. Go to the Test tab and create a new connection if one doesn't exist**
     **5. Run each operation listed, in order**
     **6. For operations that need an ID from a previous step, use the value from that response**

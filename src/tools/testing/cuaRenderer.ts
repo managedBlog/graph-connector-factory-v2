@@ -159,13 +159,11 @@ function renderNavigate(
   lines: string[],
 ): number {
   instrStep++;
-  lines.push(`${instrStep}. Open ${step.url} in the browser.`);
+  lines.push(`${instrStep}. Open ${step.startUrl} in the browser.`);
   instrStep++;
-  lines.push(`${instrStep}. Wait for the page to load: ${step.waitFor}`);
+  lines.push(`${instrStep}. Follow these navigation steps:\n${step.navigation}`);
   instrStep++;
-  lines.push(
-    `${instrStep}. If the page doesn't load correctly, use this fallback: ${step.fallback.searchPath}`,
-  );
+  lines.push(`${instrStep}. Wait for: ${step.waitFor}`);
   return instrStep;
 }
 
@@ -175,11 +173,7 @@ function renderCreateConnection(
   lines: string[],
 ): number {
   instrStep++;
-  lines.push(`${instrStep}. Navigate to ${step.url} to create a new connection.`);
-  instrStep++;
-  lines.push(
-    `${instrStep}. If the direct link doesn't work: ${step.fallback.searchPath}`,
-  );
+  lines.push(`${instrStep}. Navigate to create a new connection:\n${step.navigation}`);
   instrStep++;
   lines.push(`${instrStep}. Click 'Create' or '+ New connection'.`);
   instrStep++;

@@ -549,6 +549,7 @@ async function invokeGraphTool(
             const plan = generateTestPlan({
               connectorId: pipelineResult.connector.connectorId,
               environmentId: pipelineResult.connector.environmentId,
+              environmentName: typedInput.environmentName as string | undefined,
               displayName: pipelineResult.connector.displayName,
               deployStatus: pipelineResult.status,
               authType: pipelineResult.connector.authType ?? "OAuthAAD",
@@ -617,6 +618,7 @@ async function invokeGraphTool(
       const testPlanInput: TestPlanInput = {
         connectorId: typedInput["connectorId"] as string,
         environmentId: typedInput["environmentId"] as string,
+        environmentName: typedInput["environmentName"] as string | undefined,
         displayName: typedInput["displayName"] as string,
         deployStatus: typedInput["deployStatus"] as "success" | "partial" | "failed",
         authType: typedInput["authType"] as string,

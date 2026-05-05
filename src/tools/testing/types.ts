@@ -96,6 +96,8 @@ export interface TestPlanInput {
   readonly connectorId: string;
   /** Power Platform environment ID. */
   readonly environmentId: string;
+  /** Power Platform environment display name — used for CUA navigation. If omitted, instructions tell CUA to verify environment manually. */
+  readonly environmentName?: string | undefined;
   /** Connector display name — used for UI search fallback. */
   readonly displayName: string;
   /** Deploy pipeline status — gates plan generation. */
@@ -118,13 +120,10 @@ export interface NavigateStep {
   readonly stepNumber: number;
   readonly action: "navigate";
   readonly description: string;
-  /** Deep link URL into the Power Platform portal. */
-  readonly url: string;
-  /** Fallback UI navigation when deep link is stale. */
-  readonly fallback: {
-    readonly searchPath: string;
-    readonly searchTerm: string;
-  };
+  /** Portal base URL to open. */
+  readonly startUrl: string;
+  /** Step-by-step UI navigation instructions (the CUA reads the screen). */
+  readonly navigation: string;
   /** What to wait for before proceeding. */
   readonly waitFor: string;
 }
@@ -134,13 +133,10 @@ export interface CreateConnectionStep {
   readonly action: "createConnection";
   readonly description: string;
   readonly authType: string;
-  /** Deep link to the new-connection page. */
-  readonly url: string;
-  /** Fallback UI navigation when deep link is stale. */
-  readonly fallback: {
-    readonly searchPath: string;
-    readonly searchTerm: string;
-  };
+  /** Portal base URL to open. */
+  readonly startUrl: string;
+  /** Step-by-step UI navigation instructions (the CUA reads the screen). */
+  readonly navigation: string;
   readonly expectedPrompt: string;
   readonly successIndicator: string;
 }

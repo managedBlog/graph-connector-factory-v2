@@ -26,7 +26,7 @@ import type {
   SwaggerParameter,
   TestPlanSummary,
 } from "./types";
-import { connectorTestTabUrl, newConnectionUrl } from "./portalUrls";
+import { connectorTestTabNav, newConnectionNav } from "./portalUrls";
 
 // ─── Known required fields (mirrored from connectorGenerator.ts) ────────────
 
@@ -114,11 +114,11 @@ export function generateTestPlan(input: TestPlanInput): TestPlan {
   // Build steps
   const steps: TestStep[] = [];
   let stepNumber = 1;
+  const envDisplayName = input.environmentName ?? "your target environment";
 
   // Step 1: Navigate to connector test tab
-  const testTab = connectorTestTabUrl(
-    input.environmentId,
-    input.connectorId,
+  const testTab = connectorTestTabNav(
+    envDisplayName,
     input.displayName,
     portalHost,
   );
@@ -126,8 +126,8 @@ export function generateTestPlan(input: TestPlanInput): TestPlan {
     stepNumber: stepNumber++,
     action: "navigate",
     description: `Open the test page for '${input.displayName}'`,
-    url: testTab.url,
-    fallback: testTab.fallback,
+    startUrl: testTab.startUrl,
+    navigation: testTab.navigation,
     waitFor: "Connector test page loaded with operation list",
   } satisfies NavigateStep);
 
@@ -142,9 +142,8 @@ export function generateTestPlan(input: TestPlanInput): TestPlan {
         "Run graph_completeAppRegistration to finish app registration, then retry test plan generation",
     } satisfies BlockedStep);
   } else if (input.authType && input.authType.toLowerCase() !== "noauth") {
-    const connUrl = newConnectionUrl(
-      input.environmentId,
-      input.connectorId,
+    const connNav = newConnectionNav(
+      envDisplayName,
       input.displayName,
       portalHost,
     );
@@ -153,8 +152,8 @@ export function generateTestPlan(input: TestPlanInput): TestPlan {
       action: "createConnection",
       description: `Create a new connection for '${input.displayName}'`,
       authType: input.authType,
-      url: connUrl.url,
-      fallback: connUrl.fallback,
+      startUrl: connNav.startUrl,
+      navigation: connNav.navigation,
       expectedPrompt: authPromptForType(input.authType),
       successIndicator: "Connection status shows 'Connected'",
     } satisfies CreateConnectionStep);

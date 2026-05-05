@@ -139,6 +139,8 @@ export interface GraphDeployPipelineToolInput {
   readonly baseName?: string;
   /** Power Platform environment ID. Uses the CDA's configured default if omitted. */
   readonly environmentId?: string;
+  /** Power Platform environment display name — passed to test plan for CUA navigation. */
+  readonly environmentName?: string;
   /** Auth type for the connector (NoAuth, OAuthAAD, FederatedIdentity, etc.). */
   readonly authType?: string;
   /** OAuth client ID for the connector (required for OAuthAAD/FederatedIdentity). */

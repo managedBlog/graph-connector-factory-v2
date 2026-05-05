@@ -124,13 +124,18 @@ export function generateMultiConnectorTestPlan(
 
 function buildTestPlanInstructions(environmentName?: string): string {
   const envLine = environmentName
-    ? `STEP 0: Verify you are in the "${environmentName}" environment. Check the environment name displayed in the Power Platform portal header. If it does not match, switch environments before proceeding.`
-    : "STEP 0: Verify you are in the correct Power Platform environment as indicated by the environmentId field above.";
+    ? `STEP 0: Open https://make.powerapps.com. Check the environment name in the top-right header. It must show "${environmentName}". If it does not, click the environment picker and select "${environmentName}" by name. Do NOT navigate using environment IDs — always use the visible environment name on screen.`
+    : "STEP 0: Open https://make.powerapps.com. Verify you are in the correct Power Platform environment by checking the environment name in the top-right header.";
 
   return [
     "READ THESE INSTRUCTIONS COMPLETELY BEFORE STARTING ANY TEST.",
     "",
     envLine,
+    "",
+    "NAVIGATION:",
+    "- Always navigate by visible names on screen, never by environment IDs or deep-link URLs.",
+    "- To find Custom connectors: left nav → More → Discover all → Custom connectors.",
+    "- Find the connector by its displayed name, click Edit, then go to the Test tab.",
     "",
     "GENERAL RULES:",
     "- Read and follow ALL agent instructions provided by your system prompt before executing this plan.",
