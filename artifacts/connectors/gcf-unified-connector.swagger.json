@@ -389,20 +389,10 @@
                   "description": "Total operations to test.",
                   "x-ms-summary": "Total Operations"
                 },
-                "readOps": {
-                  "type": "integer",
-                  "description": "Number of read (GET) operations.",
-                  "x-ms-summary": "Read Operations"
-                },
-                "writeOps": {
-                  "type": "integer",
-                  "description": "Number of write (POST/PATCH/DELETE) operations.",
-                  "x-ms-summary": "Write Operations"
-                },
-                "testPlanJson": {
+                "testPlanMarkdown": {
                   "type": "string",
-                  "description": "Full test plan as JSON string. Parse with Parse value node for detailed step data.",
-                  "x-ms-summary": "Test Plan JSON"
+                  "description": "Human-readable test plan in markdown format. Pass directly to the CUA agent as instructions.",
+                  "x-ms-summary": "Test Plan (Markdown)"
                 }
               }
             }

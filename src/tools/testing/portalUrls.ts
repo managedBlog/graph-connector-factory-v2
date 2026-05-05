@@ -20,27 +20,6 @@ export interface PortalNavigation {
 }
 
 /**
- * Build navigation instructions to reach the connector detail page.
- */
-export function connectorPageNav(
-  environmentName: string,
-  displayName: string,
-  portalHost: string = DEFAULT_PORTAL_HOST,
-): PortalNavigation {
-  return {
-    startUrl: `https://${portalHost}`,
-    navigation:
-      `1. Open https://${portalHost}\n` +
-      `2. Check the environment name in the top-right header\n` +
-      `3. If it does not show "${environmentName}", click the environment picker and select "${environmentName}"\n` +
-      `4. In the left navigation, click "More" then "Discover all"\n` +
-      `5. Search for or select "Custom connectors"\n` +
-      `6. Find the connector named "${displayName}"`,
-    searchTerm: displayName,
-  };
-}
-
-/**
  * Build navigation instructions to create a new connection for a connector.
  */
 export function newConnectionNav(
@@ -81,13 +60,4 @@ export function connectorTestTabNav(
       `6. Go to the "Test" tab`,
     searchTerm: displayName,
   };
-}
-
-/**
- * Build the portal base URL (no deep links — CUA navigates by name).
- */
-export function portalBaseUrl(
-  portalHost: string = DEFAULT_PORTAL_HOST,
-): string {
-  return `https://${portalHost}`;
 }

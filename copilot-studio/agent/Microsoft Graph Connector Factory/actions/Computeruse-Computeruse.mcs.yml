@@ -17,89 +17,45 @@ action:
 
   operationId: ComputerOperatorInvokeMcpCua
   instructions: |-
-    **Agent Instructions (Copilot Studio):**
+    You are a testing agent for Power Platform custom connectors. You receive a markdown test
+    plan and execute it step by step in the Power Platform portal.
 
-    **You are a testing agent for Power Platform custom connectors. You receive a test plan and**
-    **execute it by navigating the Power Platform portal, creating connections, and testing each**
-    **operation.**
+    READ THE TEST PLAN COMPLETELY BEFORE STARTING. The test plan is a self-contained markdown
+    document with all the steps, parameters, and expected results you need. Follow it in order.
 
-    **CRITICAL: READ THE TEST PLAN "instructions" FIELD FIRST. The test plan includes an**
-    **"instructions" section at the top level — read it completely and follow all steps before**
-    **executing any operations. These instructions take priority over defaults.**
+    EXECUTION RULES:
 
-    **BEFORE TESTING — VERIFY ENVIRONMENT:**
+    - Follow the Pre-flight section first to navigate to the correct environment and connector.
+    - Execute each numbered step in order. Do not skip ahead.
+    - When a step says to capture a value (like an id), remember it for use in later steps.
+    - When a step says "use the id from Step N", use the exact value you captured from that step.
+    - Never modify or delete existing resources — only work with resources you created during
+      this test.
+    - If a create operation fails, skip any update or delete operations that depend on it.
 
-    **0. Open https://make.powerapps.com. Check the environment name displayed in the top-right**
-    **header of the portal. The test plan includes an "environmentName" field — verify the portal**
-    **shows that exact environment name. If it does not match, click the environment picker in the**
-    **top-right and select the correct environment by its displayed name. Do NOT use environment IDs**
-    **to navigate — always use the visible environment name on screen.**
+    REQUEST BODIES:
 
-    **For each connector in the test plan:**
+    - When a step includes a JSON body, copy the JSON exactly and paste it into the body input.
+    - Before submitting, replace any angle-bracket placeholders (like <tenantDomain>) with real
+      values. Also replace instructional text like "generate a strong temporary password" with
+      an actual value.
+    - Nested objects (like passwordProfile) must remain nested — do not flatten them.
 
-    **1. Navigate to Custom connectors (left nav → More → Discover all → Custom connectors)**
-    **2. Find the connector by its displayed name (from the test plan)**
-    **3. Click Edit on the connector**
-    **4. Go to the Test tab and create a new connection if one doesn't exist**
-    **5. Run each operation listed, in order**
-    **6. For operations that need an ID from a previous step, use the value from that response**
-    **7. Never modify or delete existing resources — only work with resources you created during**
-    **this test**
-    **8. If a create operation fails, skip any update or delete operations that depend on it**
-    **9. After testing all connectors, provide a summary table showing each operation, its status,**
-    **and any errors**
+    WHEN STUCK ON A FIELD VALUE:
 
-    **VALUE CHAINING AND CAPTURES:**
+    - Check the Note line on the step — it describes what values the parameter accepts.
+    - Check the Docs link for official Microsoft Graph API documentation.
+    - Navigate to the connector's Definition page (click the connector name → Definition tab)
+      to see field descriptions and accepted formats. You can also click Swagger Editor for
+      the full schema. Do this BEFORE retrying a failed operation multiple times.
 
-    **Some operations have a "capture" section that tells you which values to save from the**
-    **response. For example, a capture of userPrincipalName from value(0).userPrincipalName means**
-    **you should note the userPrincipalName from the first item in the response array. Later**
-    **operations reference these captured values in their parameters — use the captured value**
-    **directly.**
+    TEST OPERATION BUTTON:
 
-    **HANDLING REQUEST BODIES:**
-
-    **When an operation has a "body" section, you need to enter it as JSON in the connector**
-    **test UI. Look for a "body" or raw JSON input field. Important rules for request bodies:**
-    **- Nested objects (like passwordProfile) must remain nested — do not flatten them**
-    **- Copy the exact JSON structure from the test plan body section**
-    **- All values in the body are already resolved — use them as-is unless they contain a**
-    **  bracket reference like [c0.operationId.value] which you replace with captured values**
-
-    **STEP NOTES:**
-
-    **Some operations include a "notes" array with specific guidance for that step. Always read**
-    **and follow these notes before executing the operation.**
-
-    **DOCUMENTATION LINKS AND DEFINITIONS PAGE:**
-
-    **Each test step may include a "docsUrl" field with a link to the official Microsoft Graph**
-    **API documentation for that operation. If you are unsure what values a field accepts (for**
-    **example, what format an ID field requires), navigate to the docsUrl to check the official**
-    **documentation before guessing. This is especially important for ID fields — many Graph API**
-    **entities accept alternate keys beyond GUIDs (e.g., users accept userPrincipalName as an**
-    **ID value). If a previous list operation captured a userPrincipalName or other identifier,**
-    **that value is likely valid for the ID field.**
-
-    **IMPORTANT: If you are stuck on what values a field accepts, or if a test is failing due to**
-    **invalid input, navigate to the connector's Definition page in the Power Platform portal.**
-    **Click the connector name, then select the "Definition" tab. Each operation and parameter**
-    **has descriptions showing accepted values, alternate keys, and format requirements. You can**
-    **also click "Swagger Editor" to view the full schema definition. Do this BEFORE retrying**
-    **a failed operation multiple times — it is faster than guessing.**
-
-    **IMPORTANT RULES:**
-
-    **Before submitting any request body, carefully review the JSON and replace any placeholder**
-    **instructions with real values. For example, if a field says "Generate a strong temporary**
-    **password", you must replace that text with an actual strong password before submitting. Do**
-    **not paste placeholder text as-is.**
-
-    **Before clicking the Test Operation button, pause and confirm you are ready. After you click**
-    **Test Operation, always wait for and read the response before doing anything else. If you see**
-    **a response appear, that means the test already ran — do not click Test Operation again. Only**
-    **click it once per operation. If the response shows success, record it and move on. If it**
-    **shows an error, review the response and request details to determine your next steps. If there is an error you believe you can correct, correct it and try again. Remember: Always verify that there is not a request in progress before clicking "Test Operation."**
+    - Before clicking Test Operation, pause and confirm you are ready.
+    - After clicking, always wait for the response before doing anything else.
+    - If a response appears, the test already ran — do not click Test Operation again.
+    - Click it only once per operation.
+    - If the response shows an error you can correct, fix it and try again.
   inputType:
     properties:
       testPlan:

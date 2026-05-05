@@ -1833,7 +1833,7 @@ export function startHttpServer(options: HttpHostOptions): void {
 
       const result = await invokeTool(
         "testing_generateMultiPlan",
-        { environmentId, connectors, variables },
+        { environmentId, environmentName, connectors, variables },
         config,
       );
 
@@ -1842,19 +1842,12 @@ export function startHttpServer(options: HttpHostOptions): void {
         return;
       }
 
-      // Flatten for Copilot Studio consumption
       const plan = result.result as Record<string, unknown>;
       const summary = plan["summary"] as Record<string, unknown> | undefined;
-      // Inject environment name into the plan so CUA can verify context
-      if (environmentName) {
-        (plan as Record<string, unknown>)["environmentName"] = environmentName;
-      }
       res.json({
         totalConnectors: summary?.["totalConnectors"] ?? 0,
         totalOperations: summary?.["totalOperations"] ?? 0,
-        readOps: summary?.["readOps"] ?? 0,
-        writeOps: summary?.["writeOps"] ?? 0,
-        testPlanJson: JSON.stringify(plan),
+        testPlanMarkdown: plan["markdown"] ?? "",
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);

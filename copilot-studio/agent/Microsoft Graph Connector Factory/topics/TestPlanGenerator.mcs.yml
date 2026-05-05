@@ -377,8 +377,6 @@ beginDialog:
         binding:
           totalConnectors: Topic.resultTotalConnectors
           totalOperations: Topic.resultTotalOperations
-          readOps: Topic.resultReadOps
-          writeOps: Topic.resultWriteOps
           testPlanJson: Topic.resultTestPlanJson
 
     # ── Step 7: Display results ──
@@ -407,8 +405,6 @@ beginDialog:
                     facts: [
                       { title: "Connectors", value: Text(Topic.resultTotalConnectors) },
                       { title: "Operations", value: Text(Topic.resultTotalOperations) },
-                      { title: "Read Ops", value: Text(Topic.resultReadOps) },
-                      { title: "Write Ops", value: Text(Topic.resultWriteOps) },
                       { title: "Scope", value: Topic.scopeMode }
                     ]
                   },
@@ -426,4 +422,27 @@ beginDialog:
       activity: |-
         💡 **Next steps:**
         - Send the test plan to the **Computer Using Agent** to execute automated portal testing
-        - Or say **"Show test plan"** to view the raw plan JSON
+        - Or say **"Show test plan"** to view the markdown plan
+
+    # ── Step 8: Invoke CUA with the markdown test plan ──
+
+    - kind: Question
+      id: question_runCUA
+      interruptionPolicy:
+        allowInterruption: true
+      prompt: Would you like me to send this test plan to the Computer Using Agent now?
+      variable: Topic.runCUA
+      entity: BooleanPrebuiltEntity
+
+    - kind: ConditionGroup
+      id: check_runCUA
+      conditions:
+        - id: userSaidYes
+          condition: =Topic.runCUA = true
+          actions:
+            - kind: BeginDialog
+              id: beginDialog_invokeCUA
+              input:
+                binding:
+                  testPlan: =Topic.resultTestPlanMarkdown
+              dialog: copilots_header_91a5e.action.Computeruse-Computeruse

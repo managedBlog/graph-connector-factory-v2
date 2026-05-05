@@ -37,57 +37,8 @@ export interface ConnectorTestSpec {
 }
 
 // ─── Multi-Connector Test Plan Output ───────────────────────────────────────
-
-/** Lean operation manifest the CUA consumes from chat. */
-export interface MultiConnectorTestPlan {
-  readonly schemaVersion: string;
-  readonly environmentId: string;
-  readonly environmentName?: string;
-  readonly generatedAt: string;
-  /** Instructions the CUA must read and follow before executing any test steps. */
-  readonly instructions: string;
-  readonly connectors: readonly ConnectorTestPlanEntry[];
-  /** Top-level variables for template substitution. */
-  readonly variables: Record<string, string>;
-  readonly summary: MultiConnectorSummary;
-}
-
-export interface ConnectorTestPlanEntry {
-  readonly displayName: string;
-  readonly operations: readonly OperationTestStep[];
-}
-
-/**
- * A single operation the CUA should execute in the connector test tab.
- * Uses `[OperationId.captureKey]` for dynamic value references.
- */
-export interface OperationTestStep {
-  readonly operationId: string;
-  readonly method: string;
-  readonly description: string;
-  /** Microsoft Learn documentation URL for this operation. */
-  readonly docsUrl?: string | undefined;
-  /** Query/path parameters to fill in the test UI. */
-  readonly parameters?: Record<string, string> | undefined;
-  /** JSON body for POST/PATCH/PUT operations. */
-  readonly body?: Record<string, unknown> | undefined;
-  /** Values to capture from the response for use in subsequent operations. */
-  readonly capture?: Record<string, string> | undefined;
-  /** Operation IDs this step depends on (for ordering). */
-  readonly dependsOn?: readonly string[] | undefined;
-  /** Step-specific guidance for the CUA (entity/operation quirks). */
-  readonly notes?: readonly string[] | undefined;
-  readonly expectedResponse: {
-    readonly statusCode: number;
-    readonly valueIsArray?: boolean;
-  };
-}
-
-export interface MultiConnectorSummary {
-  readonly totalConnectors: number;
-  readonly totalOperations: number;
-  readonly operationsByMethod: Record<string, number>;
-}
+// The multi-connector plan now outputs MarkdownTestPlan (defined in multiConnectorPlan.ts).
+// The legacy JSON output types have been removed.
 
 // ─── Single-Connector Test Plan Input (legacy) ─────────────────────────────
 

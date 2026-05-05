@@ -644,6 +644,7 @@ async function invokeGraphTool(
       // Resolve swagger from cache for any connector that specifies baseName
       const multiInput: MultiConnectorTestInput = {
         environmentId: typedInput["environmentId"] as string,
+        environmentName: typedInput["environmentName"] as string | undefined,
         connectors: connectors.map((c) => {
           let swagger = c["swagger"] as string | Record<string, unknown> | undefined;
           if (!swagger && c["baseName"]) {
@@ -663,7 +664,7 @@ async function invokeGraphTool(
 
       const testPlan = generateMultiConnectorTestPlan(multiInput);
       log(`[MultiPlan] Generated ${testPlan.summary.totalOperations} operations across ${testPlan.summary.totalConnectors} connectors`);
-      return { ok: true, toolName, result: { testPlan } };
+      return { ok: true, toolName, result: testPlan };
     }
 
     default:

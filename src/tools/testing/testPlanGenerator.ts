@@ -27,58 +27,14 @@ import type {
   TestPlanSummary,
 } from "./types";
 import { connectorTestTabNav, newConnectionNav } from "./portalUrls";
-
-// ─── Known required fields (mirrored from connectorGenerator.ts) ────────────
-
-const KNOWN_REQUIRED_FIELDS: Record<string, readonly string[]> = {
-  users: ["accountEnabled", "displayName", "mailNickname", "passwordProfile", "userPrincipalName"],
-  groups: ["displayName", "mailEnabled", "mailNickname", "securityEnabled"],
-  applications: ["displayName"],
-  serviceprincipals: ["appId"],
-  teams: ["displayName"],
-  channels: ["displayName"],
-  sites: ["displayName"],
-  exportjobs: ["reportName"],
-};
-
-/**
- * Body templates for known Graph entity sets.
- * Values use `{{inputName}}` for CUA-declared inputs (tenantDomain, etc.).
- * The CUA renderer will substitute or prompt for these.
- */
-const KNOWN_BODY_TEMPLATES: Record<string, Record<string, unknown>> = {
-  users: {
-    accountEnabled: true,
-    displayName: "GCF Test User",
-    mailNickname: "gcf-test-user",
-    passwordProfile: {
-      forceChangePasswordNextSignIn: true,
-      password: "{{testUserPassword}}",
-    },
-    userPrincipalName: "gcf-test-user@{{tenantDomain}}",
-  },
-  groups: {
-    displayName: "GCF Test Group",
-    mailEnabled: false,
-    mailNickname: "gcf-test-group",
-    securityEnabled: true,
-  },
-  applications: {
-    displayName: "GCF Test Application",
-  },
-  serviceprincipals: {
-    appId: "{{testAppId}}",
-  },
-  teams: {
-    "template@odata.bind": "https://graph.microsoft.com/v1.0/teamsTemplates('standard')",
-    displayName: "GCF Test Team",
-    description: "Created by GCF test plan",
-  },
-  channels: {
-    displayName: "GCF Test Channel",
-    description: "Created by GCF test plan",
-  },
-};
+import {
+  KNOWN_BODY_TEMPLATES,
+  KNOWN_REQUIRED_FIELDS,
+  generateNonce,
+  singularize,
+  entitySetNameFromPath,
+  isWriteMethod,
+} from "./shared";
 
 // ─── Public API ─────────────────────────────────────────────────────────────
 
@@ -192,7 +148,7 @@ export function generateTestPlan(input: TestPlanInput): TestPlan {
       } else if (method === "POST") {
         requiredFields = KNOWN_REQUIRED_FIELDS[entitySet] ?? extractRequiredFieldsFromSchema(op);
         if (requiredFields.length === 0) requiredFields = undefined;
-        bodyTemplate = KNOWN_BODY_TEMPLATES[entitySet];
+        bodyTemplate = KNOWN_BODY_TEMPLATES[entitySet]?.(generateNonce());
         // Track this POST for PATCH/DELETE dependency resolution
         postOpsByEntity.set(entitySet, op.operationId);
       } else {
@@ -229,9 +185,11 @@ export function generateTestPlan(input: TestPlanInput): TestPlan {
     }
 
     // Build test parameters and dependencies
-    // For PATCH/DELETE write ops, prefer the POST-created resource over list results
-    const writePostDep = isWrite ? postOpsByEntity.get(entitySetNameFromPath(op.path)) : undefined;
-    const { params, outputCapture, dependsOn } = buildTestParams(op, listOpsByResource, writePostDep);
+    // For GET-by-id, PATCH, and DELETE: prefer the POST-created resource over list results
+    const entitySet = entitySetNameFromPath(op.path);
+    const isItemGet = op.method.toUpperCase() === "GET" && op.parameters.some((p) => p.in === "path");
+    const postDep = (isWrite || isItemGet) ? postOpsByEntity.get(entitySet) : undefined;
+    const { params, outputCapture, dependsOn } = buildTestParams(op, listOpsByResource, postDep);
 
     const expectedResponse = buildExpectedResponse(op);
 
@@ -328,8 +286,8 @@ function parseSwaggerOperations(swagger: Record<string, unknown>): SwaggerOperat
 /**
  * Priority-based ordering:
  * 1. Collection GETs (list endpoints — no path params or only non-entity params)
- * 2. Item GETs (have path params like {user-id})
- * 3. POST (create)
+ * 2. POST (create) — before GET-by-id so the created resource ID is available
+ * 3. Item GETs (have path params like {user-id})
  * 4. PATCH (update)
  * 5. DELETE
  */
@@ -342,17 +300,14 @@ function operationPriority(op: SwaggerOperation): number {
   const hasPathParams = op.parameters.some((p) => p.in === "path");
 
   if (method === "GET" && !hasPathParams) return 0; // list
-  if (method === "GET" && hasPathParams) return 1;  // item
-  if (method === "POST") return 2;
+  if (method === "POST") return 1;                   // create (before GET-by-id)
+  if (method === "GET" && hasPathParams) return 2;   // item GET
   if (method === "PATCH" || method === "PUT") return 3;
   if (method === "DELETE") return 4;
   return 5;
 }
 
-function isWriteMethod(method: string): boolean {
-  const upper = method.toUpperCase();
-  return upper === "POST" || upper === "PATCH" || upper === "PUT" || upper === "DELETE";
-}
+// isWriteMethod, entitySetNameFromPath, and singularize are imported from shared.ts
 
 // ─── Resource / Dependency Mapping ──────────────────────────────────────────
 
@@ -389,10 +344,7 @@ function normalizeResourcePath(pathStr: string): string {
   return segments.join("/") || "/";
 }
 
-function entitySetNameFromPath(pathStr: string): string {
-  const segments = pathStr.split("/").filter((s) => s && !s.startsWith("{"));
-  return (segments[segments.length - 1] ?? "").toLowerCase();
-}
+// entitySetNameFromPath is imported from shared.ts
 
 // ─── Parameter Generation ───────────────────────────────────────────────────
 
@@ -419,8 +371,8 @@ function buildTestParams(
     if (param.in === "header") continue;
 
     if (param.in === "path") {
-      // For write ops (PATCH/DELETE), prefer the POST-created resource ID
-      if (writePostDep && isWriteMethod(op.method)) {
+      // Prefer the POST-created resource ID for GET-by-id, PATCH, and DELETE
+      if (writePostDep) {
         params[param.name] =
           `[From ${writePostDep} response] Copy the 'id' value from the resource you just created`;
         if (!dependsOn.includes(writePostDep)) dependsOn.push(writePostDep);
@@ -474,15 +426,7 @@ function buildTestParams(
   return { params, outputCapture, dependsOn };
 }
 
-/**
- * Naive singularization for common Graph entity sets.
- */
-function singularize(plural: string): string {
-  if (plural.endsWith("ies")) return plural.slice(0, -3) + "y";
-  if (plural.endsWith("ses") || plural.endsWith("xes")) return plural.slice(0, -2);
-  if (plural.endsWith("s")) return plural.slice(0, -1);
-  return plural;
-}
+// singularize is imported from shared.ts
 
 // ─── Expected Response ──────────────────────────────────────────────────────
 

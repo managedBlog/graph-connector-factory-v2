@@ -1,82 +1,92 @@
 /**
  * Multi-Connector CUA Test Plan Generator.
  *
- * Produces a lean operation manifest that a Computer Use Agent can follow
- * to test multiple Power Platform custom connectors. The CUA's own agent
- * instructions handle portal navigation — this plan only specifies WHAT
- * to test and WITH WHAT data.
+ * Produces a human-readable markdown test plan that a Computer Use Agent
+ * can follow to test Power Platform custom connectors in the portal UI.
  *
  * Key design decisions:
- * - Output is self-contained JSON — no server lookups at CUA runtime.
- * - Write ops include inline JSON bodies (from KNOWN_BODY_TEMPLATES or overrides).
- * - Dynamic value chaining uses [c<N>.<OperationId>.<captureKey>] placeholders.
- * - A run nonce is appended to created resources to avoid collisions on repeat runs.
+ * - Output is markdown — the CUA reads text, not JSON.
+ * - Operations are ordered: LIST → POST → GET-by-id → PATCH → DELETE.
+ * - GET-by-id uses the POST-created resource ID when POST exists.
+ * - References are natural language ("use the `id` from Step 2").
+ * - Template variables in body JSON use angle brackets: <tenantDomain>.
+ * - Parameter descriptions from swagger are surfaced as notes.
  */
 
 import type {
   MultiConnectorTestInput,
-  MultiConnectorTestPlan,
-  ConnectorTestPlanEntry,
   ConnectorTestSpec,
-  OperationTestStep,
-  MultiConnectorSummary,
   SwaggerOperation,
   SwaggerParameter,
 } from "./types";
 
-// ─── Known body templates (reused from testPlanGenerator.ts) ────────────────
+import {
+  KNOWN_BODY_TEMPLATES,
+  generateNonce,
+  singularize,
+  entitySetNameFromPath,
+  isWriteMethod,
+  defaultStatusCode,
+  buildGraphDocsUrl,
+} from "./shared";
 
-const KNOWN_BODY_TEMPLATES: Record<string, (nonce: string) => Record<string, unknown>> = {
-  users: (nonce) => ({
-    accountEnabled: true,
-    displayName: `GCF Test User ${nonce}`,
-    mailNickname: `gcf-test-user-${nonce}`,
-    passwordProfile: {
-      forceChangePasswordNextSignIn: true,
-      password: "[testUserPassword]",
-    },
-    userPrincipalName: `gcf-test-user-${nonce}@[tenantDomain]`,
-  }),
-  groups: (nonce) => ({
-    displayName: `GCF Test Group ${nonce}`,
-    mailEnabled: false,
-    mailNickname: `gcf-test-group-${nonce}`,
-    securityEnabled: true,
-  }),
-  applications: (nonce) => ({
-    displayName: `GCF Test Application ${nonce}`,
-  }),
-  serviceprincipals: () => ({
-    appId: "[testAppId]",
-  }),
-  teams: (nonce) => ({
-    "template@odata.bind": "https://graph.microsoft.com/v1.0/teamsTemplates('standard')",
-    displayName: `GCF Test Team ${nonce}`,
-    description: "Created by GCF test plan",
-  }),
-  channels: (nonce) => ({
-    displayName: `GCF Test Channel ${nonce}`,
-    description: "Created by GCF test plan",
-  }),
-};
+// ─── Output Types ───────────────────────────────────────────────────────────
+
+export interface MarkdownTestPlan {
+  readonly markdown: string;
+  readonly summary: {
+    readonly totalConnectors: number;
+    readonly totalOperations: number;
+    readonly operationsByMethod: Record<string, number>;
+  };
+}
 
 // ─── Public API ─────────────────────────────────────────────────────────────
 
-/**
- * Generate a multi-connector test plan.
- *
- * @throws {Error} if required inputs are missing or swagger cannot be resolved.
- */
 export function generateMultiConnectorTestPlan(
   input: MultiConnectorTestInput,
-): MultiConnectorTestPlan {
+): MarkdownTestPlan {
   if (!input.environmentId) throw new Error("environmentId is required");
   if (!input.connectors || input.connectors.length === 0) {
     throw new Error("At least one connector is required");
   }
 
   const nonce = generateNonce();
-  const connectorEntries: ConnectorTestPlanEntry[] = [];
+  const lines: string[] = [];
+  const methodCounts: Record<string, number> = {};
+  let totalOps = 0;
+  let globalStep = 0;
+
+  // ── Header ──────────────────────────────────────────────────────────────
+
+  const title = input.connectors.length === 1
+    ? `Test Plan: ${input.connectors[0]!.displayName}`
+    : `Test Plan: ${input.connectors.length} Connectors`;
+
+  lines.push(`# ${title}`);
+  lines.push("");
+  if (input.environmentName) {
+    lines.push(`**Environment:** ${input.environmentName}`);
+  }
+  lines.push(`**Generated:** ${new Date().toISOString().split("T")[0]}`);
+  lines.push("");
+
+  // ── Pre-flight ──────────────────────────────────────────────────────────
+
+  lines.push("## Pre-flight");
+  lines.push("");
+  lines.push("1. Open https://make.powerapps.com");
+  if (input.environmentName) {
+    lines.push(
+      `2. Verify the environment name in the top-right shows "${input.environmentName}". If not, click the environment picker and select it by name.`,
+    );
+  } else {
+    lines.push("2. Verify you are in the correct environment by checking the name in the top-right header.");
+  }
+  lines.push("3. Navigate to Custom connectors (left nav → More → Discover all → Custom connectors)");
+  lines.push("");
+
+  // ── Per-connector sections ──────────────────────────────────────────────
 
   for (let ci = 0; ci < input.connectors.length; ci++) {
     const spec = input.connectors[ci]!;
@@ -84,76 +94,159 @@ export function generateMultiConnectorTestPlan(
 
     const swagger = resolveSwagger(spec, ci);
     const allOps = parseSwaggerOperations(swagger);
-
     if (allOps.length === 0) {
       throw new Error(`No operations found in swagger for "${spec.displayName}"`);
     }
 
     const filteredOps = filterByScope(allOps, spec.scope);
     const orderedOps = orderOperations(filteredOps);
-    const connectorPrefix = `c${ci}`;
 
-    const operations = buildOperationSteps(
-      orderedOps,
-      connectorPrefix,
-      nonce,
-      spec.bodyOverrides,
-    );
+    lines.push(`## Connector: ${spec.displayName}`);
+    lines.push("");
+    lines.push(`1. Find **"${spec.displayName}"** in the Custom connectors list`);
+    lines.push("2. Click **Edit** on the connector");
+    lines.push("3. Go to the **Test** tab");
+    lines.push("4. Create a connection if one doesn't exist");
+    lines.push("");
 
-    connectorEntries.push({
-      displayName: spec.displayName,
-      operations,
-    });
+    // Track step numbers for cross-references within this connector
+    const postStepNum = new Map<string, number>();  // entitySet → step number of POST
+    const listStepNum = new Map<string, number>();  // entitySet → step number of LIST
+
+    for (const op of orderedOps) {
+      globalStep++;
+      totalOps++;
+      const method = op.method.toUpperCase();
+      methodCounts[method] = (methodCounts[method] ?? 0) + 1;
+
+      const entitySet = entitySetNameFromPath(op.path);
+      const hasPathParam = op.parameters.some((p) => p.in === "path");
+      const isListOp = method === "GET" && !hasPathParam;
+      const successCode = (op as SwaggerOperation & { _successCode?: number })._successCode
+        ?? defaultStatusCode(method);
+      const docsUrl = entitySet ? buildGraphDocsUrl(entitySet, method, hasPathParam) : undefined;
+
+      // Track step numbers for references
+      if (isListOp && entitySet) listStepNum.set(entitySet, globalStep);
+      if (method === "POST" && entitySet) postStepNum.set(entitySet, globalStep);
+
+      lines.push(`### Step ${globalStep}: ${op.summary || op.operationId} (${method})`);
+      lines.push("");
+
+      // Instruction line
+      lines.push(`Select the **${op.operationId}** operation.`);
+
+      // Parameters
+      if (isListOp) {
+        lines.push("Set `$top` to `5`.");
+      }
+
+      for (const param of op.parameters) {
+        if (param.in === "header" || param.in === "body") continue;
+        if (param.in === "query" && param.name === "$top") continue; // handled above
+
+        if (param.in === "path") {
+          const paramNote = buildParamInstruction(
+            param, method, entitySet, postStepNum, listStepNum,
+          );
+          lines.push(paramNote);
+        }
+      }
+
+      // Body for write operations
+      if (method === "POST" || method === "PATCH" || method === "PUT") {
+        const body = resolveBody(method, entitySet, nonce, spec.bodyOverrides);
+        if (body) {
+          lines.push("");
+          lines.push("Paste this JSON as the request body:");
+          lines.push("");
+          lines.push("```json");
+          lines.push(JSON.stringify(body, null, 2));
+          lines.push("```");
+          lines.push("");
+          lines.push("Copy only the JSON above. Replace any angle-bracket values (like `<tenantDomain>`) with real values before submitting.");
+        }
+      }
+
+      lines.push("");
+      lines.push("Click **Test Operation** and wait for the response.");
+      lines.push("");
+
+      // Expected response
+      lines.push(`**Expected:** ${successCode} ${statusText(successCode)}.`);
+
+      // Capture instructions
+      if (isListOp) {
+        lines.push("");
+        lines.push("Note the results returned. If subsequent steps need an ID from this list, use a value from the response.");
+      }
+
+      if (method === "POST") {
+        lines.push("");
+        lines.push("Capture the `id` from the response — you will need it for later steps (Get, Update, Delete).");
+      }
+
+      // Parameter description notes
+      for (const param of op.parameters) {
+        if (param.in === "path" && param.description) {
+          lines.push("");
+          lines.push(`**Note:** ${param.name} — ${param.description}`);
+        }
+      }
+
+      // Docs link
+      if (docsUrl) {
+        lines.push("");
+        lines.push(`**Docs:** ${docsUrl}`);
+      }
+
+      lines.push("");
+      lines.push("---");
+      lines.push("");
+    }
   }
 
-  const summary = buildSummary(connectorEntries);
+  // ── Summary ─────────────────────────────────────────────────────────────
+
+  lines.push("## Summary");
+  lines.push("");
+  lines.push("After completing all steps, provide a summary listing each operation, whether it passed or failed, and any error details.");
+  lines.push("");
 
   return {
-    schemaVersion: "1.0",
-    environmentId: input.environmentId,
-    ...(input.environmentName ? { environmentName: input.environmentName } : {}),
-    generatedAt: new Date().toISOString(),
-    instructions: buildTestPlanInstructions(input.environmentName),
-    connectors: connectorEntries,
-    variables: input.variables ?? {},
-    summary,
+    markdown: lines.join("\n"),
+    summary: {
+      totalConnectors: input.connectors.length,
+      totalOperations: totalOps,
+      operationsByMethod: methodCounts,
+    },
   };
 }
 
-// ─── Test Plan Instructions ─────────────────────────────────────────────────
+// ─── Parameter Instructions ─────────────────────────────────────────────────
 
-function buildTestPlanInstructions(environmentName?: string): string {
-  const envLine = environmentName
-    ? `STEP 0: Open https://make.powerapps.com. Check the environment name in the top-right header. It must show "${environmentName}". If it does not, click the environment picker and select "${environmentName}" by name. Do NOT navigate using environment IDs — always use the visible environment name on screen.`
-    : "STEP 0: Open https://make.powerapps.com. Verify you are in the correct Power Platform environment by checking the environment name in the top-right header.";
+function buildParamInstruction(
+  param: SwaggerParameter,
+  method: string,
+  entitySet: string,
+  postStepNum: Map<string, number>,
+  listStepNum: Map<string, number>,
+): string {
+  // For non-POST operations, prefer POST-created ID when available
+  if (method !== "POST") {
+    const postStep = postStepNum.get(entitySet);
+    if (postStep !== undefined) {
+      return `For \`${param.name}\`, use the \`id\` captured from Step ${postStep}.`;
+    }
+  }
 
-  return [
-    "READ THESE INSTRUCTIONS COMPLETELY BEFORE STARTING ANY TEST.",
-    "",
-    envLine,
-    "",
-    "NAVIGATION:",
-    "- Always navigate by visible names on screen, never by environment IDs or deep-link URLs.",
-    "- To find Custom connectors: left nav → More → Discover all → Custom connectors.",
-    "- Find the connector by its displayed name, click Edit, then go to the Test tab.",
-    "",
-    "GENERAL RULES:",
-    "- Read and follow ALL agent instructions provided by your system prompt before executing this plan.",
-    "- Execute operations in the order listed. Do not skip ahead.",
-    "- For operations that need an ID from a previous step, use the captured value from that response.",
-    "- Never modify or delete existing resources — only work with resources you created during this test.",
-    "- If a create operation fails, skip update/delete operations that depend on it.",
-    "",
-    "WHEN STUCK ON A FIELD VALUE:",
-    "- Check the docsUrl field in the test step — it links to official Microsoft Graph API documentation.",
-    "- Navigate to the connector's Definition page in the Power Platform portal to see field descriptions and accepted value formats.",
-    "- Open the Swagger editor view for detailed schema information including alternate keys and enums.",
-    "- ID fields often accept alternate identifiers beyond GUIDs (e.g., userPrincipalName for users).",
-    "- If a previous list operation captured a value (like userPrincipalName), that value is likely valid as an ID.",
-    "",
-    "AFTER ALL TESTS:",
-    "- Provide a summary table showing each operation, its status (pass/fail), and any error details.",
-  ].join("\n");
+  // Fallback to list-derived value
+  const listStep = listStepNum.get(entitySet);
+  if (listStep !== undefined) {
+    return `For \`${param.name}\`, use a value from the list in Step ${listStep}. Note: list results may include different object types — verify the item type before using its ID.`;
+  }
+
+  return `For \`${param.name}\`, provide an appropriate value. Check the Docs link or Definition page for accepted formats.`;
 }
 
 // ─── Swagger Resolution ─────────────────────────────────────────────────────
@@ -182,7 +275,6 @@ function parseSwaggerOperations(swagger: Record<string, unknown>): SwaggerOperat
   const operations: SwaggerOperation[] = [];
 
   for (const [pathStr, pathItem] of Object.entries(paths)) {
-    // Collect path-level parameters (shared by all methods on this path)
     const pathLevelParams = (pathItem["parameters"] as Array<Record<string, unknown>>) ?? [];
 
     for (const [method, opObj] of Object.entries(pathItem)) {
@@ -192,7 +284,6 @@ function parseSwaggerOperations(swagger: Record<string, unknown>): SwaggerOperat
       if (!operationId) continue;
 
       const opLevelParams = (op["parameters"] as Array<Record<string, unknown>>) ?? [];
-      // Merge path-level + operation-level params (operation-level wins on conflict)
       const mergedRaw = mergeParameters(pathLevelParams, opLevelParams);
 
       const parameters: SwaggerParameter[] = mergedRaw.map((p) => ({
@@ -204,10 +295,7 @@ function parseSwaggerOperations(swagger: Record<string, unknown>): SwaggerOperat
         schema: p["schema"] as Record<string, unknown> | undefined,
       }));
 
-      // Extract response schema — check all 2xx codes
       const responses = op["responses"] as Record<string, Record<string, unknown>> | undefined;
-      const successResponse = find2xxResponse(responses);
-      const responseSchema = successResponse?.["schema"] as Record<string, unknown> | undefined;
       const successCode = findSuccessCode(responses, method);
 
       operations.push({
@@ -216,7 +304,6 @@ function parseSwaggerOperations(swagger: Record<string, unknown>): SwaggerOperat
         path: pathStr,
         summary: (op["summary"] as string) ?? "",
         parameters,
-        responseSchema,
         _successCode: successCode,
       } as SwaggerOperation & { _successCode: number });
     }
@@ -225,7 +312,6 @@ function parseSwaggerOperations(swagger: Record<string, unknown>): SwaggerOperat
   return operations;
 }
 
-/** Merge path-level and operation-level parameters. Operation-level wins on name+in conflict. */
 function mergeParameters(
   pathLevel: Array<Record<string, unknown>>,
   opLevel: Array<Record<string, unknown>>,
@@ -235,18 +321,6 @@ function mergeParameters(
   return [...fromPath, ...opLevel];
 }
 
-/** Find the first 2xx response entry. */
-function find2xxResponse(
-  responses?: Record<string, Record<string, unknown>>,
-): Record<string, unknown> | undefined {
-  if (!responses) return undefined;
-  for (const code of ["200", "201", "204"]) {
-    if (responses[code]) return responses[code];
-  }
-  return responses["default"];
-}
-
-/** Derive expected success HTTP status code from swagger responses + method. */
 function findSuccessCode(
   responses?: Record<string, Record<string, unknown>>,
   method?: string,
@@ -256,7 +330,6 @@ function findSuccessCode(
       if (responses[code]) return parseInt(code, 10);
     }
   }
-  // Fallback by method
   const m = (method ?? "get").toUpperCase();
   if (m === "POST") return 201;
   if (m === "DELETE" || m === "PATCH" || m === "PUT") return 204;
@@ -289,12 +362,7 @@ function filterByScope(
   return ops;
 }
 
-/**
- * CRUD filter: for each entity set, include list + get + post + patch + delete
- * (if they exist). An entity set is "eligible" if it has at least a list operation.
- */
 function filterCrudOperations(ops: SwaggerOperation[]): SwaggerOperation[] {
-  // Group operations by entity set
   const entityOps = new Map<string, SwaggerOperation[]>();
   for (const op of ops) {
     const entity = entitySetNameFromPath(op.path);
@@ -306,13 +374,11 @@ function filterCrudOperations(ops: SwaggerOperation[]): SwaggerOperation[] {
 
   const result: SwaggerOperation[] = [];
   for (const [, entityGroup] of entityOps) {
-    // Entity set is eligible if it has at least a list (GET without path params)
     const hasList = entityGroup.some(
       (op) => op.method === "GET" && !op.parameters.some((p) => p.in === "path"),
     );
     if (!hasList) continue;
 
-    // Include one of each CRUD method
     const picked = new Map<string, SwaggerOperation>();
     for (const op of entityGroup) {
       const method = op.method.toUpperCase();
@@ -321,7 +387,7 @@ function filterCrudOperations(ops: SwaggerOperation[]): SwaggerOperation[] {
       let key: string;
       if (method === "GET" && !hasPathParams) key = "LIST";
       else if (method === "GET" && hasPathParams) key = "GET";
-      else key = method; // POST, PATCH, PUT, DELETE
+      else key = method;
 
       if (!picked.has(key)) {
         picked.set(key, op);
@@ -342,159 +408,12 @@ function orderOperations(ops: SwaggerOperation[]): SwaggerOperation[] {
 function operationPriority(op: SwaggerOperation): number {
   const method = op.method.toUpperCase();
   const hasPathParams = op.parameters.some((p) => p.in === "path");
-  if (method === "GET" && !hasPathParams) return 0; // list
-  if (method === "GET" && hasPathParams) return 1;  // item
-  if (method === "POST") return 2;
+  if (method === "GET" && !hasPathParams) return 0; // LIST — smoke test
+  if (method === "POST") return 1;                   // CREATE — deterministic resource
+  if (method === "GET" && hasPathParams) return 2;    // GET — uses POST-created ID
   if (method === "PATCH" || method === "PUT") return 3;
   if (method === "DELETE") return 4;
   return 5;
-}
-
-// ─── Step Building ──────────────────────────────────────────────────────────
-
-function buildOperationSteps(
-  ops: SwaggerOperation[],
-  connectorPrefix: string,
-  nonce: string,
-  bodyOverrides?: Record<string, Record<string, unknown>>,
-): OperationTestStep[] {
-  const steps: OperationTestStep[] = [];
-
-  // Track list operations for value chaining (entitySet → scoped operationId reference)
-  const listOpRefs = new Map<string, string>(); // entitySet → "c0.ListUsers"
-  // Track POST operations for write-op lifecycle dependencies
-  const postOpRefs = new Map<string, string>();  // entitySet → "c0.CreateUser"
-
-  for (const op of ops) {
-    const method = op.method.toUpperCase();
-    const entitySet = entitySetNameFromPath(op.path);
-    const scopedId = `${connectorPrefix}.${op.operationId}`;
-    const successCode = (op as SwaggerOperation & { _successCode?: number })._successCode
-      ?? defaultStatusCode(method);
-    const isListOp = method === "GET" && !op.parameters.some((p) => p.in === "path");
-
-    // Track references
-    if (isListOp && entitySet) {
-      listOpRefs.set(entitySet, scopedId);
-    }
-    if (method === "POST" && entitySet) {
-      postOpRefs.set(entitySet, scopedId);
-    }
-
-    const step = buildSingleStep(
-      op, method, entitySet, scopedId, successCode, isListOp,
-      nonce, listOpRefs, postOpRefs, bodyOverrides,
-    );
-    steps.push(step);
-  }
-
-  return steps;
-}
-
-function buildSingleStep(
-  op: SwaggerOperation,
-  method: string,
-  entitySet: string,
-  scopedId: string,
-  successCode: number,
-  isListOp: boolean,
-  nonce: string,
-  listOpRefs: Map<string, string>,
-  postOpRefs: Map<string, string>,
-  bodyOverrides?: Record<string, Record<string, unknown>>,
-): OperationTestStep {
-  const params: Record<string, string> = {};
-  const dependsOn: string[] = [];
-  let capture: Record<string, string> | undefined;
-  let body: Record<string, unknown> | undefined;
-
-  // Build parameters
-  for (const param of op.parameters) {
-    if (param.in === "header" || param.in === "body") continue;
-
-    if (param.in === "path") {
-      // For write ops (PATCH/DELETE), prefer the POST-created resource ID
-      if (isWriteMethod(method) && method !== "POST") {
-        const postRef = postOpRefs.get(entitySet);
-        if (postRef) {
-          params[param.name] = `[${postRef}.newId]`;
-          if (!dependsOn.includes(postRef)) dependsOn.push(postRef);
-          continue;
-        }
-      }
-      // For GET-by-id, reference the list operation's captured ID
-      const listRef = listOpRefs.get(entitySet);
-      if (listRef) {
-        const singular = singularize(entitySet);
-        params[param.name] = `[${listRef}.${singular}Id]`;
-        if (!dependsOn.includes(listRef)) dependsOn.push(listRef);
-      } else {
-        params[param.name] = `<provide-${param.name}>`;
-      }
-    } else if (param.in === "query") {
-      if (param.name === "$top") {
-        params[param.name] = "5";
-      }
-    }
-  }
-
-  // Add $top for list operations even if not explicit in params
-  if (isListOp && !params["$top"]) {
-    params["$top"] = "5";
-  }
-
-  // Capture for list operations
-  if (isListOp) {
-    const singular = singularize(entitySet);
-    capture = { [`${singular}Id`]: "value[0].id" };
-  }
-
-  // Capture for POST operations
-  if (method === "POST") {
-    capture = { newId: "id" };
-  }
-
-  // Body for write operations
-  if (method === "POST" || method === "PATCH" || method === "PUT") {
-    body = resolveBody(method, entitySet, nonce, bodyOverrides);
-
-    // PATCH/DELETE depend on POST
-    if (method !== "POST") {
-      const postRef = postOpRefs.get(entitySet);
-      if (postRef && !dependsOn.includes(postRef)) {
-        dependsOn.push(postRef);
-      }
-    }
-  }
-
-  // DELETE depends on the update step (or POST if no update)
-  if (method === "DELETE") {
-    const postRef = postOpRefs.get(entitySet);
-    if (postRef && !dependsOn.includes(postRef)) {
-      dependsOn.push(postRef);
-    }
-  }
-
-  const isCollection = isListOp || hasValueArray(op.responseSchema);
-
-  // Generate Microsoft Learn docs URL for this operation
-  const hasPathParam = op.parameters.some((p) => p.in === "path");
-  const docsUrl = entitySet ? buildGraphDocsUrl(entitySet, method, hasPathParam) : undefined;
-
-  return {
-    operationId: op.operationId,
-    method,
-    description: op.summary || `${method} ${op.path}`,
-    ...(docsUrl ? { docsUrl } : {}),
-    ...(Object.keys(params).length > 0 ? { parameters: params } : {}),
-    ...(body ? { body } : {}),
-    ...(capture ? { capture } : {}),
-    ...(dependsOn.length > 0 ? { dependsOn } : {}),
-    expectedResponse: {
-      statusCode: successCode,
-      ...(isCollection ? { valueIsArray: true } : {}),
-    },
-  };
 }
 
 // ─── Body Resolution ────────────────────────────────────────────────────────
@@ -505,7 +424,6 @@ function resolveBody(
   nonce: string,
   bodyOverrides?: Record<string, Record<string, unknown>>,
 ): Record<string, unknown> | undefined {
-  // Check overrides first
   if (bodyOverrides?.[entitySet]) {
     return bodyOverrides[entitySet];
   }
@@ -513,12 +431,10 @@ function resolveBody(
   if (method === "POST") {
     const templateFn = KNOWN_BODY_TEMPLATES[entitySet];
     if (templateFn) return templateFn(nonce);
-    // No template — return a placeholder
-    return { "[note]": `Provide POST body for ${entitySet}` };
+    return { "_note": `Provide the required POST body for ${singularize(entitySet)}` };
   }
 
   if (method === "PATCH" || method === "PUT") {
-    // Minimal update body
     return { displayName: `GCF Updated ${nonce}` };
   }
 
@@ -527,71 +443,11 @@ function resolveBody(
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
-function entitySetNameFromPath(pathStr: string): string {
-  const segments = pathStr.split("/").filter((s) => s && !s.startsWith("{"));
-  return (segments[segments.length - 1] ?? "").toLowerCase();
-}
-
-function singularize(plural: string): string {
-  if (plural.endsWith("ies")) return plural.slice(0, -3) + "y";
-  if (plural.endsWith("ses") || plural.endsWith("xes")) return plural.slice(0, -2);
-  if (plural.endsWith("s")) return plural.slice(0, -1);
-  return plural;
-}
-
-/**
- * Generate a Microsoft Learn docs URL for a Graph API operation.
- */
-function buildGraphDocsUrl(entitySet: string, method: string, hasPathParam: boolean): string {
-  const entity = singularize(entitySet);
-  let verb: string;
-  switch (method.toUpperCase()) {
-    case "GET": verb = hasPathParam ? "get" : "list"; break;
-    case "POST": verb = "create"; break;
-    case "PATCH": case "PUT": verb = "update"; break;
-    case "DELETE": verb = "delete"; break;
-    default: verb = method.toLowerCase();
+function statusText(code: number): string {
+  switch (code) {
+    case 200: return "OK";
+    case 201: return "Created";
+    case 204: return "No Content";
+    default: return "";
   }
-  return `https://learn.microsoft.com/en-us/graph/api/${entity}-${verb}?view=graph-rest-1.0`;
-}
-
-function isWriteMethod(method: string): boolean {
-  return method === "POST" || method === "PATCH" || method === "PUT" || method === "DELETE";
-}
-
-function defaultStatusCode(method: string): number {
-  if (method === "POST") return 201;
-  if (method === "DELETE" || method === "PATCH" || method === "PUT") return 204;
-  return 200;
-}
-
-function hasValueArray(schema?: Record<string, unknown>): boolean {
-  if (!schema) return false;
-  const properties = schema["properties"] as Record<string, Record<string, unknown>> | undefined;
-  if (!properties?.["value"]) return false;
-  return properties["value"]["type"] === "array";
-}
-
-function generateNonce(): string {
-  return Math.random().toString(36).substring(2, 6);
-}
-
-// ─── Summary ────────────────────────────────────────────────────────────────
-
-function buildSummary(connectors: readonly ConnectorTestPlanEntry[]): MultiConnectorSummary {
-  const methodCounts: Record<string, number> = {};
-  let total = 0;
-
-  for (const c of connectors) {
-    for (const op of c.operations) {
-      total++;
-      methodCounts[op.method] = (methodCounts[op.method] ?? 0) + 1;
-    }
-  }
-
-  return {
-    totalConnectors: connectors.length,
-    totalOperations: total,
-    operationsByMethod: methodCounts,
-  };
 }
