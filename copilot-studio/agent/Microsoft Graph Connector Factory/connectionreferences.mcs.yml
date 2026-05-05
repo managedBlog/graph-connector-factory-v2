@@ -7,5 +7,5 @@
     connectorId: /providers/Microsoft.PowerApps/apis/shared_microsoftlearndocsmcpserver
   - connectionReferenceLogicalName: copilots_header_91a5e.shared_new-5fgcf-20mcp-20agent-5f251f982b189de9d2.935136bad07b42348a21092a8caf5edc
     connectorId: /providers/Microsoft.PowerApps/apis/shared_new-5fgcf-20mcp-20agent-5f251f982b189de9d2
-  - connectionReferenceLogicalName: copilots_header_91a5e.shared_new-5fgcf-20rest-20connector-5f251f982b189de9d2.b895ed5158d0473eaba1be82299811ac
+  - connectionReferenceLogicalName: copilots_header_91a5e.shared_new-5fgcf-20rest-20connector-5f251f982b189de9d2.3b64b1b7818145a59f83da81404dde8e
     connectorId: /providers/Microsoft.PowerApps/apis/shared_new-5fgcf-20rest-20connector-5f251f982b189de9d2

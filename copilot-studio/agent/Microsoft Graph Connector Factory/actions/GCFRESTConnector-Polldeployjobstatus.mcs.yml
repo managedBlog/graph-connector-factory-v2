@@ -2,51 +2,19 @@ mcs.metadata:
   componentName: GCF REST Connector - Poll deploy job status
 kind: TaskDialog
 modelDisplayName: Poll deploy job status
-modelDescription: Long-polls a deploy or batch-deploy job. Returns the current status and, when complete, the full result. If the job is still running, holds the request up to 25 seconds before returning the latest progress. Topic should loop on this until status is success, partial, or failed.
+modelDescription: Long-polls a deploy or batch-deploy job. Returns the current status and, when complete, the full result.
+inputs:
+  - kind: AutomaticTaskInput
+    propertyName: jobId
+    name: Job ID
+    description: The deploy job ID returned by graph_deployPipeline
+
 outputs:
-  - propertyName: appRegistrationAppId
-
-  - propertyName: appRegistrationConfigured
-
-  - propertyName: appRegistrationDisplayName
-
-  - propertyName: appRegistrationObjectId
-
-  - propertyName: appRegistrationSkipped
-
-  - propertyName: appRegistrationSkipReason
-
-  - propertyName: batchCompleted
-
-  - propertyName: batchCurrentBaseName
-
-  - propertyName: batchResultsJson
-
-  - propertyName: batchSucceeded
-
-  - propertyName: batchTotal
-
-  - propertyName: connectorAuthType
-
   - propertyName: connectorDisplayName
-
-  - propertyName: connectorEnvironmentId
-
-  - propertyName: connectorId
-
-  - propertyName: connectorRedirectUri
-
-  - propertyName: connectorStatus
 
   - propertyName: error
 
-  - propertyName: errors
-
   - propertyName: jobId
-
-  - propertyName: jobType
-
-  - propertyName: retryAfter
 
   - propertyName: status
 
@@ -54,10 +22,18 @@ outputs:
 
 action:
   kind: InvokeConnectorTaskAction
-  connectionReference: copilots_header_91a5e.shared_new-5fgcf-20rest-20connector-5f251f982b189de9d2.b895ed5158d0473eaba1be82299811ac
+  connectionReference: copilots_header_91a5e.shared_new-5fgcf-20rest-20connector-5f251f982b189de9d2.3b64b1b7818145a59f83da81404dde8e
   connectionProperties:
     mode: Invoker
 
   operationId: graph_deployStatus
+
+  inputType:
+    properties:
+      jobId:
+        displayName: Job ID
+        description: The deploy job ID returned by graph_deployPipeline
+        isRequired: true
+        type: String
 
 outputMode: All
