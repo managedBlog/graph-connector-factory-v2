@@ -1025,7 +1025,13 @@ const appregConfigureForConnectorTool: ToolDefinition = {
         const permMsg = permErr instanceof Error ? permErr.message : String(permErr);
         results["permissionError"] = {
           error: permMsg,
-          hint: "Permission setup failed. You may need to add permissions manually.",
+          hint: "Admin consent grant failed. This typically means the server's service principal " +
+            "needs the Cloud Application Administrator directory role in Entra ID, or the " +
+            "DelegatedPermissionGrant.ReadWrite.All application permission with admin consent. " +
+            "To fix: open the Azure portal → Entra ID → App registrations → find the Graph Connector Factory " +
+            "API app → API permissions → Grant admin consent. Alternatively, assign the Cloud Application " +
+            "Administrator role to the app's service principal under Entra ID → Roles and administrators.",
+          scopes: graphApiScopes,
         };
       }
     }

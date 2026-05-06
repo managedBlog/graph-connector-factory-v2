@@ -226,7 +226,11 @@ export function generateMultiConnectorTestPlan(
 
   lines.push("## Summary");
   lines.push("");
-  lines.push("After completing all steps, provide a summary listing each operation, whether it passed or failed, and any error details.");
+  lines.push("After completing all steps, provide a summary with the following:");
+  lines.push("");
+  lines.push("1. A table listing each operation tested, the HTTP method, the result (✅ Pass / ❌ Fail), and any error details.");
+  lines.push("2. **If any operations failed**, list them explicitly under a **\"Failed Operations\"** heading and recommend the user test those operations manually in the connector's Test tab.");
+  lines.push("3. A total pass/fail count (e.g., \"8 of 10 operations passed\").");
   lines.push("");
 
   return {

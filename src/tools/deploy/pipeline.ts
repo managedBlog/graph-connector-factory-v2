@@ -131,7 +131,9 @@ function parseAraSteps(araData: Record<string, unknown>): AppRegPartialDetail {
   } else if (appCreated && !ficConfigured) {
     guidance = `App registration was created (${araData["appId"] ?? "unknown"}), but FIC configuration failed. You can retry to complete the FIC setup.`;
   } else if (appCreated && ficConfigured && !permissionsGranted) {
-    guidance = `App and FIC are configured, but permission grants failed. You can retry to complete permissions.`;
+    guidance = `App and FIC are configured, but admin consent for API permissions could not be granted automatically. ` +
+      `To grant consent manually: open Azure portal → Entra ID → App registrations → find the connector's app → ` +
+      `API permissions → click "Grant admin consent". The connector will work once consent is granted.`;
   } else {
     guidance = `The following steps still need to be completed: ${remaining.join(", ")}. You can retry the app registration process.`;
   }
@@ -568,6 +570,19 @@ export async function executeDeployPipeline(
     summaryParts.push(
       `App registration "${appRegResult.displayName}" configured (App ID: ${appRegResult.appId}).`,
     );
+    // Surface admin consent warning if permissions failed despite app reg succeeding
+    const steps = appRegResult.steps as Record<string, unknown> | undefined;
+    if (steps?.["permissionError"]) {
+      const permErr = steps["permissionError"] as Record<string, unknown>;
+      const failedScopes = Array.isArray(permErr["scopes"])
+        ? (permErr["scopes"] as string[]).join(", ")
+        : "";
+      summaryParts.push(
+        `⚠️ Admin consent could not be granted automatically${failedScopes ? ` for: ${failedScopes}` : ""}. ` +
+        `Open Azure portal → Entra ID → App registrations → "${appRegResult.displayName}" → ` +
+        `API permissions → Grant admin consent.`,
+      );
+    }
   } else if (appRegResult?.skipped) {
     summaryParts.push(`App registration: ${appRegResult.skipReason}`);
   } else if (appRegResult && !appRegResult.configured && !appRegResult.skipped) {

@@ -562,6 +562,34 @@ function Invoke-StageEntra {
         Write-Warning "  az ad app permission admin-consent --id $apiAppId"
     }
 
+    # ── Assign Cloud Application Administrator role to the API app's service principal ──
+    # This role is required for the server to grant admin consent on newly created
+    # connector app registrations during deployment (POST /oauth2PermissionGrants).
+    # Without this role, deployments succeed but admin consent must be granted manually.
+    Write-Step 'Assigning Cloud Application Administrator role to API app service principal…'
+    $cloudAppAdminRoleId = '158c047a-c907-4556-b7ef-446551a6b5f7'
+    $apiSpObjectId = (Invoke-AzCli @('ad', 'sp', 'show', '--id', $apiAppId, '--query', 'id', '-o', 'tsv')).Trim()
+    try {
+        $roleBody = @{
+            '@odata.type'    = '#microsoft.graph.unifiedRoleAssignment'
+            roleDefinitionId = $cloudAppAdminRoleId
+            principalId      = $apiSpObjectId
+            directoryScopeId = '/'
+        } | ConvertTo-Json -Compress
+        $tmpRoleFile = [System.IO.Path]::GetTempFileName()
+        Set-Content -Path $tmpRoleFile -Value $roleBody -Encoding UTF8
+        Invoke-AzCli @('rest', '--method', 'POST',
+            '--uri', 'https://graph.microsoft.com/v1.0/roleManagement/directory/roleAssignments',
+            '--body', "@$tmpRoleFile",
+            '--headers', 'Content-Type=application/json') | Out-Null
+        Write-Success "Cloud Application Administrator role assigned to API service principal ($apiSpObjectId)"
+        Remove-Item $tmpRoleFile -ErrorAction SilentlyContinue
+    } catch {
+        Write-Warning "Could not assign Cloud Application Administrator role: $($_.Exception.Message)"
+        Write-Warning "The server can still deploy connectors, but admin consent will need to be granted manually."
+        Write-Warning "To assign manually: Entra ID → Roles and administrators → Cloud Application Administrator → Add the GCF API app."
+    }
+
     # ── Client App ───────────────────────────────────────────────
     Write-Step 'Creating Client app "Graph Connector Factory - Client"…'
 
