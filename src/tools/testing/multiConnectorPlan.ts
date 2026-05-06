@@ -88,6 +88,19 @@ export function generateMultiConnectorTestPlan(
   lines.push("3. Navigate to Custom connectors (left nav → More → Discover all → Custom connectors)");
   lines.push("");
 
+  // ── Testing tips ────────────────────────────────────────────────────────
+
+  lines.push("## Testing Tips");
+  lines.push("");
+  lines.push("- **Alternate identifiers:** Some Graph API operations accept multiple types of identifiers in path parameters. " +
+    "For example, the `user-id` parameter accepts either a GUID **or** a `userPrincipalName` (e.g., `user@domain.com`). " +
+    "If a lookup operation fails or returns no results with one identifier type, try the alternate form before concluding the operation is broken.");
+  lines.push("- **Documentation links:** Each test step includes a link to the official Microsoft Graph documentation for that operation. " +
+    "If you are uncertain about valid parameter values, required fields, or expected behavior, **review the documentation link** instead of repeatedly retrying the same request.");
+  lines.push("- **Do not spin on failures:** If an operation fails after 2 attempts, record the failure and move on to the next step. " +
+    "Do not retry the same operation more than twice.");
+  lines.push("");
+
   // ── Per-connector sections ──────────────────────────────────────────────
 
   for (let ci = 0; ci < input.connectors.length; ci++) {
@@ -264,6 +277,12 @@ function buildParamInstruction(
   const listStep = listStepNum.get(entitySet);
   if (listStep !== undefined) {
     return `For \`${param.name}\`, use a value from the list in Step ${listStep}. Note: list results may include different object types — verify the item type before using its ID.`;
+  }
+
+  // Entity-specific alternate key guidance
+  if (param.name === "user-id" || param.name === "userId") {
+    return `For \`${param.name}\`, you may use either a GUID **or** a \`userPrincipalName\` (e.g., \`user@domain.com\`). ` +
+      `If one form doesn't work, try the other. Refer to the Docs link below for accepted formats.`;
   }
 
   return `For \`${param.name}\`, provide an appropriate value. Check the Docs link or Definition page for accepted formats.`;
