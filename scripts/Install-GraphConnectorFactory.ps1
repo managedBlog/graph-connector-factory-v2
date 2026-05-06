@@ -369,6 +369,7 @@ function Invoke-StageEntra {
     $graphAppId = '00000003-0000-0000-c000-000000000000'
     $appReadWriteAllId   = '1bfefb4e-e0b5-418b-a88f-73c46d2cc8e9'  # Application.ReadWrite.All (Application)
     $appRoleAssignRWId   = '06b708a9-e830-4db3-a914-8e69da51d44f'  # AppRoleAssignment.ReadWrite.All (Application)
+    $delegPermGrantRWId  = '8e8e4742-1d2d-4e1b-8804-dc7c4b0f0d2c'  # DelegatedPermissionGrant.ReadWrite.All (Application)
 
     # ── API App ──────────────────────────────────────────────────
     Write-Step 'Creating API app "Graph Connector Factory"…'
@@ -442,8 +443,8 @@ function Invoke-StageEntra {
     Write-Step 'Adding Graph API permissions…'
     Invoke-AzCli @('ad', 'app', 'permission', 'add', '--id', $apiAppId,
         '--api', $graphAppId,
-        '--api-permissions', "$appReadWriteAllId=Role", "$appRoleAssignRWId=Role") | Out-Null
-    Write-Success 'Graph API permissions added (Application.ReadWrite.All, AppRoleAssignment.ReadWrite.All)'
+        '--api-permissions', "$appReadWriteAllId=Role", "$appRoleAssignRWId=Role", "$delegPermGrantRWId=Role") | Out-Null
+    Write-Success 'Graph API permissions added (Application.ReadWrite.All, AppRoleAssignment.ReadWrite.All, DelegatedPermissionGrant.ReadWrite.All)'
 
     # ── Credential creation (secret OR certificate) ──
     $apiSecret       = $null

@@ -10,6 +10,8 @@
  * - GET-by-id uses the POST-created resource ID when POST exists.
  * - References are natural language ("use the `id` from Step 2").
  * - Template variables in body JSON use angle brackets: <tenantDomain>.
+ *   When variables are provided, they are substituted with real values.
+ * - Explicit field-by-field instructions are generated above the JSON body.
  * - Parameter descriptions from swagger are surfaced as notes.
  */
 
@@ -157,14 +159,28 @@ export function generateMultiConnectorTestPlan(
       if (method === "POST" || method === "PATCH" || method === "PUT") {
         const body = resolveBody(method, entitySet, nonce, spec.bodyOverrides);
         if (body) {
+          // Apply variable substitutions (e.g., <tenantDomain> → real domain)
+          const vars = input.variables ?? {};
+          const substituted = substituteVariables(body, vars);
+          const hasUnresolved = JSON.stringify(substituted).includes("<");
+
+          // Explicit field-by-field instructions
           lines.push("");
-          lines.push("Paste this JSON as the request body:");
+          lines.push("Fill in the following fields:");
+          lines.push("");
+          emitFieldInstructions(substituted, lines, "");
+
+          // JSON body as alternative
+          lines.push("");
+          lines.push("**Alternatively**, paste this JSON as the request body:");
           lines.push("");
           lines.push("```json");
-          lines.push(JSON.stringify(body, null, 2));
+          lines.push(JSON.stringify(substituted, null, 2));
           lines.push("```");
-          lines.push("");
-          lines.push("Copy only the JSON above. Replace any angle-bracket values (like `<tenantDomain>`) with real values before submitting.");
+          if (hasUnresolved) {
+            lines.push("");
+            lines.push("Replace any angle-bracket values with real values before submitting.");
+          }
         }
       }
 
@@ -449,5 +465,51 @@ function statusText(code: number): string {
     case 201: return "Created";
     case 204: return "No Content";
     default: return "";
+  }
+}
+
+// ─── Variable Substitution ──────────────────────────────────────────────────
+
+/** Recursively replace <varName> placeholders in string values with resolved variables. */
+function substituteVariables(
+  obj: Record<string, unknown>,
+  vars: Record<string, string>,
+): Record<string, unknown> {
+  const result: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(obj)) {
+    if (typeof value === "string") {
+      let resolved = value;
+      for (const [varName, varValue] of Object.entries(vars)) {
+        resolved = resolved.split(`<${varName}>`).join(varValue);
+      }
+      result[key] = resolved;
+    } else if (value !== null && typeof value === "object" && !Array.isArray(value)) {
+      result[key] = substituteVariables(value as Record<string, unknown>, vars);
+    } else {
+      result[key] = value;
+    }
+  }
+  return result;
+}
+
+/** Emit human-readable field-by-field instructions for a body object. */
+function emitFieldInstructions(
+  obj: Record<string, unknown>,
+  lines: string[],
+  prefix: string,
+): void {
+  for (const [key, value] of Object.entries(obj)) {
+    if (key.startsWith("_")) continue; // skip internal notes
+    const label = prefix ? `${prefix} > ${key}` : key;
+
+    if (value !== null && typeof value === "object" && !Array.isArray(value)) {
+      // Nested object — recurse with indented label
+      emitFieldInstructions(value as Record<string, unknown>, lines, label);
+    } else if (typeof value === "string" && value.startsWith("<")) {
+      // Unresolved placeholder — give contextual instruction
+      lines.push(`- **${label}**: ${value.slice(1, -1)}`);
+    } else {
+      lines.push(`- **${label}**: \`${String(value)}\``);
+    }
   }
 }

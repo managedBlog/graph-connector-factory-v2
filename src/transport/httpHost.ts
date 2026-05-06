@@ -211,6 +211,7 @@ interface SessionKeyResolution {
 interface DecodedTokenClaims {
   oidKey: string | undefined;
   subKey: string | undefined;
+  upn: string | undefined;
 }
 
 // ─── Options ──────────────────────────────────────────────────────────────────
@@ -392,8 +393,10 @@ export function startHttpServer(options: HttpHostOptions): void {
       const subRaw = decoded["sub"];
       const oidKey = typeof oidRaw === "string" && oidRaw.trim().length > 0 ? oidRaw.trim() : undefined;
       const subKey = typeof subRaw === "string" && subRaw.trim().length > 0 ? subRaw.trim() : undefined;
+      const upnRaw = decoded["upn"] ?? decoded["preferred_username"];
+      const upn = typeof upnRaw === "string" && upnRaw.includes("@") ? upnRaw.trim() : undefined;
       if (!oidKey && !subKey) return undefined;
-      return { oidKey, subKey };
+      return { oidKey, subKey, upn };
     } catch {
       return undefined;
     }
@@ -1881,7 +1884,19 @@ export function startHttpServer(options: HttpHostOptions): void {
         return;
       }
 
-      const variables = body["variables"] ? JSON.parse(body["variables"] as string) as Record<string, string> : undefined;
+      const variables = body["variables"] ? JSON.parse(body["variables"] as string) as Record<string, string> : {};
+
+      // Extract tenant domain from caller's UPN — prefer custom domain over .onmicrosoft.com
+      if (!variables["tenantDomain"]) {
+        const claims = extractTokenClaims(req.headers["authorization"] as string | undefined);
+        if (claims?.upn) {
+          const domain = claims.upn.split("@")[1];
+          if (domain) {
+            variables["tenantDomain"] = domain;
+            log(`[TestPlanCS REST] Resolved tenantDomain="${domain}" from caller UPN`);
+          }
+        }
+      }
 
       const result = await invokeTool(
         "testing_generateMultiPlan",
