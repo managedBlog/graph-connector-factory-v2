@@ -62,6 +62,77 @@ export const KNOWN_BODY_TEMPLATES: Record<string, (nonce: string) => Record<stri
   }),
 };
 
+// ─── Entity Identifier Metadata ─────────────────────────────────────────────
+
+/**
+ * Describes the preferred identifier for lookup operations and which fields
+ * should appear in $select for LIST operations so subsequent steps can
+ * reference the correct property.
+ *
+ * Keys are lowercase entity set names (e.g., "users", "groups").
+ */
+export interface EntityIdentifierMeta {
+  /** The response property to use as the path parameter in GET/PATCH/DELETE. */
+  readonly preferredKey: string;
+  /** Human-readable description of the preferred key. */
+  readonly keyDescription: string;
+  /** Example value for the preferred key. */
+  readonly example: string;
+  /** Fields to include in $select on LIST operations. */
+  readonly selectFields: readonly string[];
+}
+
+export const ENTITY_IDENTIFIER_META: Record<string, EntityIdentifierMeta> = {
+  users: {
+    preferredKey: "userPrincipalName",
+    keyDescription: "the user's email-format UPN",
+    example: "user@domain.com",
+    selectFields: ["id", "userPrincipalName", "displayName"],
+  },
+  groups: {
+    preferredKey: "id",
+    keyDescription: "the Entra object ID (GUID)",
+    example: "a GUID from the response",
+    selectFields: ["id", "displayName", "mailNickname"],
+  },
+  applications: {
+    preferredKey: "id",
+    keyDescription: "the Entra object ID (GUID)",
+    example: "a GUID from the response",
+    selectFields: ["id", "appId", "displayName"],
+  },
+  serviceprincipals: {
+    preferredKey: "id",
+    keyDescription: "the Entra object ID (GUID)",
+    example: "a GUID from the response",
+    selectFields: ["id", "appId", "displayName"],
+  },
+  devices: {
+    preferredKey: "id",
+    keyDescription: "the Entra object ID (GUID)",
+    example: "a GUID from the response",
+    selectFields: ["id", "deviceId", "displayName"],
+  },
+  teams: {
+    preferredKey: "id",
+    keyDescription: "the team ID (GUID)",
+    example: "a GUID from the response",
+    selectFields: ["id", "displayName"],
+  },
+  channels: {
+    preferredKey: "id",
+    keyDescription: "the channel ID (GUID)",
+    example: "a GUID from the response",
+    selectFields: ["id", "displayName"],
+  },
+  sites: {
+    preferredKey: "id",
+    keyDescription: "the site ID",
+    example: "a site ID from the response",
+    selectFields: ["id", "displayName", "webUrl"],
+  },
+};
+
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
 /** Generate a short random nonce for unique resource names. */
