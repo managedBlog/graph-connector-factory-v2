@@ -24,6 +24,8 @@ outputs:
 
   - propertyName: environmentId
 
+  - propertyName: environmentName
+
   - propertyName: group1Json
 
   - propertyName: group2Json

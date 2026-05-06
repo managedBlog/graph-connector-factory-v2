@@ -189,6 +189,7 @@ const graphToolDefinitions: AvailableTool[] = [
         connectorGroups: { type: "array", items: { type: "object", properties: { endpoints: { type: "array", items: { type: "string" } } }, required: ["endpoints"] } },
         appRegistrationStrategy: { type: "string", enum: ["single", "separate"] },
         environmentId: { type: "string" },
+        environmentName: { type: "string", description: "Display name of the target Power Platform environment" },
         baseName: { type: "string" },
         targetVersion: { type: "string", enum: ["v1.0", "beta"] },
         notes: { type: "string" },

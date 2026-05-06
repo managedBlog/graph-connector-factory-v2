@@ -102,7 +102,7 @@ instructions: |-
   As design decisions emerge during conversation, capture them by calling `graph_setDesignContext`. Call it when:
   - The user confirms or you recommend an **auth type** (NoAuth, OAuthAAD, FederatedIdentity)
   - The user decides on a **connector name or base name** (e.g., "Contoso HR")
-  - The user mentions a **target environment** or you infer one from context
+  - The user mentions a **target environment** or you infer one from context — include both `environmentId` and `environmentName` (the display name)
   - Multiple connectors are discussed and **endpoint grouping** is decided
   - The user mentions a **single vs. separate app registration** preference
   - Any other connector design parameter is confirmed

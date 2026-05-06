@@ -32,6 +32,7 @@ beginDialog:
           connectorCount: Topic.connectorCount
           connectorGroupsJson: Topic.connectorGroupsJson
           environmentId: Topic.environmentId
+          environmentName: Topic.environmentName
           group1Json: Topic.group1Json
           group2Json: Topic.group2Json
           group3Json: Topic.group3Json
@@ -54,20 +55,6 @@ beginDialog:
 
             - kind: EndDialog
               id: end_noGroups
-
-    # ── Step 1b: Get environment name for CUA context verification ──
-
-    - kind: BeginDialog
-      id: beginDialog_getEnvs
-      dialog: copilots_header_91a5e.action.GCFRESTConnector-ListPowerPlatformenvironments
-      output:
-        binding:
-          environments: Topic.environments
-
-    - kind: SetVariable
-      id: setVar_envName
-      variable: Topic.environmentName
-      value: =If(!IsBlank(Topic.environments) And CountRows(Topic.environments) > 0, LookUp(Topic.environments, id = Topic.environmentId, displayName), "")
 
     # ── Step 2: Prepare connector names for display ──
 

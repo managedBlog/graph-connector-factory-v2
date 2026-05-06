@@ -509,6 +509,11 @@ export function startHttpServer(options: HttpHostOptions): void {
           incomingGroups as Array<Record<string, unknown>>,
         );
       }
+      // Keep environmentId and environmentName as an atomic pair:
+      // if environmentId changes without environmentName, clear the stale name.
+      if ("environmentId" in partial && !("environmentName" in partial)) {
+        delete next["environmentName"];
+      }
       ctx.designContext = next;
       ctx.lastActivity = Date.now();
     } else {
@@ -893,6 +898,11 @@ export function startHttpServer(options: HttpHostOptions): void {
       ? designContext["environmentId"] as string
       : config.powerPlatform.defaultEnvironmentId ?? null;
 
+    // Extract environmentName from design context
+    const environmentName = (typeof designContext["environmentName"] === "string" && (designContext["environmentName"] as string).trim())
+      ? designContext["environmentName"] as string
+      : null;
+
     // Serialize connectorGroups
     const connectorGroups = Array.isArray(designContext["connectorGroups"])
       ? designContext["connectorGroups"] as Array<Record<string, unknown>>
@@ -1048,6 +1058,7 @@ export function startHttpServer(options: HttpHostOptions): void {
       baseName,
       baseNameSource,
       environmentId,
+      environmentName,
       authType,
       connectorCount,
       appRegistrationStrategy,
@@ -1807,12 +1818,53 @@ export function startHttpServer(options: HttpHostOptions): void {
       log(`[TestPlanCS REST] scopeMode="${String(body["scopeMode"] ?? "")}", connectorsJson length=${String(body["connectorsJson"] ?? "").length}`);
 
       const environmentId = (body["environmentId"] as string)?.trim();
-      const environmentName = (body["environmentName"] as string)?.trim() || "";
+      let environmentName = (body["environmentName"] as string)?.trim() || "";
       const connectorsJson = (body["connectorsJson"] as string)?.trim();
 
       if (!environmentId || !connectorsJson) {
         res.status(400).json({ error: "environmentId and connectorsJson are required." });
         return;
+      }
+
+      // Resolve environment name: first from current session's design context,
+      // then from environments API as a last resort.
+      if (!environmentName) {
+        // Check current session's design context — cheapest path, no cross-session leakage
+        const tracking = resolveSessionKeyForRequest(req, {});
+        if (tracking.key) {
+          const resolved = resolveContextKey(tracking.key);
+          const dc = resolved?.ctx?.designContext;
+          if (dc && typeof dc["environmentName"] === "string" && (dc["environmentName"] as string).trim()) {
+            environmentName = (dc["environmentName"] as string).trim();
+            log(`[TestPlanCS REST] Resolved environmentName="${environmentName}" from session designContext`);
+          }
+        }
+      }
+
+      // Fallback: resolve from environments API if still blank
+      if (!environmentName && config.server.authMode !== "noauth") {
+        try {
+          const envLookup = invokeConnectorTool("connector_listEnvironments", {}, config);
+          const timeout = new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error("env lookup timeout")), 8_000)
+          );
+          const envResult = await Promise.race([envLookup, timeout]);
+          if (envResult.ok && envResult.result) {
+            const envList = (envResult.result as Record<string, unknown>)["environments"] as Array<Record<string, string>> | undefined;
+            const match = envList?.find((e) => e.id === environmentId);
+            if (match?.displayName) {
+              environmentName = match.displayName;
+              log(`[TestPlanCS REST] Resolved environmentName="${environmentName}" from environmentId`);
+            } else {
+              log(`[TestPlanCS REST] No environment match for id="${environmentId}"`);
+            }
+          } else {
+            log(`[TestPlanCS REST] Environment lookup failed: ${envResult.ok ? "empty result" : envResult.error ?? "unknown"}`);
+          }
+        } catch (envErr) {
+          const msg = envErr instanceof Error ? envErr.message : String(envErr);
+          log(`[TestPlanCS REST] Environment name resolution skipped: ${msg}`);
+        }
       }
 
       // Parse the JSON-string envelope

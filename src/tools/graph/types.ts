@@ -232,6 +232,8 @@ export interface GraphSetDesignContextToolInput {
   readonly appRegistrationStrategy?: "single" | "separate";
   /** Target Power Platform environment ID (GUID or 'default'). */
   readonly environmentId?: string;
+  /** Display name of the target Power Platform environment. */
+  readonly environmentName?: string;
   /** Suggested base name for connector naming. */
   readonly baseName?: string;
   /** Target Graph API version. */
