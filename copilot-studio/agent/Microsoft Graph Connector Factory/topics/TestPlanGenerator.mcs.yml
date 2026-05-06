@@ -32,7 +32,6 @@ beginDialog:
           connectorCount: Topic.connectorCount
           connectorGroupsJson: Topic.connectorGroupsJson
           environmentId: Topic.environmentId
-          environmentName: Topic.environmentName
           group1Json: Topic.group1Json
           group2Json: Topic.group2Json
           group3Json: Topic.group3Json
@@ -357,7 +356,6 @@ beginDialog:
       input:
         binding:
           environmentId: =Topic.environmentId
-          environmentName: =Topic.environmentName
           connectorsJson: =Topic.connectorsJson
       dialog: copilots_header_91a5e.action.GCFRESTConnector-GenerateCUAtestplan
       output:
