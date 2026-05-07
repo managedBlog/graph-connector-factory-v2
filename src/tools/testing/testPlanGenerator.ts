@@ -30,6 +30,7 @@ import { connectorTestTabNav, newConnectionNav } from "./portalUrls";
 import {
   KNOWN_BODY_TEMPLATES,
   KNOWN_REQUIRED_FIELDS,
+  ENTITY_IDENTIFIER_META,
   generateNonce,
   singularize,
   entitySetNameFromPath,
@@ -371,10 +372,18 @@ function buildTestParams(
     if (param.in === "header") continue;
 
     if (param.in === "path") {
+      // Resolve the preferred identifier key for this entity type
+      const entitySet = entitySetNameFromPath(op.path);
+      const meta = ENTITY_IDENTIFIER_META[entitySet];
+      const keyField = meta?.preferredKey ?? "id";
+      const keyHint = meta && meta.preferredKey !== "id"
+        ? ` (${meta.keyDescription}, e.g. ${meta.example})`
+        : "";
+
       // Prefer the POST-created resource ID for GET-by-id, PATCH, and DELETE
       if (writePostDep) {
         params[param.name] =
-          `[From ${writePostDep} response] Copy the 'id' value from the resource you just created`;
+          `[From ${writePostDep} response] Copy the '${keyField}' value from the resource you just created${keyHint}`;
         if (!dependsOn.includes(writePostDep)) dependsOn.push(writePostDep);
       } else {
         // Try to find a list operation for the parent resource
@@ -390,13 +399,13 @@ function buildTestParams(
 
         if (listOpId) {
           params[param.name] =
-            `[From ${listOpId} response] Copy the 'id' value of the first item in the response`;
+            `[From ${listOpId} response] Copy the '${keyField}' value of the first item in the response${keyHint}`;
           if (!dependsOn.includes(listOpId)) dependsOn.push(listOpId);
         } else {
           params[param.name] = `<provide-${param.name}>`;
         }
       }
-    } else if (param.in === "query") {
+    }else if (param.in === "query") {
       if (param.name === "$top") {
         params[param.name] = "5";
       }
@@ -414,11 +423,17 @@ function buildTestParams(
   if (isListOp) {
     const entityName = entitySetNameFromPath(op.path);
     const singular = singularize(entityName);
+    const meta = ENTITY_IDENTIFIER_META[entityName];
+    const captureKey = meta?.preferredKey ?? "id";
+    const captureLabel = captureKey === "id" ? `${singular}Id` : captureKey;
+    const captureHint = meta && meta.preferredKey !== "id"
+      ? ` (${meta.keyDescription})`
+      : "";
     outputCapture.push({
-      label: `${singular}Id`,
-      responsePath: "value[0].id",
+      label: captureLabel,
+      responsePath: `value[0].${captureKey}`,
       instruction:
-        `In the response console, find the first item in the 'value' array and note its 'id' field. ` +
+        `In the response console, find the first item in the 'value' array and note its '${captureKey}' field${captureHint}. ` +
         `You will use this value as '${singular}-id' in subsequent operations.`,
     });
   }
