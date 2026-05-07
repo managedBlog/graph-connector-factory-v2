@@ -168,6 +168,8 @@ export interface ModeEntry {
 export interface ConnectorGroup {
   readonly name?: string | undefined;
   readonly endpoints: readonly string[];
+  /** Exact operationId values agreed upon during research. When present, filters hydrated operations. */
+  readonly operationIds?: readonly string[] | undefined;
 }
 
 export interface DesignContext {

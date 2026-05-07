@@ -186,7 +186,25 @@ const graphToolDefinitions: AvailableTool[] = [
         endpoints: { type: "array", items: { type: "string" } },
         authType: { type: "string", enum: ["NoAuth", "OAuthAAD", "FederatedIdentity"] },
         connectorCount: { type: "number" },
-        connectorGroups: { type: "array", items: { type: "object", properties: { endpoints: { type: "array", items: { type: "string" } } }, required: ["endpoints"] } },
+        connectorGroups: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              id: { type: "string", description: "Stable group identifier (e.g. 'conn1')" },
+              name: { type: "string", description: "Human-readable group name" },
+              baseName: { type: "string", description: "Per-connector base name override" },
+              endpoints: { type: "array", items: { type: "string" }, description: "Graph API endpoint paths" },
+              operationPattern: { type: "string", description: "Pattern hint (CRUD, Read, Actions)" },
+              operationIds: {
+                type: "array",
+                items: { type: "string" },
+                description: "Exact operationId values from graph_listOperations. When present, only these operations are included in the build card. Use this to capture the specific operations agreed upon during research.",
+              },
+            },
+            required: ["endpoints"],
+          },
+        },
         appRegistrationStrategy: { type: "string", enum: ["single", "separate"] },
         environmentId: { type: "string" },
         environmentName: { type: "string", description: "Display name of the target Power Platform environment" },

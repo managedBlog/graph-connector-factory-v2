@@ -497,6 +497,17 @@ export function startHttpServer(options: HttpHostOptions): void {
             merged["endpoints"] = existingEndpoints;
           }
         }
+        // Clear stale operationIds when endpoints change without new operationIds
+        const endpointsChanged = Array.isArray(incomingEndpoints) && incomingEndpoints.length > 0;
+        const hasIncomingOpIds = "operationIds" in incoming || "operations" in incoming;
+        if (endpointsChanged && !hasIncomingOpIds) {
+          delete merged["operationIds"];
+          // Also clear legacy operations field if it was a string-array (not hydrated objects)
+          const existingOps = merged["operations"];
+          if (Array.isArray(existingOps) && existingOps.length > 0 && typeof existingOps[0] === "string") {
+            delete merged["operations"];
+          }
+        }
         return merged;
       });
     };
@@ -993,27 +1004,49 @@ export function startHttpServer(options: HttpHostOptions): void {
               seenOps.add(op.operationId);
               return true;
             });
-            // Filter by operationPattern
-            const pattern = typeof group["operationPattern"] === "string"
-              ? (group["operationPattern"] as string).toLowerCase()
-              : "";
-            if (pattern.includes("read")) {
-              group["operations"] = groupOps.filter((op) => op.method.toUpperCase() === "GET");
-            } else if (pattern === "actions") {
-              group["operations"] = groupOps.filter((op) => op.method.toUpperCase() === "POST");
-            } else if (pattern === "crud") {
-              group["operations"] = groupOps.filter((op) => {
-                for (const ep of groupEndpoints) {
-                  if (op.path === ep) return true;
-                  if (op.path.startsWith(ep + "/")) {
-                    const remainder = op.path.slice(ep.length + 1);
-                    if (!remainder.includes("/")) return true;
-                  }
-                }
-                return false;
-              });
+
+            // Resolve operationIds: prefer operationIds, then legacy operations (string array only)
+            const rawOpIds = group["operationIds"];
+            const rawLegacyOps = group["operations"];
+            const resolvedIds: string[] | undefined =
+              Array.isArray(rawOpIds) ? (rawOpIds as unknown[]).filter((v): v is string => typeof v === "string") :
+              (Array.isArray(rawLegacyOps) && rawLegacyOps.length > 0 && typeof rawLegacyOps[0] === "string")
+                ? (rawLegacyOps as unknown[]).filter((v): v is string => typeof v === "string")
+                : undefined;
+
+            if (resolvedIds !== undefined) {
+              // Filter by explicit operationIds (even if empty = no operations)
+              const idSet = new Set(resolvedIds);
+              group["operations"] = groupOps.filter((op) => idSet.has(op.operationId));
+              // Log mismatches
+              const matchedIds = new Set((group["operations"] as EnrichedOperation[]).map((op) => op.operationId));
+              const missingIds = resolvedIds.filter((id) => !matchedIds.has(id));
+              if (missingIds.length > 0) {
+                log(`[Session context] WARN: operationIds not found in hydrated ops for group "${group["baseName"] ?? "?"}: ${missingIds.join(", ")}`);
+              }
             } else {
-              group["operations"] = groupOps;
+              // Fallback: filter by operationPattern (existing behavior)
+              const pattern = typeof group["operationPattern"] === "string"
+                ? (group["operationPattern"] as string).toLowerCase()
+                : "";
+              if (pattern.includes("read")) {
+                group["operations"] = groupOps.filter((op) => op.method.toUpperCase() === "GET");
+              } else if (pattern === "actions") {
+                group["operations"] = groupOps.filter((op) => op.method.toUpperCase() === "POST");
+              } else if (pattern === "crud") {
+                group["operations"] = groupOps.filter((op) => {
+                  for (const ep of groupEndpoints) {
+                    if (op.path === ep) return true;
+                    if (op.path.startsWith(ep + "/")) {
+                      const remainder = op.path.slice(ep.length + 1);
+                      if (!remainder.includes("/")) return true;
+                    }
+                  }
+                  return false;
+                });
+              } else {
+                group["operations"] = groupOps;
+              }
             }
           }
           log(`[Session context] Hydrated ${allOps.length} operations across ${connectorGroups.length} groups`);

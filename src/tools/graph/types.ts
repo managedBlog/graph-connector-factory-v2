@@ -211,6 +211,12 @@ export interface ConnectorGroupInput {
   readonly endpoints: readonly string[];
   /** Operation pattern hint for suffix derivation (e.g. "CRUD", "Read", "Actions"). */
   readonly operationPattern?: string;
+  /**
+   * Exact operationId values from graph_listOperations that the user agreed to during research.
+   * When present (even if empty), only these operations are included in the build card.
+   * When absent, falls back to operationPattern-based filtering.
+   */
+  readonly operationIds?: readonly string[];
 }
 
 /**
