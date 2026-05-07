@@ -235,7 +235,7 @@ export interface HttpHostOptions {
 
 export function startHttpServer(options: HttpHostOptions): void {
   const { config } = options;
-  const port = options.port ?? config.server.port ?? 3001;
+  const port = options.port ?? parseInt(process.env["GCF_PORT"] ?? "", 10) || config.server.port ?? 3001;
   const outputRoot = path.resolve(config.output?.dir ?? path.join(process.cwd(), "output"));
   const ttlMinutes = options.outputTtlMinutes ?? config.output?.ttlMinutes ?? 15;
   const ttlMs = ttlMinutes * 60 * 1000;
