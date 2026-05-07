@@ -448,6 +448,169 @@
           }
         }
       }
+    },
+    "/api/agent/mcp-servers": {
+      "get": {
+        "operationId": "agent_listMcpServers",
+        "summary": "List available MCP servers",
+        "description": "Returns a curated catalog of Microsoft MCP servers that can be added as tools to a generated agent.",
+        "x-ms-visibility": "important",
+        "parameters": [
+          {
+            "name": "category",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "description": "Filter by category (graph, azure, data, devtools, m365, security).",
+            "x-ms-summary": "Category"
+          },
+          {
+            "name": "stableOnly",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "description": "If true, only return servers with known stable connector names.",
+            "x-ms-summary": "Stable Only"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of MCP servers",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "servers": {
+                  "type": "array",
+                  "x-ms-summary": "Servers",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": { "type": "string", "description": "Catalog ID." },
+                      "displayName": { "type": "string", "description": "Server name." },
+                      "description": { "type": "string", "description": "What this server does." },
+                      "category": { "type": "string", "description": "Category." },
+                      "stable": { "type": "boolean", "description": "Connector name is globally stable." }
+                    }
+                  }
+                },
+                "count": { "type": "integer", "x-ms-summary": "Count" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/agent/context": {
+      "get": {
+        "operationId": "agent_getContext",
+        "summary": "Get agent factory context",
+        "description": "Returns deployed connectors from this session, agent design decisions from research, and design context.",
+        "x-ms-visibility": "important",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Agent factory context",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "agentContext": { "type": "object", "x-ms-summary": "Agent Context" },
+                "deployedConnectors": {
+                  "type": "array",
+                  "x-ms-summary": "Deployed Connectors",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "connectorId": { "type": "string" },
+                      "apiName": { "type": "string" },
+                      "displayName": { "type": "string" },
+                      "baseName": { "type": "string" },
+                      "environmentId": { "type": "string" },
+                      "operationIds": { "type": "array", "items": { "type": "string" } }
+                    }
+                  }
+                },
+                "designContext": { "type": "object", "x-ms-summary": "Design Context" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/agent/generate": {
+      "post": {
+        "operationId": "agent_generateAgent",
+        "summary": "Generate a Copilot Studio agent",
+        "description": "Generates and deploys a new Copilot Studio agent. Returns a job ID for async polling via agent_generateStatus.",
+        "x-ms-visibility": "important",
+        "x-ms-api-timeout": 120,
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "type": "object",
+              "required": ["agentName", "agentPurpose", "environmentId"],
+              "properties": {
+                "agentName": { "type": "string", "description": "Display name for the new agent.", "x-ms-summary": "Agent Name" },
+                "agentPurpose": { "type": "string", "description": "What the agent should do.", "x-ms-summary": "Agent Purpose" },
+                "environmentId": { "type": "string", "description": "Power Platform environment ID.", "x-ms-summary": "Environment ID" },
+                "solutionName": { "type": "string", "description": "Target solution (default: GCFApps).", "x-ms-summary": "Solution Name" },
+                "mcpServerIds": { "type": "string", "description": "Comma-separated MCP server catalog IDs.", "x-ms-summary": "MCP Server IDs" },
+                "knowledgeSourcesJson": { "type": "string", "description": "JSON array of knowledge sources.", "x-ms-summary": "Knowledge Sources JSON" },
+                "includeCua": { "type": "string", "description": "Include CUA (true/false).", "x-ms-summary": "Include CUA" },
+                "instructionsOverride": { "type": "string", "description": "Custom instructions text.", "x-ms-summary": "Instructions Override" }
+              }
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "Job accepted",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "jobId": { "type": "string", "description": "Job ID for polling.", "x-ms-summary": "Job ID" },
+                "status": { "type": "string", "description": "Initial status.", "x-ms-summary": "Status" },
+                "retryAfter": { "type": "integer", "description": "Seconds before first poll.", "x-ms-summary": "Retry After" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/agent/generate/status": {
+      "get": {
+        "operationId": "agent_generateStatus",
+        "summary": "Poll agent generation status",
+        "description": "Long-polls an agent generation job. Returns status and result when complete.",
+        "x-ms-visibility": "important",
+        "x-ms-api-timeout": 30,
+        "parameters": [
+          {
+            "name": "jobId",
+            "in": "query",
+            "required": true,
+            "type": "string",
+            "description": "Agent generation job ID.",
+            "x-ms-summary": "Job ID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Job status and result",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "jobId": { "type": "string", "x-ms-summary": "Job ID" },
+                "status": { "type": "string", "x-ms-summary": "Status" },
+                "result": { "type": "object", "x-ms-summary": "Result" },
+                "error": { "type": "string", "x-ms-summary": "Error" }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "definitions": {

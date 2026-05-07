@@ -1,0 +1,43 @@
+mcs.metadata:
+  componentName: GCF REST Connector - List MCP Servers
+kind: TaskDialog
+modelDisplayName: List MCP Servers
+modelDescription: Lists available Microsoft MCP servers that can be added to a generated agent. Returns server names, descriptions, categories, and stability status.
+inputs:
+  - kind: AutomaticTaskInput
+    propertyName: category
+    name: Category
+    description: Optional filter by category (graph, azure, data, devtools, m365, security)
+    isRequired: false
+
+  - kind: AutomaticTaskInput
+    propertyName: stableOnly
+    name: Stable Only
+    description: If true, only return servers with known stable connector names
+    isRequired: false
+
+outputs:
+  - propertyName: body
+
+action:
+  kind: InvokeConnectorTaskAction
+  connectionReference: copilots_header_91a5e.shared_new-5fgcf-20rest-20connector-5f251f982b189de9d2.3b64b1b7818145a59f83da81404dde8e
+  connectionProperties:
+    mode: Invoker
+
+  operationId: agent_listMcpServers
+
+  inputType:
+    properties:
+      category:
+        displayName: Category
+        description: Optional filter by category
+        isRequired: false
+        type: String
+      stableOnly:
+        displayName: Stable Only
+        description: If true, only return stable servers
+        isRequired: false
+        type: String
+
+outputMode: All

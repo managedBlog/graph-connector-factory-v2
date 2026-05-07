@@ -1,0 +1,71 @@
+mcs.metadata:
+  componentName: AgentPollLoop
+kind: AdaptiveDialog
+beginDialog:
+  kind: OnInvokeDialog
+  id: main
+  actions:
+    - kind: SendActivity
+      id: sendActivity_polling
+      activity: ⏳ Agent generation in progress...
+
+    - kind: BeginDialog
+      id: beginDialog_pollStatus
+      input:
+        binding:
+          jobId: =Topic.jobId
+      dialog: copilots_header_91a5e.action.GCFRESTConnector-AgentGenerateStatus
+      output:
+        binding:
+          status: Topic.pollStatus
+          result: Topic.pollResult
+          error: Topic.pollError
+
+    - kind: ConditionGroup
+      id: condGroup_checkStatus
+      conditions:
+        - id: cond_success
+          condition: =Topic.pollStatus = "success"
+          actions:
+            - kind: SendActivity
+              id: sendActivity_success
+              activity: |
+                ✅ **Agent created successfully!**
+
+                {Topic.pollResult}
+
+                **Next steps:**
+                1. Open the agent in Copilot Studio
+                2. Configure any connections that need authentication
+                3. Publish the agent
+                4. Test with sample prompts
+
+        - id: cond_failed
+          condition: =Topic.pollStatus = "failed"
+          actions:
+            - kind: SendActivity
+              id: sendActivity_failed
+              activity: |
+                ❌ **Agent generation failed.**
+
+                Error: {Topic.pollError}
+
+                Please check the server logs and try again.
+
+      elseActions:
+        - kind: SendActivity
+          id: sendActivity_stillRunning
+          activity: ⏳ Still generating... checking again in a moment.
+
+        - kind: BeginDialog
+          id: beginDialog_retry
+          input:
+            binding:
+              jobId: =Topic.jobId
+          dialog: copilots_header_91a5e.topic.AgentPollLoop
+
+inputParameters:
+  - name: jobId
+    dataType: String
+    isRequired: true
+    description: The agent generation job ID to poll

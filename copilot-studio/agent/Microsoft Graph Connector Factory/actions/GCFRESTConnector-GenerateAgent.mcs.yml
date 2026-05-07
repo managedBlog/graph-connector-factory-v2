@@ -1,0 +1,113 @@
+mcs.metadata:
+  componentName: GCF REST Connector - Generate Agent
+kind: TaskDialog
+modelDisplayName: Generate Agent
+modelDescription: Generates and deploys a new Copilot Studio agent with the specified connectors, MCP servers, and knowledge sources. Returns a job ID for async polling. The server auto-generates instructions from the agent spec.
+inputs:
+  - kind: AutomaticTaskInput
+    propertyName: agentName
+    name: Agent Name
+    description: Display name for the new agent
+    isRequired: true
+
+  - kind: AutomaticTaskInput
+    propertyName: agentPurpose
+    name: Agent Purpose
+    description: Brief description of what the agent does
+    isRequired: true
+
+  - kind: AutomaticTaskInput
+    propertyName: environmentId
+    name: Environment ID
+    description: Power Platform environment ID to deploy to
+    isRequired: true
+
+  - kind: AutomaticTaskInput
+    propertyName: solutionName
+    name: Solution Name
+    description: Target solution name (default GCFApps)
+    isRequired: false
+
+  - kind: AutomaticTaskInput
+    propertyName: mcpServerIds
+    name: MCP Server IDs
+    description: JSON array of MCP server catalog IDs to include
+    isRequired: false
+
+  - kind: AutomaticTaskInput
+    propertyName: knowledgeSourcesJson
+    name: Knowledge Sources JSON
+    description: JSON array of knowledge sources with type, url, displayName, description
+    isRequired: false
+
+  - kind: AutomaticTaskInput
+    propertyName: includeCua
+    name: Include CUA
+    description: Whether to include Computer Use Agent capability
+    isRequired: false
+
+  - kind: AutomaticTaskInput
+    propertyName: instructionsOverride
+    name: Instructions Override
+    description: Optional custom instructions (overrides auto-generated instructions)
+    isRequired: false
+
+outputs:
+  - propertyName: jobId
+
+  - propertyName: status
+
+  - propertyName: retryAfter
+
+action:
+  kind: InvokeConnectorTaskAction
+  connectionReference: copilots_header_91a5e.shared_new-5fgcf-20rest-20connector-5f251f982b189de9d2.3b64b1b7818145a59f83da81404dde8e
+  connectionProperties:
+    mode: Invoker
+
+  operationId: agent_generateAgent
+
+  inputType:
+    properties:
+      agentName:
+        displayName: Agent Name
+        description: Display name for the new agent
+        isRequired: true
+        type: String
+      agentPurpose:
+        displayName: Agent Purpose
+        description: Brief description of what the agent does
+        isRequired: true
+        type: String
+      environmentId:
+        displayName: Environment ID
+        description: Power Platform environment ID
+        isRequired: true
+        type: String
+      solutionName:
+        displayName: Solution Name
+        description: Target solution name
+        isRequired: false
+        type: String
+      mcpServerIds:
+        displayName: MCP Server IDs
+        description: JSON array of MCP server catalog IDs
+        isRequired: false
+        type: String
+      knowledgeSourcesJson:
+        displayName: Knowledge Sources JSON
+        description: JSON array of knowledge source objects
+        isRequired: false
+        type: String
+      includeCua:
+        displayName: Include CUA
+        description: Include Computer Use Agent
+        isRequired: false
+        type: String
+      instructionsOverride:
+        displayName: Instructions Override
+        description: Custom instructions text
+        isRequired: false
+        type: String
+
+outputMode: All
