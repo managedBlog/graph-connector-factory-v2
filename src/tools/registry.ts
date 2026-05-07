@@ -766,10 +766,10 @@ async function invokeAgentTool(
   switch (toolName) {
     case "agent_listMcpServers": {
       const typedInput = input as Record<string, unknown>;
-      const servers = listMcpServers({
-        category: typedInput["category"] as string | undefined,
-        stableOnly: typedInput["stableOnly"] as boolean | undefined,
-      });
+      const filter: { category?: string; stableOnly?: boolean } = {};
+      if (typedInput["category"] != null) filter.category = typedInput["category"] as string;
+      if (typedInput["stableOnly"] != null) filter.stableOnly = typedInput["stableOnly"] as boolean;
+      const servers = listMcpServers(filter);
       return { ok: true, toolName, result: { servers, count: servers.length } };
     }
 

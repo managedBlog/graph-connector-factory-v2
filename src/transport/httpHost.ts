@@ -177,14 +177,14 @@ type DeployJobStatus = "accepted" | "running" | "success" | "partial" | "failed"
 
 interface DeployJob {
   readonly id: string;
-  readonly jobType: "deploy" | "batchDeploy";
+  readonly jobType: "deploy" | "batchDeploy" | "agent-generate";
   status: DeployJobStatus;
   readonly createdAt: number;
-  completedAt?: number;
+  completedAt?: number | undefined;
   readonly ownerKey: string | undefined;
-  result?: Record<string, unknown>;
-  batchProgress?: { total: number; completed: number; succeeded: number; currentBaseName?: string };
-  error?: string;
+  result?: Record<string, unknown> | undefined;
+  batchProgress?: { total: number; completed: number; succeeded: number; currentBaseName?: string | undefined } | undefined;
+  error?: string | undefined;
 }
 
 /** Long-poll max wait (ms). Leaves 5s buffer for Copilot Studio's 30s limit. */
@@ -235,7 +235,7 @@ export interface HttpHostOptions {
 
 export function startHttpServer(options: HttpHostOptions): void {
   const { config } = options;
-  const port = options.port ?? parseInt(process.env["GCF_PORT"] ?? "", 10) || config.server.port ?? 3001;
+  const port = options.port ?? (parseInt(process.env["GCF_PORT"] ?? "", 10) || (config.server.port ?? 3001));
   const outputRoot = path.resolve(config.output?.dir ?? path.join(process.cwd(), "output"));
   const ttlMinutes = options.outputTtlMinutes ?? config.output?.ttlMinutes ?? 15;
   const ttlMs = ttlMinutes * 60 * 1000;
@@ -2181,7 +2181,10 @@ export function startHttpServer(options: HttpHostOptions): void {
     try {
       const category = req.query["category"] as string | undefined;
       const stableOnly = req.query["stableOnly"] === "true";
-      const servers = agentListMcpServers({ category, stableOnly });
+      const filter: { category?: string; stableOnly?: boolean } = {};
+      if (category != null) filter.category = category;
+      if (stableOnly) filter.stableOnly = stableOnly;
+      const servers = agentListMcpServers(filter);
       res.json({ servers, count: servers.length });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -2230,7 +2233,7 @@ export function startHttpServer(options: HttpHostOptions): void {
       const tracking = resolveSessionKeyForRequest(req, {});
       const ownerKey = tracking.key;
       const ctx = ownerKey ? resolveContextKey(ownerKey)?.ctx : undefined;
-      const deployedConnectors = (ctx?.deployResults ?? []) as DeployedConnectorInfo[];
+      const deployedConnectors = (ctx?.deployResults ?? []) as unknown as DeployedConnectorInfo[];
 
       if (deployedConnectors.length === 0) {
         res.status(400).json({ error: "No deployed connectors found. Deploy connectors first." });

@@ -110,7 +110,7 @@ export async function generateAgent(
       connectors: deployedConnectors,
       mcpServers,
       knowledgeSources: input.knowledgeSources ?? [],
-      includeCua: input.includeCua,
+      includeCua: input.includeCua ?? false,
     });
     log(`[AgentGenerator] Template patched: ${patchedTemplate.componentCount} components`);
   } catch (err) {

@@ -99,10 +99,10 @@ export interface AgentFactoryContext {
 export interface AgentGenerationInput {
   agentName: string;
   agentPurpose: string;
-  mcpServerIds?: string[];
-  knowledgeSources?: KnowledgeSource[];
-  includeCua?: boolean;
-  instructionsOverride?: string;
+  mcpServerIds?: string[] | undefined;
+  knowledgeSources?: KnowledgeSource[] | undefined;
+  includeCua?: boolean | undefined;
+  instructionsOverride?: string | undefined;
   /** Target environment for pac copilot create */
   environmentId: string;
   /** Solution name (must have matching publisher prefix) */
@@ -111,17 +111,17 @@ export interface AgentGenerationInput {
 
 export interface AgentGenerationResult {
   success: boolean;
-  agentId?: string;
-  agentUrl?: string;
-  displayName?: string;
-  componentCount?: number;
+  agentId?: string | undefined;
+  agentUrl?: string | undefined;
+  displayName?: string | undefined;
+  componentCount?: number | undefined;
   /** Connections that need manual configuration */
   pendingConnections: PendingConnection[];
   /** Suggested starter prompts */
   starterPrompts: string[];
-  error?: string;
+  error?: string | undefined;
   /** PAC CLI output for debugging */
-  pacOutput?: string;
+  pacOutput?: string | undefined;
 }
 
 export interface PendingConnection {
@@ -161,7 +161,7 @@ export interface TemplatePatchConfig {
   mcpServers: McpServerCatalogEntry[];
   knowledgeSources: KnowledgeSource[];
   /** Whether to include CUA component */
-  includeCua?: boolean;
+  includeCua?: boolean | undefined;
 }
 
 export interface PatchedTemplate {

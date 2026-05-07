@@ -79,7 +79,7 @@ export async function isPacAvailable(): Promise<boolean> {
  */
 export async function getPacAuthInfo(): Promise<{
   user: string;
-  environment?: string;
+  environment?: string | undefined;
 } | null> {
   const result = await runPac(["auth", "list"], { timeout: 15_000 });
   if (!result.success) return null;
@@ -91,7 +91,7 @@ export async function getPacAuthInfo(): Promise<{
   if (userMatch) {
     return {
       user: userMatch[1]!.trim(),
-      environment: envMatch?.[1]?.trim(),
+      environment: envMatch?.[1]?.trim() ?? undefined,
     };
   }
   return null;
@@ -106,7 +106,7 @@ export async function pacCopilotCreate(params: {
   templateFileName: string;
   solution: string;
   environmentId: string;
-}): Promise<PacResult & { agentId?: string; agentUrl?: string }> {
+}): Promise<PacResult & { agentId?: string | undefined; agentUrl?: string | undefined }> {
   const args = [
     "copilot", "create",
     "--displayName", params.displayName,
@@ -137,7 +137,7 @@ export async function pacCopilotCreate(params: {
     agentUrl = urlMatch[1];
   }
 
-  return { ...result, agentId, agentUrl };
+  return { ...result, agentId: agentId ?? undefined, agentUrl: agentUrl ?? undefined };
 }
 
 /**
