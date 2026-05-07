@@ -20,6 +20,10 @@
  *   POST /api/testing/multi-plan — Generate multi-connector CUA test plan
  *   GET  /download/:id/:filename — Serve generated files
  *   POST /api/graph/test/batch-echo — Test endpoint
+ *   GET  /api/agent/mcp-servers     — List MCP servers for agent composition
+ *   GET  /api/agent/context         — Agent factory context + deploy results
+ *   POST /api/agent/generate        — Generate Copilot Studio agent (async)
+ *   GET  /api/agent/generate/status — Poll agent generation status
  */
 
 import * as fs from "fs";
@@ -40,6 +44,8 @@ import { invokeTool as invokeAppregTool } from "../tools/appreg/tools";
 import { executeDeployPipeline } from "../tools/deploy/pipeline";
 import type { DeployPipelineInput } from "../tools/deploy/pipeline";
 import type { EnrichedOperation } from "../tools/graph/types";
+import { listMcpServers as agentListMcpServers, generateAgent } from "../tools/agent";
+import type { DeployedConnectorInfo, AgentGenerationInput } from "../tools/agent";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -194,6 +200,8 @@ interface SessionContextEntry {
   endpoints: string[];
   lastActivity: number;
   designContext?: Record<string, unknown>;
+  agentContext?: Record<string, unknown>;
+  deployResults?: Array<Record<string, unknown>>;
 }
 
 type SessionKeySource = "oid" | "sub" | "userObjectId" | "conversation" | "mcpSessionId" | "none";
@@ -536,6 +544,27 @@ export function startHttpServer(options: HttpHostOptions): void {
     log(`[Session ${sessionId.slice(0, 8)}] Design context updated: ${Object.keys(partial).join(", ")}`);
   }
 
+  function updateAgentContextForSession(sessionId: string, partial: Record<string, unknown>): void {
+    const ctx = sessionContext.get(sessionId);
+    if (ctx) {
+      ctx.agentContext = { ...(ctx.agentContext ?? {}), ...partial };
+      ctx.lastActivity = Date.now();
+    } else {
+      sessionContext.set(sessionId, { endpoints: [], lastActivity: Date.now(), agentContext: partial });
+    }
+    log(`[Session ${sessionId.slice(0, 8)}] Agent context updated: ${Object.keys(partial).join(", ")}`);
+  }
+
+  function appendDeployResult(sessionId: string, result: Record<string, unknown>): void {
+    const ctx = sessionContext.get(sessionId);
+    if (ctx) {
+      if (!ctx.deployResults) ctx.deployResults = [];
+      ctx.deployResults.push(result);
+      ctx.lastActivity = Date.now();
+      log(`[Session ${sessionId.slice(0, 8)}] Deploy result persisted (total: ${ctx.deployResults.length})`);
+    }
+  }
+
   function createSession(): { id: string; createdAt: number } {
     const session = { id: randomUUID(), createdAt: Date.now() };
     sessions.set(session.id, session);
@@ -740,6 +769,20 @@ export function startHttpServer(options: HttpHostOptions): void {
           } else {
             registerAliases(tracking, tracking.key, sessionId);
             updateDesignContextForSession(tracking.key, args);
+          }
+        }
+
+        // ── agent_setDesignContext interceptor: persist agent factory context ──
+        if (toolName === "agent_setDesignContext" && !rpcRes.result?.isError) {
+          const args = (params?.["arguments"] as Record<string, unknown>) ?? {};
+          const tracking = resolveSessionKeyForRequest(req, {
+            mcpSessionId: sessionId,
+          });
+          if (!tracking.key) {
+            log(`[WARN] [Session context] agent_setDesignContext succeeded but no stable session key resolved`);
+          } else {
+            registerAliases(tracking, tracking.key, sessionId);
+            updateAgentContextForSession(tracking.key, args);
           }
         }
       } // end tools/call intercept
@@ -1594,6 +1637,26 @@ export function startHttpServer(options: HttpHostOptions): void {
           job.status = result.status === "success" ? "success" : result.errors?.length ? "partial" : "success";
           job.completedAt = Date.now();
           log(`[Deploy REST] Job ${jobId} completed: status=${job.status}`);
+
+          // Persist deploy result to session context for agent factory
+          if (connector?.connectorId && ownerKey) {
+            const designCtx = sessionContext.get(ownerKey)?.designContext;
+            const connectorGroups = designCtx?.["connectorGroups"] as Array<Record<string, unknown>> | undefined;
+            const matchingGroup = connectorGroups?.find((g) =>
+              g["baseName"] === pipelineInput.baseName || g["name"] === pipelineInput.baseName,
+            );
+            appendDeployResult(ownerKey, {
+              timestamp: Date.now(),
+              connectorId: connector.connectorId,
+              apiName: connector.connectorId.split("/").pop() ?? "",
+              displayName: connector.displayName,
+              baseName: pipelineInput.baseName ?? "",
+              environmentId: connector.environmentId,
+              authType: connector.authType ?? "Unknown",
+              appRegistrationAppId: appReg?.appId ?? undefined,
+              operationIds: (matchingGroup?.["operationIds"] as string[]) ?? [],
+            });
+          }
         } catch (err) {
           const message = err instanceof Error ? err.message : String(err);
           job.status = "failed";
@@ -2110,6 +2173,179 @@ export function startHttpServer(options: HttpHostOptions): void {
       parsedGroups,
       resultsJson: JSON.stringify(sampleResults),
     });
+  });
+
+  // ─── Agent Factory: MCP Servers ────────────────────────────────────────
+
+  app.get("/api/agent/mcp-servers", (req, res) => {
+    try {
+      const category = req.query["category"] as string | undefined;
+      const stableOnly = req.query["stableOnly"] === "true";
+      const servers = agentListMcpServers({ category, stableOnly });
+      res.json({ servers, count: servers.length });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      res.status(500).json({ error: message });
+    }
+  });
+
+  // ─── Agent Factory: Get Agent Context ──────────────────────────────────
+
+  app.get("/api/agent/context", (req, res) => {
+    try {
+      const tracking = resolveSessionKeyForRequest(req, {});
+      if (!tracking.key) {
+        res.json({ agentContext: null, deployedConnectors: [], designContext: null });
+        return;
+      }
+      const resolved = resolveContextKey(tracking.key);
+      const ctx = resolved?.ctx;
+      res.json({
+        agentContext: ctx?.agentContext ?? null,
+        deployedConnectors: ctx?.deployResults ?? [],
+        designContext: ctx?.designContext ?? null,
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      res.status(500).json({ error: message });
+    }
+  });
+
+  // ─── Agent Factory: Generate Agent (async job) ─────────────────────────
+
+  const agentJobs = new Map<string, DeployJob>();
+
+  app.post("/api/agent/generate", async (req, res) => {
+    try {
+      const body = req.body as Record<string, unknown>;
+      const agentName = body["agentName"] as string;
+      const agentPurpose = body["agentPurpose"] as string;
+
+      if (!agentName || !agentPurpose) {
+        res.status(400).json({ error: "agentName and agentPurpose are required." });
+        return;
+      }
+
+      // Resolve session context for deploy results
+      const tracking = resolveSessionKeyForRequest(req, {});
+      const ownerKey = tracking.key;
+      const ctx = ownerKey ? resolveContextKey(ownerKey)?.ctx : undefined;
+      const deployedConnectors = (ctx?.deployResults ?? []) as DeployedConnectorInfo[];
+
+      if (deployedConnectors.length === 0) {
+        res.status(400).json({ error: "No deployed connectors found. Deploy connectors first." });
+        return;
+      }
+
+      const environmentId = body["environmentId"] as string ??
+        (ctx?.designContext?.["environmentId"] as string) ?? "";
+      const solutionName = body["solutionName"] as string ?? "GCFApps";
+
+      if (!environmentId) {
+        res.status(400).json({ error: "environmentId is required." });
+        return;
+      }
+
+      const jobId = randomUUID();
+      const job: DeployJob = {
+        id: jobId,
+        jobType: "agent-generate",
+        status: "accepted",
+        createdAt: Date.now(),
+        ownerKey,
+      };
+      agentJobs.set(jobId, job);
+
+      log(`[Agent Generate] Created job ${jobId}`);
+
+      const generationInput: AgentGenerationInput = {
+        agentName,
+        agentPurpose,
+        mcpServerIds: body["mcpServerIds"] as string[] | undefined,
+        knowledgeSources: body["knowledgeSources"] as any[] | undefined,
+        includeCua: body["includeCua"] as boolean | undefined,
+        instructionsOverride: body["instructionsOverride"] as string | undefined,
+        environmentId,
+        solutionName,
+      };
+
+      // Fire-and-forget
+      void (async () => {
+        try {
+          job.status = "running";
+          const result = await generateAgent(generationInput, deployedConnectors);
+          job.result = result as unknown as Record<string, unknown>;
+          job.status = result.success ? "success" : "failed";
+          if (!result.success) job.error = result.error;
+          job.completedAt = Date.now();
+          log(`[Agent Generate] Job ${jobId} completed: ${job.status}`);
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          job.status = "failed";
+          job.error = message;
+          job.completedAt = Date.now();
+          log(`[Agent Generate] Job ${jobId} FAILED: ${message}`);
+        }
+      })();
+
+      res.status(202).json({
+        jobId,
+        status: "accepted",
+        retryAfter: 10,
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      res.status(500).json({ error: message });
+    }
+  });
+
+  // ─── Agent Factory: Poll Generation Status ─────────────────────────────
+
+  app.get("/api/agent/generate/status", async (req, res) => {
+    try {
+      const jobId = (req.query["jobId"] as string | undefined)?.trim();
+      if (!jobId) {
+        res.status(400).json({ error: "jobId query parameter is required." });
+        return;
+      }
+
+      const job = agentJobs.get(jobId);
+      if (!job) {
+        res.json({ jobId, status: "expired", error: "Job not found or expired." });
+        return;
+      }
+
+      // If terminal, return immediately
+      if (job.status !== "accepted" && job.status !== "running") {
+        res.json({
+          jobId: job.id,
+          status: job.status,
+          result: job.result ?? null,
+          error: job.error ?? null,
+        });
+        return;
+      }
+
+      // Long-poll
+      const deadline = Date.now() + DEPLOY_STATUS_POLL_MAX_MS;
+      while (Date.now() < deadline) {
+        if (job.status !== "accepted" && job.status !== "running") {
+          res.json({
+            jobId: job.id,
+            status: job.status,
+            result: job.result ?? null,
+            error: job.error ?? null,
+          });
+          return;
+        }
+        await new Promise((resolve) => setTimeout(resolve, DEPLOY_STATUS_POLL_INTERVAL_MS));
+      }
+
+      res.json({ jobId: job.id, status: job.status, retryAfter: 10 });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      res.status(500).json({ error: message });
+    }
   });
 
   // ─── Cleanup sweep ────────────────────────────────────────────────────

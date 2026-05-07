@@ -47,6 +47,10 @@ import { generateTestPlan } from "./testing/testPlanGenerator";
 import { generateMultiConnectorTestPlan } from "./testing/multiConnectorPlan";
 import type { TestPlanInput, MultiConnectorTestInput } from "./testing/types";
 
+// Agent factory imports
+import { listMcpServers, generateInstructions, resolveMcpServers } from "./agent";
+import type { AgentFactoryContext } from "./agent";
+
 // ─── Hash naming utilities ─────────────────────────────────────────────────
 
 const HASH_SUFFIX_RE = /_[0-9a-f]{4}$/;
@@ -82,6 +86,9 @@ const MCP_VISIBLE_TOOLS = new Set([
   "graph_setDesignContext",
   "graph_generateTestPlan",
   "testing_generateMultiPlan",
+  "agent_listMcpServers",
+  "agent_setDesignContext",
+  "agent_generateInstructions",
 ]);
 
 /**
@@ -284,6 +291,60 @@ const graphToolDefinitions: AvailableTool[] = [
       required: ["environmentId", "connectors"],
     },
   },
+
+  // ─── Agent Factory tools ──────────────────────────────────────────────────
+  {
+    name: "agent_listMcpServers",
+    description: "List available Microsoft MCP servers for agent composition.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        category: { type: "string", description: "Filter by category: graph, azure, data, devtools, m365, security." },
+        stableOnly: { type: "boolean", description: "Only return servers with globally stable connector names." },
+      },
+    },
+  },
+  {
+    name: "agent_setDesignContext",
+    description: "Persist agent factory design decisions for the current session (name, purpose, MCP servers, knowledge sources).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        agentName: { type: "string", description: "Display name for the generated agent." },
+        agentPurpose: { type: "string", description: "What the agent should help users do." },
+        selectedMcpServers: { type: "array", items: { type: "string" }, description: "MCP server catalog IDs." },
+        knowledgeSources: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              type: { type: "string", enum: ["sharepoint", "url"] },
+              url: { type: "string" },
+              displayName: { type: "string" },
+              description: { type: "string" },
+            },
+            required: ["type", "url"],
+          },
+          description: "Knowledge sources (SharePoint sites, URLs).",
+        },
+        includeCua: { type: "boolean", description: "Whether to include Computer Use Agent capability." },
+        instructionsOverride: { type: "string", description: "Custom instructions (replaces auto-generated)." },
+      },
+    },
+  },
+  {
+    name: "agent_generateInstructions",
+    description: "Preview auto-generated agent instructions based on current design context.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        agentName: { type: "string", description: "Agent display name." },
+        agentPurpose: { type: "string", description: "Agent purpose." },
+        mcpServerIds: { type: "array", items: { type: "string" }, description: "MCP server catalog IDs." },
+      },
+      required: ["agentName", "agentPurpose"],
+    },
+  },
 ];
 
 // ─── Unified dispatcher ────────────────────────────────────────────────────
@@ -301,6 +362,10 @@ export async function invokeTool(
     // Route by prefix
     if (toolName.startsWith("graph_") || toolName.startsWith("testing_")) {
       return await invokeGraphTool(toolName, input, config);
+    }
+
+    if (toolName.startsWith("agent_")) {
+      return await invokeAgentTool(toolName, input, config);
     }
 
     if (toolName.startsWith("connector_") || toolName === "setAutonomyMode") {
@@ -688,5 +753,71 @@ async function invokeGraphTool(
 
     default:
       return { ok: false, toolName, error: `Unknown graph tool: ${toolName}` };
+  }
+}
+
+// ─── Agent Factory tool dispatch ───────────────────────────────────────────
+
+async function invokeAgentTool(
+  toolName: string,
+  input: unknown,
+  _config: AgentConfig,
+): Promise<ToolInvocationResult> {
+  switch (toolName) {
+    case "agent_listMcpServers": {
+      const typedInput = input as Record<string, unknown>;
+      const servers = listMcpServers({
+        category: typedInput["category"] as string | undefined,
+        stableOnly: typedInput["stableOnly"] as boolean | undefined,
+      });
+      return { ok: true, toolName, result: { servers, count: servers.length } };
+    }
+
+    case "agent_setDesignContext": {
+      // This tool is intercepted by httpHost.ts for session persistence.
+      // If it reaches here, return the input as confirmation.
+      const typedInput = input as AgentFactoryContext;
+      return {
+        ok: true,
+        toolName,
+        result: {
+          saved: true,
+          context: typedInput,
+          message: "Agent factory design context saved for this session.",
+        },
+      };
+    }
+
+    case "agent_generateInstructions": {
+      const typedInput = input as Record<string, unknown>;
+      const agentName = typedInput["agentName"] as string;
+      const agentPurpose = typedInput["agentPurpose"] as string;
+      const mcpServerIds = typedInput["mcpServerIds"] as string[] | undefined;
+
+      const mcpServers = mcpServerIds ? resolveMcpServers(mcpServerIds) : [];
+
+      const instructions = generateInstructions({
+        agentName,
+        agentPurpose,
+        connectorOperations: [], // Will be populated from deploy results at generation time
+        mcpServers,
+        knowledgeSources: [],
+      });
+
+      return {
+        ok: true,
+        toolName,
+        result: {
+          instructions,
+          stats: {
+            mcpServerCount: mcpServers.length,
+          },
+          message: "Instructions preview generated. Final instructions will include deployed connector operations.",
+        },
+      };
+    }
+
+    default:
+      return { ok: false, toolName, error: `Unknown agent tool: ${toolName}` };
   }
 }
