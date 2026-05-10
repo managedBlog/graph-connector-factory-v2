@@ -66,7 +66,7 @@ export async function runPac(
  */
 export async function isPacAvailable(): Promise<boolean> {
   try {
-    const result = await runPac(["--version"], { timeout: 10_000 });
+    const result = await runPac(["help"], { timeout: 10_000 });
     return result.success;
   } catch {
     return false;
@@ -153,4 +153,62 @@ export async function getPublisherPrefix(
   // A full implementation would query the Dataverse publisher API.
   log(`[PAC] Using publisher prefix "mme" for solution "${solutionName}"`);
   return "mme";
+}
+
+/**
+ * Resolve environment ID to the format PAC CLI expects.
+ *
+ * The session context may provide a Dataverse org ID (from the org URL)
+ * but PAC CLI needs the Power Platform environment GUID. This function
+ * runs `pac env list` and matches by org URL to find the correct GUID.
+ *
+ * If the provided ID already works as a PAC environment GUID, returns it as-is.
+ */
+export async function resolveEnvironmentId(envIdOrOrgId: string): Promise<string> {
+  // Quick check: run pac env list and look for a match
+  const result = await runPac(["env", "list"], { timeout: 30_000 });
+  if (!result.success) {
+    log(`[PAC] env list failed, using provided ID as-is: ${envIdOrOrgId}`);
+    return envIdOrOrgId;
+  }
+
+  // If the provided ID is already a valid environment GUID in the list, use it
+  if (result.stdout.includes(envIdOrOrgId)) {
+    log(`[PAC] Environment ID ${envIdOrOrgId} found directly in env list`);
+    return envIdOrOrgId;
+  }
+
+  // Try matching by Dataverse org URL containing the org ID
+  // pac env list output has columns: Index, Active, Display Name, Environment ID, URL, ...
+  // The URL column contains the Dataverse org URL like https://orgXXXXXXXX.crm.dynamics.com/
+  const lines = result.stdout.split(/\r?\n/);
+  for (const line of lines) {
+    if (line.toLowerCase().includes(envIdOrOrgId.toLowerCase().replace(/-/g, ""))) {
+      // Found a line matching the org ID — extract the environment GUID
+      const guidMatch = line.match(/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i);
+      if (guidMatch) {
+        const resolved = guidMatch[1]!;
+        if (resolved !== envIdOrOrgId) {
+          log(`[PAC] Resolved Dataverse org ID ${envIdOrOrgId} → environment GUID ${resolved}`);
+          return resolved;
+        }
+      }
+    }
+  }
+
+  // Fallback: try matching org URL pattern (orgXXXXXXXX)
+  // The Dataverse org ID is often embedded in the URL as org{id-without-dashes}
+  const orgIdNoDashes = envIdOrOrgId.replace(/-/g, "");
+  for (const line of lines) {
+    if (line.includes(`org${orgIdNoDashes}`)) {
+      const guidMatch = line.match(/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i);
+      if (guidMatch && guidMatch[1] !== envIdOrOrgId) {
+        log(`[PAC] Resolved via org URL pattern org${orgIdNoDashes} → ${guidMatch[1]}`);
+        return guidMatch[1]!;
+      }
+    }
+  }
+
+  log(`[PAC] Could not resolve ${envIdOrOrgId} from env list, using as-is`);
+  return envIdOrOrgId;
 }

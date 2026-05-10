@@ -1,5 +1,5 @@
 mcs.metadata:
-  componentName: AgentFactory
+  componentName: Agent Factory
 kind: AdaptiveDialog
 beginDialog:
   kind: OnRecognizedIntent
@@ -17,269 +17,220 @@ beginDialog:
       - Build an agent from my connectors
 
   actions:
-    # Step 1: Load agent context (deployed connectors + any research decisions)
+    # ── Step 1: Get session context to find environment ID ──
+
     - kind: BeginDialog
-      id: beginDialog_getAgentContext
-      dialog: copilots_header_91a5e.action.GCFRESTConnector-GetAgentContext
+      id: beginDialog_sessionContext
+      dialog: copilots_header_91a5e.action.GCFRESTConnector-Getsessioncontext
       output:
         binding:
-          body: Topic.agentContextResponse
+          environmentId: Topic.environmentId
+          hasDesignContext: Topic.hasDesignContext
+          baseName: Topic.baseName
 
-    - kind: SetVariable
-      id: setVar_deployedConnectors
-      variable: Topic.deployedConnectors
-      value: =Topic.agentContextResponse.deployedConnectors
+    # ── Step 2: Guard — require a design context (means research was done) ──
 
-    - kind: SetVariable
-      id: setVar_agentCtx
-      variable: Topic.agentCtx
-      value: =Topic.agentContextResponse.agentContext
-
-    # Step 2: Guard — require deployed connectors
     - kind: ConditionGroup
-      id: condGroup_checkConnectors
+      id: condGroup_checkContext
       conditions:
-        - id: cond_noConnectors
-          condition: =CountRows(Topic.deployedConnectors) = 0
+        - id: cond_noContext
+          condition: =!Topic.hasDesignContext
           actions:
             - kind: SendActivity
-              id: sendActivity_noConnectors
-              activity: |
-                ⚠️ **No deployed connectors found.**
+              id: sendActivity_noContext
+              activity: |-
+                ⚠️ **No design context found.**
 
                 You need to deploy at least one custom connector before creating an agent.
-                Use the **Connector Pipeline** (say "Build connectors") to deploy connectors first,
-                then come back here to create an agent that uses them.
+                Use the **Connector Pipeline** (say "Build connectors") to deploy connectors first, then come back here.
             - kind: EndDialog
-              id: endDialog_noConnectors
+              id: endDialog_noContext
 
-    # Step 3: Load MCP server catalog
-    - kind: BeginDialog
-      id: beginDialog_getMcpServers
-      dialog: copilots_header_91a5e.action.GCFRESTConnector-ListMCPServers
+    # ── Step 3: Display Agent Composition Card ──
+
+    - kind: AdaptiveCardPrompt
+      id: adaptiveCard_agentComposition
+      card: |-
+        ={
+          type: "AdaptiveCard",
+          '$schema': "https://adaptivecards.io/schemas/adaptive-card.json",
+          version: "1.5",
+          body: [
+            {
+              type: "TextBlock",
+              text: "🏭 Agent Factory",
+              weight: "Bolder",
+              size: "Large",
+              wrap: true
+            },
+            {
+              type: "TextBlock",
+              text: "Create a new Copilot Studio agent using your deployed connectors.",
+              wrap: true
+            },
+            {
+              type: "TextBlock",
+              text: "Agent Name",
+              weight: "Bolder",
+              spacing: "Medium"
+            },
+            {
+              type: "Input.Text",
+              id: "agentName",
+              placeholder: "Enter agent name",
+              value: Coalesce(Topic.baseName, "My Custom Agent")
+            },
+            {
+              type: "TextBlock",
+              text: "Agent Purpose",
+              weight: "Bolder"
+            },
+            {
+              type: "Input.Text",
+              id: "agentPurpose",
+              placeholder: "Describe what this agent should do",
+              isMultiline: true
+            },
+            {
+              type: "TextBlock",
+              text: "📦 Deployed Connectors",
+              weight: "Bolder",
+              spacing: "Large"
+            },
+            {
+              type: "TextBlock",
+              text: "All connectors deployed in this session will be automatically included as tools.",
+              wrap: true,
+              color: "Good"
+            },
+            {
+              type: "TextBlock",
+              text: "🔌 Knowledge Sources",
+              weight: "Bolder",
+              spacing: "Large"
+            },
+            {
+              type: "TextBlock",
+              text: "Add SharePoint sites or web URLs as knowledge sources for the agent.",
+              wrap: true,
+              size: "Small",
+              isSubtle: true
+            },
+            {
+              type: "Input.Text",
+              id: "sharepointUrl1",
+              placeholder: "https://tenant.sharepoint.com/sites/..."
+            },
+            {
+              type: "Input.Text",
+              id: "sharepointUrl2",
+              placeholder: "Additional SharePoint URL (optional)"
+            },
+            {
+              type: "Input.Text",
+              id: "webUrl1",
+              placeholder: "https://docs.microsoft.com/... (optional web URL)"
+            },
+            {
+              type: "TextBlock",
+              text: "🤖 MCP Servers (optional)",
+              weight: "Bolder",
+              spacing: "Large"
+            },
+            {
+              type: "TextBlock",
+              text: "Select Microsoft MCP servers to add as tools.",
+              wrap: true,
+              size: "Small",
+              isSubtle: true
+            },
+            {
+              type: "Input.Toggle",
+              id: "mcp_mslearn",
+              title: "Microsoft Learn Docs MCP",
+              value: "false"
+            },
+            {
+              type: "Input.Toggle",
+              id: "mcp_azure",
+              title: "Azure MCP Server",
+              value: "false"
+            },
+            {
+              type: "Input.Toggle",
+              id: "mcp_dataverse",
+              title: "Microsoft Dataverse MCP",
+              value: "false"
+            },
+            {
+              type: "Input.Toggle",
+              id: "mcp_m365",
+              title: "Microsoft 365 MCP",
+              value: "false"
+            },
+            {
+              type: "Input.Toggle",
+              id: "mcp_playwright",
+              title: "Playwright MCP (Browser Automation)",
+              value: "false"
+            },
+            {
+              type: "TextBlock",
+              text: "⚙️ Additional Options",
+              weight: "Bolder",
+              spacing: "Large"
+            },
+            {
+              type: "Input.Toggle",
+              id: "includeCua",
+              title: "Include Computer Use Agent capability",
+              value: "false"
+            }
+          ],
+          actions: [
+            {
+              type: "Action.Submit",
+              title: "🚀 Create Agent"
+            }
+          ]
+        }
       output:
         binding:
-          body: Topic.mcpServersResponse
+          actionSubmitId: Topic.cardActionId
+          agentName: Topic.agentName
+          agentPurpose: Topic.agentPurpose
+          sharepointUrl1: Topic.sharepointUrl1
+          sharepointUrl2: Topic.sharepointUrl2
+          webUrl1: Topic.webUrl1
+          mcp_mslearn: Topic.mcpMslearn
+          mcp_azure: Topic.mcpAzure
+          mcp_dataverse: Topic.mcpDataverse
+          mcp_m365: Topic.mcpM365
+          mcp_playwright: Topic.mcpPlaywright
+          includeCua: Topic.includeCua
 
-    # Step 4: Build summary of deployed connectors for display
-    - kind: SetVariable
-      id: setVar_connectorSummary
-      variable: Topic.connectorSummary
-      value: =Concat(Topic.deployedConnectors, displayName & " (" & Coalesce(Text(CountRows(operationIds)), "?") & " ops)", ", ")
+      outputType:
+        properties:
+          actionSubmitId: String
+          agentName: String
+          agentPurpose: String
+          sharepointUrl1: String
+          sharepointUrl2: String
+          webUrl1: String
+          mcp_mslearn: String
+          mcp_azure: String
+          mcp_dataverse: String
+          mcp_m365: String
+          mcp_playwright: String
+          includeCua: String
 
-    # Step 5: Set defaults from agent context (if research was done)
-    - kind: SetVariable
-      id: setVar_defaultName
-      variable: Topic.defaultAgentName
-      value: =Coalesce(Topic.agentCtx.agentName, "My Custom Agent")
+    # ── Step 4: Validate required fields ──
 
-    - kind: SetVariable
-      id: setVar_defaultPurpose
-      variable: Topic.defaultAgentPurpose
-      value: =Coalesce(Topic.agentCtx.agentPurpose, "")
-
-    # Step 6: Display Agent Composition Card
-    - kind: Question
-      id: question_agentCard
-      interruptionPolicy:
-        allowInterruption: false
-      variable: Topic.cardResponse
-      prompt: ""
-      entity:
-        kind: EmbeddedEntity
-        definition:
-          kind: ClosedListEntity
-          smartMatchingEnabled: false
-          items: []
-      activity:
-        attachments:
-          - kind: AdaptiveCardTemplate
-            cardContent: |
-              {
-                "type": "AdaptiveCard",
-                "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
-                "version": "1.5",
-                "body": [
-                  {
-                    "type": "TextBlock",
-                    "text": "🏭 Agent Factory",
-                    "weight": "Bolder",
-                    "size": "Large"
-                  },
-                  {
-                    "type": "TextBlock",
-                    "text": "Create a new Copilot Studio agent using your deployed connectors.",
-                    "wrap": true
-                  },
-                  {
-                    "type": "TextBlock",
-                    "text": "Agent Name",
-                    "weight": "Bolder",
-                    "spacing": "Medium"
-                  },
-                  {
-                    "type": "Input.Text",
-                    "id": "agentName",
-                    "placeholder": "Enter agent name",
-                    "value": "${Topic.defaultAgentName}"
-                  },
-                  {
-                    "type": "TextBlock",
-                    "text": "Agent Purpose",
-                    "weight": "Bolder"
-                  },
-                  {
-                    "type": "Input.Text",
-                    "id": "agentPurpose",
-                    "placeholder": "Describe what this agent should do",
-                    "value": "${Topic.defaultAgentPurpose}",
-                    "isMultiline": true
-                  },
-                  {
-                    "type": "TextBlock",
-                    "text": "📦 Deployed Connectors (included automatically)",
-                    "weight": "Bolder",
-                    "spacing": "Large"
-                  },
-                  {
-                    "type": "TextBlock",
-                    "text": "${Topic.connectorSummary}",
-                    "wrap": true,
-                    "color": "Good"
-                  },
-                  {
-                    "type": "TextBlock",
-                    "text": "🔌 Knowledge Sources",
-                    "weight": "Bolder",
-                    "spacing": "Large"
-                  },
-                  {
-                    "type": "TextBlock",
-                    "text": "Add SharePoint sites or web URLs as knowledge sources for the agent.",
-                    "wrap": true,
-                    "size": "Small"
-                  },
-                  {
-                    "type": "Input.Text",
-                    "id": "sharepointUrl1",
-                    "placeholder": "https://tenant.sharepoint.com/sites/..."
-                  },
-                  {
-                    "type": "Input.Text",
-                    "id": "sharepointUrl2",
-                    "placeholder": "Additional SharePoint URL (optional)"
-                  },
-                  {
-                    "type": "Input.Text",
-                    "id": "webUrl1",
-                    "placeholder": "https://docs.microsoft.com/... (optional web URL)"
-                  },
-                  {
-                    "type": "TextBlock",
-                    "text": "🤖 MCP Servers (optional)",
-                    "weight": "Bolder",
-                    "spacing": "Large"
-                  },
-                  {
-                    "type": "TextBlock",
-                    "text": "Select Microsoft MCP servers to add as tools.",
-                    "wrap": true,
-                    "size": "Small"
-                  },
-                  {
-                    "type": "Input.Toggle",
-                    "id": "mcp_ms-learn-docs",
-                    "title": "Microsoft Learn Docs MCP",
-                    "value": "false"
-                  },
-                  {
-                    "type": "Input.Toggle",
-                    "id": "mcp_azure",
-                    "title": "Azure MCP Server",
-                    "value": "false"
-                  },
-                  {
-                    "type": "Input.Toggle",
-                    "id": "mcp_dataverse",
-                    "title": "Microsoft Dataverse MCP",
-                    "value": "false"
-                  },
-                  {
-                    "type": "Input.Toggle",
-                    "id": "mcp_m365",
-                    "title": "Microsoft 365 MCP",
-                    "value": "false"
-                  },
-                  {
-                    "type": "Input.Toggle",
-                    "id": "mcp_playwright",
-                    "title": "Playwright MCP (Browser Automation)",
-                    "value": "false"
-                  },
-                  {
-                    "type": "TextBlock",
-                    "text": "⚙️ Additional Options",
-                    "weight": "Bolder",
-                    "spacing": "Large"
-                  },
-                  {
-                    "type": "Input.Toggle",
-                    "id": "includeCua",
-                    "title": "Include Computer Use Agent capability",
-                    "value": "false"
-                  }
-                ],
-                "actions": [
-                  {
-                    "type": "Action.Submit",
-                    "title": "🚀 Create Agent",
-                    "data": {
-                      "action": "createAgent"
-                    }
-                  }
-                ]
-              }
-
-    # Step 7: Parse card submission
-    - kind: SetVariable
-      id: setVar_agentName
-      variable: Topic.agentName
-      value: =Topic.cardResponse.agentName
-
-    - kind: SetVariable
-      id: setVar_agentPurpose
-      variable: Topic.agentPurpose
-      value: =Topic.cardResponse.agentPurpose
-
-    # Build MCP server IDs array from toggles
-    - kind: SetVariable
-      id: setVar_mcpIds
-      variable: Topic.mcpServerIds
-      value: =Concatenate(If(Topic.cardResponse.mcp_ms-learn-docs = "true", "ms-learn-docs,", ""), If(Topic.cardResponse.mcp_azure = "true", "azure,", ""), If(Topic.cardResponse.mcp_dataverse = "true", "dataverse,", ""), If(Topic.cardResponse.mcp_m365 = "true", "m365,", ""), If(Topic.cardResponse.mcp_playwright = "true", "playwright,", ""))
-
-    # Build knowledge sources JSON
-    - kind: SetVariable
-      id: setVar_knowledgeSources
-      variable: Topic.knowledgeSourcesJson
-      value: =Concatenate("[", If(Len(Topic.cardResponse.sharepointUrl1) > 0, Concatenate("{\"type\":\"sharepoint\",\"url\":\"", Topic.cardResponse.sharepointUrl1, "\"},"), ""), If(Len(Topic.cardResponse.sharepointUrl2) > 0, Concatenate("{\"type\":\"sharepoint\",\"url\":\"", Topic.cardResponse.sharepointUrl2, "\"},"), ""), If(Len(Topic.cardResponse.webUrl1) > 0, Concatenate("{\"type\":\"url\",\"url\":\"", Topic.cardResponse.webUrl1, "\"},"), ""), "]")
-
-    - kind: SetVariable
-      id: setVar_includeCua
-      variable: Topic.includeCua
-      value: =Topic.cardResponse.includeCua = "true"
-
-    # Step 8: Get environment ID from design context
-    - kind: SetVariable
-      id: setVar_envId
-      variable: Topic.environmentId
-      value: =Coalesce(Topic.agentContextResponse.designContext.environmentId, "")
-
-    # Step 9: Validate required fields
     - kind: ConditionGroup
-      id: condGroup_validateFields
+      id: condGroup_validateName
       conditions:
         - id: cond_missingName
-          condition: =Len(Topic.agentName) = 0
+          condition: =IsBlank(Topic.agentName)
           actions:
             - kind: SendActivity
               id: sendActivity_missingName
@@ -291,7 +242,7 @@ beginDialog:
       id: condGroup_validatePurpose
       conditions:
         - id: cond_missingPurpose
-          condition: =Len(Topic.agentPurpose) = 0
+          condition: =IsBlank(Topic.agentPurpose)
           actions:
             - kind: SendActivity
               id: sendActivity_missingPurpose
@@ -299,18 +250,84 @@ beginDialog:
             - kind: EndDialog
               id: endDialog_missingPurpose
 
-    # Step 10: Confirmation
+    # ── Step 5: Build MCP server IDs string ──
+
+    - kind: SetVariable
+      id: setVar_mcpIds
+      variable: Topic.mcpServerIds
+      value: |-
+        =Concatenate(
+          If(Or(Topic.mcpMslearn = "true", Topic.mcpMslearn = "True"), "ms-learn-docs,", ""),
+          If(Or(Topic.mcpAzure = "true", Topic.mcpAzure = "True"), "azure,", ""),
+          If(Or(Topic.mcpDataverse = "true", Topic.mcpDataverse = "True"), "dataverse,", ""),
+          If(Or(Topic.mcpM365 = "true", Topic.mcpM365 = "True"), "m365,", ""),
+          If(Or(Topic.mcpPlaywright = "true", Topic.mcpPlaywright = "True"), "playwright,", "")
+        )
+
+    # ── Step 6: Build knowledge sources JSON ──
+
+    - kind: SetVariable
+      id: setVar_knowledgeSources
+      variable: Topic.knowledgeSourcesJson
+      value: |-
+        =Concatenate(
+          "[",
+          If(!IsBlank(Topic.sharepointUrl1),
+            Concatenate("{""type"":""sharepoint"",""url"":""", Topic.sharepointUrl1, """},"),
+            ""
+          ),
+          If(!IsBlank(Topic.sharepointUrl2),
+            Concatenate("{""type"":""sharepoint"",""url"":""", Topic.sharepointUrl2, """},"),
+            ""
+          ),
+          If(!IsBlank(Topic.webUrl1),
+            Concatenate("{""type"":""url"",""url"":""", Topic.webUrl1, """},"),
+            ""
+          ),
+          "]"
+        )
+
+    # ── Step 7: Confirmation ──
+
     - kind: SendActivity
       id: sendActivity_generating
-      activity: |
-        🏭 **Generating agent: ${Topic.agentName}**
+      activity:
+        attachments:
+          - kind: AdaptiveCardTemplate
+            cardContent: |-
+              ={
+                type: "AdaptiveCard",
+                '$schema': "https://adaptivecards.io/schemas/adaptive-card.json",
+                version: "1.5",
+                body: [
+                  {
+                    type: "TextBlock",
+                    text: "🏭 Generating Agent",
+                    weight: "Bolder",
+                    size: "Large",
+                    wrap: true
+                  },
+                  {
+                    type: "FactSet",
+                    facts: [
+                      { title: "Name", value: Topic.agentName },
+                      { title: "Purpose", value: Topic.agentPurpose },
+                      { title: "Knowledge Sources", value: If(IsBlank(Topic.knowledgeSourcesJson) Or Topic.knowledgeSourcesJson = "[]", "None", Topic.knowledgeSourcesJson) },
+                      { title: "MCP Servers", value: If(IsBlank(Topic.mcpServerIds), "None", Topic.mcpServerIds) },
+                      { title: "CUA", value: If(Topic.includeCua = "true", "Yes", "No") }
+                    ]
+                  },
+                  {
+                    type: "TextBlock",
+                    text: "⏳ This may take 30-60 seconds...",
+                    wrap: true,
+                    spacing: "Medium"
+                  }
+                ]
+              }
 
-        Purpose: ${Topic.agentPurpose}
-        Connectors: ${Topic.connectorSummary}
+    # ── Step 8: Call generate endpoint ──
 
-        This may take 30-60 seconds...
-
-    # Step 11: Call generate endpoint
     - kind: BeginDialog
       id: beginDialog_generateAgent
       input:
@@ -318,19 +335,69 @@ beginDialog:
           agentName: =Topic.agentName
           agentPurpose: =Topic.agentPurpose
           environmentId: =Topic.environmentId
-          mcpServerIds: =Topic.mcpServerIds
-          knowledgeSourcesJson: =Topic.knowledgeSourcesJson
-          includeCua: =Text(Topic.includeCua)
+          solutionName: ="GCFApps"
+          mcpServerIds: =If(IsBlank(Topic.mcpServerIds), "none", Topic.mcpServerIds)
+          knowledgeSourcesJson: =If(IsBlank(Topic.knowledgeSourcesJson), "[]", Topic.knowledgeSourcesJson)
+          includeCua: =If(IsBlank(Topic.includeCua), "false", Topic.includeCua)
+          instructionsOverride: ="auto"
       dialog: copilots_header_91a5e.action.GCFRESTConnector-GenerateAgent
       output:
         binding:
           jobId: Topic.agentJobId
           status: Topic.agentJobStatus
 
-    # Step 12: Poll for completion
+    # ── Step 9: Poll for completion (server long-polls ~30s) ──
+
+    - kind: SendActivity
+      id: sendActivity_polling
+      activity: ⏳ Agent generation in progress, polling for status...
+
     - kind: BeginDialog
-      id: beginDialog_pollAgent
+      id: beginDialog_pollStatus
       input:
         binding:
           jobId: =Topic.agentJobId
-      dialog: copilots_header_91a5e.topic.AgentPollLoop
+      dialog: copilots_header_91a5e.action.GCFRESTConnector-AgentGenerateStatus
+      output:
+        binding:
+          status: Topic.pollStatus
+          result: Topic.pollResult
+          error: Topic.pollError
+
+    # ── Step 10: Show result ──
+
+    - kind: ConditionGroup
+      id: condGroup_checkResult
+      conditions:
+        - id: cond_success
+          condition: =Topic.pollStatus = "success"
+          actions:
+            - kind: SendActivity
+              id: sendActivity_success
+              activity: |
+                ✅ **Agent created successfully!**
+
+                {Topic.pollResult}
+
+                **Next steps:**
+                1. Open the agent in Copilot Studio
+                2. Configure any connections that need authentication
+                3. Publish the agent
+                4. Test with sample prompts
+
+        - id: cond_failed
+          condition: =Topic.pollStatus = "failed"
+          actions:
+            - kind: SendActivity
+              id: sendActivity_failed
+              activity: |
+                ❌ **Agent generation failed.**
+
+                Error: {Topic.pollError}
+
+                Please check the server logs and try again.
+
+      elseActions:
+        - kind: SendActivity
+          id: sendActivity_stillRunning
+          activity: ⏳ Agent is still generating. Please check back shortly or ask "Check agent generation status".

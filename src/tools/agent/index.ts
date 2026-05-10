@@ -5,7 +5,7 @@
 export { listMcpServers, getMcpServer, getStableMcpServers, resolveMcpServers } from "./mcpCatalog";
 export { generateInstructions, generateStarterPrompts } from "./instructionsGenerator";
 export { patchTemplate, cleanupTemplateDir, sanitizeSchemaName, buildSchemaName } from "./templatePatcher";
-export { runPac, isPacAvailable, getPacAuthInfo, pacCopilotCreate, getPublisherPrefix } from "./pacRunner";
+export { runPac, isPacAvailable, getPacAuthInfo, pacCopilotCreate, getPublisherPrefix, resolveEnvironmentId } from "./pacRunner";
 export { generateAgent } from "./agentGenerator";
 
 export type {

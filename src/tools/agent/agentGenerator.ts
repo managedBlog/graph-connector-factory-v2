@@ -22,7 +22,7 @@ import type {
 import { resolveMcpServers } from "./mcpCatalog";
 import { generateInstructions, generateStarterPrompts } from "./instructionsGenerator";
 import { patchTemplate, cleanupTemplateDir, buildSchemaName } from "./templatePatcher";
-import { isPacAvailable, pacCopilotCreate, getPublisherPrefix } from "./pacRunner";
+import { isPacAvailable, pacCopilotCreate, getPublisherPrefix, resolveEnvironmentId } from "./pacRunner";
 
 /**
  * Generate and deploy a Copilot Studio agent.
@@ -93,8 +93,12 @@ export async function generateAgent(
     knowledgeSources: input.knowledgeSources ?? [],
   });
 
-  // 5. Get publisher prefix for the target solution
-  const publisherPrefix = await getPublisherPrefix(input.environmentId, input.solutionName);
+  // 5. Resolve environment ID (Dataverse org ID → PAC environment GUID)
+  const resolvedEnvId = await resolveEnvironmentId(input.environmentId);
+  log(`[AgentGenerator] Environment: ${input.environmentId} → ${resolvedEnvId}`);
+
+  // 6. Get publisher prefix for the target solution
+  const publisherPrefix = await getPublisherPrefix(resolvedEnvId, input.solutionName);
   const agentSchemaName = buildSchemaName(publisherPrefix, input.agentName);
   log(`[AgentGenerator] Schema name: ${agentSchemaName}`);
 
@@ -131,7 +135,7 @@ export async function generateAgent(
       schemaName: agentSchemaName,
       templateFileName: patchedTemplate.yamlPath,
       solution: input.solutionName,
-      environmentId: input.environmentId,
+      environmentId: resolvedEnvId,
     });
 
     // Clean up temp files
@@ -153,7 +157,7 @@ export async function generateAgent(
     // Derive agent URL if not in output
     const agentUrl = result.agentUrl ??
       (result.agentId
-        ? `https://web.powerva.microsoft.com/environments/${input.environmentId}/bots/${result.agentId}`
+        ? `https://web.powerva.microsoft.com/environments/${resolvedEnvId}/bots/${result.agentId}`
         : undefined);
 
     log(`[AgentGenerator] Agent created successfully: ${result.agentId}`);

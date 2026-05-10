@@ -3,7 +3,7 @@
   "info": {
     "title": "GCF REST Connector",
     "description": "Unified custom connector for Graph Connector Factory. Exposes research operations (list Graph API operations, generate connectors, manage session context) and deployment operations (deploy connectors, check names, list environments). All operations require OAuth authentication.",
-    "version": "1.0",
+    "version": "1.1",
     "contact": {
       "name": "Graph Connector Factory",
       "url": "https://github.com/managedBlog/graph-connector-factory-v2"
@@ -485,15 +485,33 @@
                   "items": {
                     "type": "object",
                     "properties": {
-                      "id": { "type": "string", "description": "Catalog ID." },
-                      "displayName": { "type": "string", "description": "Server name." },
-                      "description": { "type": "string", "description": "What this server does." },
-                      "category": { "type": "string", "description": "Category." },
-                      "stable": { "type": "boolean", "description": "Connector name is globally stable." }
+                      "id": {
+                        "type": "string",
+                        "description": "Catalog ID."
+                      },
+                      "displayName": {
+                        "type": "string",
+                        "description": "Server name."
+                      },
+                      "description": {
+                        "type": "string",
+                        "description": "What this server does."
+                      },
+                      "category": {
+                        "type": "string",
+                        "description": "Category."
+                      },
+                      "stable": {
+                        "type": "boolean",
+                        "description": "Connector name is globally stable."
+                      }
                     }
                   }
                 },
-                "count": { "type": "integer", "x-ms-summary": "Count" }
+                "count": {
+                  "type": "integer",
+                  "x-ms-summary": "Count"
+                }
               }
             }
           }
@@ -513,23 +531,44 @@
             "schema": {
               "type": "object",
               "properties": {
-                "agentContext": { "type": "object", "x-ms-summary": "Agent Context" },
+                "agentContext": {
+                  "type": "object",
+                  "x-ms-summary": "Agent Context"
+                },
                 "deployedConnectors": {
                   "type": "array",
                   "x-ms-summary": "Deployed Connectors",
                   "items": {
                     "type": "object",
                     "properties": {
-                      "connectorId": { "type": "string" },
-                      "apiName": { "type": "string" },
-                      "displayName": { "type": "string" },
-                      "baseName": { "type": "string" },
-                      "environmentId": { "type": "string" },
-                      "operationIds": { "type": "array", "items": { "type": "string" } }
+                      "connectorId": {
+                        "type": "string"
+                      },
+                      "apiName": {
+                        "type": "string"
+                      },
+                      "displayName": {
+                        "type": "string"
+                      },
+                      "baseName": {
+                        "type": "string"
+                      },
+                      "environmentId": {
+                        "type": "string"
+                      },
+                      "operationIds": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      }
                     }
                   }
                 },
-                "designContext": { "type": "object", "x-ms-summary": "Design Context" }
+                "designContext": {
+                  "type": "object",
+                  "x-ms-summary": "Design Context"
+                }
               }
             }
           }
@@ -550,16 +589,52 @@
             "required": true,
             "schema": {
               "type": "object",
-              "required": ["agentName", "agentPurpose", "environmentId"],
+              "required": [
+                "agentName",
+                "agentPurpose",
+                "environmentId"
+              ],
               "properties": {
-                "agentName": { "type": "string", "description": "Display name for the new agent.", "x-ms-summary": "Agent Name" },
-                "agentPurpose": { "type": "string", "description": "What the agent should do.", "x-ms-summary": "Agent Purpose" },
-                "environmentId": { "type": "string", "description": "Power Platform environment ID.", "x-ms-summary": "Environment ID" },
-                "solutionName": { "type": "string", "description": "Target solution (default: GCFApps).", "x-ms-summary": "Solution Name" },
-                "mcpServerIds": { "type": "string", "description": "Comma-separated MCP server catalog IDs.", "x-ms-summary": "MCP Server IDs" },
-                "knowledgeSourcesJson": { "type": "string", "description": "JSON array of knowledge sources.", "x-ms-summary": "Knowledge Sources JSON" },
-                "includeCua": { "type": "string", "description": "Include CUA (true/false).", "x-ms-summary": "Include CUA" },
-                "instructionsOverride": { "type": "string", "description": "Custom instructions text.", "x-ms-summary": "Instructions Override" }
+                "agentName": {
+                  "type": "string",
+                  "description": "Display name for the new agent.",
+                  "x-ms-summary": "Agent Name"
+                },
+                "agentPurpose": {
+                  "type": "string",
+                  "description": "What the agent should do.",
+                  "x-ms-summary": "Agent Purpose"
+                },
+                "environmentId": {
+                  "type": "string",
+                  "description": "Power Platform environment ID.",
+                  "x-ms-summary": "Environment ID"
+                },
+                "solutionName": {
+                  "type": "string",
+                  "description": "Target solution (default: GCFApps).",
+                  "x-ms-summary": "Solution Name"
+                },
+                "mcpServerIds": {
+                  "type": "string",
+                  "description": "Comma-separated MCP server catalog IDs.",
+                  "x-ms-summary": "MCP Server IDs"
+                },
+                "knowledgeSourcesJson": {
+                  "type": "string",
+                  "description": "JSON array of knowledge sources.",
+                  "x-ms-summary": "Knowledge Sources JSON"
+                },
+                "includeCua": {
+                  "type": "string",
+                  "description": "Include CUA (true/false).",
+                  "x-ms-summary": "Include CUA"
+                },
+                "instructionsOverride": {
+                  "type": "string",
+                  "description": "Custom instructions text.",
+                  "x-ms-summary": "Instructions Override"
+                }
               }
             }
           }
@@ -570,9 +645,21 @@
             "schema": {
               "type": "object",
               "properties": {
-                "jobId": { "type": "string", "description": "Job ID for polling.", "x-ms-summary": "Job ID" },
-                "status": { "type": "string", "description": "Initial status.", "x-ms-summary": "Status" },
-                "retryAfter": { "type": "integer", "description": "Seconds before first poll.", "x-ms-summary": "Retry After" }
+                "jobId": {
+                  "type": "string",
+                  "description": "Job ID for polling.",
+                  "x-ms-summary": "Job ID"
+                },
+                "status": {
+                  "type": "string",
+                  "description": "Initial status.",
+                  "x-ms-summary": "Status"
+                },
+                "retryAfter": {
+                  "type": "integer",
+                  "description": "Seconds before first poll.",
+                  "x-ms-summary": "Retry After"
+                }
               }
             }
           }
@@ -602,10 +689,22 @@
             "schema": {
               "type": "object",
               "properties": {
-                "jobId": { "type": "string", "x-ms-summary": "Job ID" },
-                "status": { "type": "string", "x-ms-summary": "Status" },
-                "result": { "type": "object", "x-ms-summary": "Result" },
-                "error": { "type": "string", "x-ms-summary": "Error" }
+                "jobId": {
+                  "type": "string",
+                  "x-ms-summary": "Job ID"
+                },
+                "status": {
+                  "type": "string",
+                  "x-ms-summary": "Status"
+                },
+                "result": {
+                  "type": "object",
+                  "x-ms-summary": "Result"
+                },
+                "error": {
+                  "type": "string",
+                  "x-ms-summary": "Error"
+                }
               }
             }
           }
