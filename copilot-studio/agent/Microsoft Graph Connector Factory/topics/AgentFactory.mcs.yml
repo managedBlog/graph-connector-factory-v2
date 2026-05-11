@@ -1,3 +1,5 @@
+mcs.metadata:
+  componentName: AgentFactory
 kind: AdaptiveDialog
 beginDialog:
   kind: OnRecognizedIntent
@@ -26,25 +28,13 @@ beginDialog:
           hasDesignContext: Topic.hasDesignContext
           baseName: Topic.baseName
 
-    # ── Step 1b: Get agent context (deployed connectors + design context) ──
-
-    - kind: BeginDialog
-      id: beginDialog_agentContext
-      dialog: copilots_header_91a5e.action.GCFRESTConnector-GetAgentContext
-      output:
-        binding:
-          agentName: Topic.designAgentName
-          agentPurpose: Topic.designAgentPurpose
-          deployedConnectorCount: Topic.deployedConnectorCount
-          hasDeployedConnectors: Topic.hasDeployedConnectors
-
     # ── Step 2: Guard — require deployed connectors ──
 
     - kind: ConditionGroup
       id: condGroup_checkContext
       conditions:
         - id: cond_noContext
-          condition: =Topic.hasDeployedConnectors <> "true"
+          condition: =!Topic.hasDesignContext
           actions:
             - kind: SendActivity
               id: sendActivity_noContext
@@ -88,7 +78,7 @@ beginDialog:
               type: "Input.Text",
               id: "agentName",
               placeholder: "Enter agent name",
-              value: Coalesce(Topic.designAgentName, Topic.baseName, "My Custom Agent")
+              value: Coalesce(Topic.baseName, "My Custom Agent")
             },
             {
               type: "TextBlock",
@@ -100,11 +90,11 @@ beginDialog:
               id: "agentPurpose",
               placeholder: "Describe what this agent should do",
               isMultiline: true,
-              value: Coalesce(Topic.designAgentPurpose, "")
+              value: ""
             },
             {
               type: "TextBlock",
-              text: Concatenate("📦 Deployed Connectors (", Coalesce(Topic.deployedConnectorCount, "0"), " in session)"),
+              text: "📦 Deployed Connectors",
               weight: "Bolder",
               spacing: "Large"
             },
@@ -288,21 +278,21 @@ beginDialog:
             sp3: If(!IsBlank(Topic.sharepointUrl3), Concatenate("{""type"":""sharepoint"",""url"":""", Topic.sharepointUrl3, """,""displayName"":""SharePoint Source 3"",""description"":""SharePoint knowledge source""}"), "")
           },
           Concatenate(
-          "[",
+            "[",
             Concat(
               Filter(
                 Table(
                   {v: sp1},
                   {v: sp2},
                   {v: sp3}
-          ),
+                ),
                 !IsBlank(v)
-          ),
+              ),
               v,
               ","
-          ),
-          "]"
-        )
+            ),
+            "]"
+          )
         )
 
     # ── Step 7: Confirmation card ──
@@ -330,7 +320,7 @@ beginDialog:
                     facts: [
                       { title: "Name", value: Topic.agentName },
                       { title: "Purpose", value: Topic.agentPurpose },
-                      { title: "Connectors", value: Concatenate(Coalesce(Topic.deployedConnectorCount, "0"), " deployed connector(s)") },
+                      { title: "Connectors", value: "All deployed connectors included" },
                       { title: "Knowledge Sources", value: If(Or(IsBlank(Topic.knowledgeSourcesJson), Topic.knowledgeSourcesJson = "[]"), "None", Topic.knowledgeSourcesJson) },
                       { title: "MCP Servers", value: If(IsBlank(Topic.mcpServerIds), "None", Topic.mcpServerIds) },
                       { title: "CUA", value: If(Or(Topic.includeCua = "true", Topic.includeCua = "True"), "Yes", "No") }

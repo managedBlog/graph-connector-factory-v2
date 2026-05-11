@@ -421,7 +421,7 @@ export function patchTemplate(config: TemplatePatchConfig): PatchedTemplate {
 
   const yaml = `kind: BotDefinition
 entity:
-  accessControlPolicy: GroupMembership
+  accessControlPolicy: Any
   authenticationMode: Integrated
   authenticationTrigger: Always
   configuration:
