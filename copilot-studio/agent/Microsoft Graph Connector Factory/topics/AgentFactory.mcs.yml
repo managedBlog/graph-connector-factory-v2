@@ -1,5 +1,3 @@
-mcs.metadata:
-  componentName: Agent Factory
 kind: AdaptiveDialog
 beginDialog:
   kind: OnRecognizedIntent
@@ -35,24 +33,10 @@ beginDialog:
       dialog: copilots_header_91a5e.action.GCFRESTConnector-GetAgentContext
       output:
         binding:
-          body: Topic.agentContextBody
-
-    # ── Step 1c: Extract design fields from agent context ──
-
-    - kind: SetVariable
-      id: setVar_designAgentName
-      variable: Topic.designAgentName
-      value: =Text(Topic.agentContextBody.designContext.agentName)
-
-    - kind: SetVariable
-      id: setVar_designAgentPurpose
-      variable: Topic.designAgentPurpose
-      value: =Text(Topic.agentContextBody.designContext.agentPurpose)
-
-    - kind: SetVariable
-      id: setVar_deployedConnectorCount
-      variable: Topic.deployedConnectorCount
-      value: =Text(CountRows(Table(Topic.agentContextBody.deployedConnectors)))
+          agentName: Topic.designAgentName
+          agentPurpose: Topic.designAgentPurpose
+          deployedConnectorCount: Topic.deployedConnectorCount
+          hasDeployedConnectors: Topic.hasDeployedConnectors
 
     # ── Step 2: Guard — require deployed connectors ──
 
@@ -60,7 +44,7 @@ beginDialog:
       id: condGroup_checkContext
       conditions:
         - id: cond_noContext
-          condition: =!Topic.hasDesignContext
+          condition: =Topic.hasDeployedConnectors <> "true"
           actions:
             - kind: SendActivity
               id: sendActivity_noContext
@@ -304,21 +288,21 @@ beginDialog:
             sp3: If(!IsBlank(Topic.sharepointUrl3), Concatenate("{""type"":""sharepoint"",""url"":""", Topic.sharepointUrl3, """,""displayName"":""SharePoint Source 3"",""description"":""SharePoint knowledge source""}"), "")
           },
           Concatenate(
-            "[",
+          "[",
             Concat(
               Filter(
                 Table(
                   {v: sp1},
                   {v: sp2},
                   {v: sp3}
-                ),
+          ),
                 !IsBlank(v)
-              ),
+          ),
               v,
               ","
-            ),
-            "]"
-          )
+          ),
+          "]"
+        )
         )
 
     # ── Step 7: Confirmation card ──

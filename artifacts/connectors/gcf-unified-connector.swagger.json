@@ -531,43 +531,25 @@
             "schema": {
               "type": "object",
               "properties": {
-                "agentContext": {
-                  "type": "object",
-                  "x-ms-summary": "Agent Context"
+                "agentName": {
+                  "type": "string",
+                  "x-ms-summary": "Agent Name"
                 },
-                "deployedConnectors": {
-                  "type": "array",
-                  "x-ms-summary": "Deployed Connectors",
-                  "items": {
-                    "type": "object",
-                    "properties": {
-                      "connectorId": {
-                        "type": "string"
-                      },
-                      "apiName": {
-                        "type": "string"
-                      },
-                      "displayName": {
-                        "type": "string"
-                      },
-                      "baseName": {
-                        "type": "string"
-                      },
-                      "environmentId": {
-                        "type": "string"
-                      },
-                      "operationIds": {
-                        "type": "array",
-                        "items": {
-                          "type": "string"
-                        }
-                      }
-                    }
-                  }
+                "agentPurpose": {
+                  "type": "string",
+                  "x-ms-summary": "Agent Purpose"
                 },
-                "designContext": {
-                  "type": "object",
-                  "x-ms-summary": "Design Context"
+                "deployedConnectorCount": {
+                  "type": "string",
+                  "x-ms-summary": "Deployed Connector Count"
+                },
+                "hasDeployedConnectors": {
+                  "type": "string",
+                  "x-ms-summary": "Has Deployed Connectors"
+                },
+                "deployedConnectorsJson": {
+                  "type": "string",
+                  "x-ms-summary": "Deployed Connectors JSON"
                 }
               }
             }

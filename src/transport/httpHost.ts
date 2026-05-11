@@ -2203,10 +2203,14 @@ export function startHttpServer(options: HttpHostOptions): void {
       }
       const resolved = resolveContextKey(tracking.key);
       const ctx = resolved?.ctx;
+      const dc = ctx?.designContext as Record<string, unknown> | undefined;
+      const deployed = ctx?.deployResults ?? [];
       res.json({
-        agentContext: ctx?.agentContext ?? null,
-        deployedConnectors: ctx?.deployResults ?? [],
-        designContext: ctx?.designContext ?? null,
+        agentName: dc?.agentName ?? "",
+        agentPurpose: dc?.agentPurpose ?? "",
+        deployedConnectorCount: String(deployed.length),
+        hasDeployedConnectors: deployed.length > 0 ? "true" : "false",
+        deployedConnectorsJson: JSON.stringify(deployed),
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);

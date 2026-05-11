@@ -5,7 +5,15 @@ modelDisplayName: Get Agent Context
 modelDescription: Returns the current agent factory context including deployed connectors, agent design decisions made during research, and design context. Used by the AgentFactory topic to pre-populate the composition card.
 
 outputs:
-  - propertyName: body
+  - propertyName: agentName
+
+  - propertyName: agentPurpose
+
+  - propertyName: deployedConnectorCount
+
+  - propertyName: hasDeployedConnectors
+
+  - propertyName: deployedConnectorsJson
 
 action:
   kind: InvokeConnectorTaskAction
