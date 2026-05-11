@@ -104,9 +104,7 @@ function generateConnectorActionComponent(
         connectionProperties:
           name: ${connRef}
           mode: Invoker
-
         operationId: ${operationId}
-
       outputMode: All
 `;
 }
@@ -140,7 +138,6 @@ function generateMcpActionComponent(
         connectionProperties:
           name: ${connRef}
           mode: Invoker
-
         operationDetails:
           kind: ModelContextProtocolMetadata
           operationId: ${opId}
@@ -175,12 +172,10 @@ function generateCuaActionComponent(prefix: string): string {
         connectionProperties:
           name: ${connRef}
           mode: Invoker
-
         operationId: ComputerOperatorInvokeMcpCua
         instructions: "Perform the task you are asked to do using the computer. Follow instructions carefully and report results."
         model:
           modelNameHint: sonnet4-5
-
         initializeContext:
           enforceHttps: true
           requestForInformationInput:
@@ -421,7 +416,7 @@ export function patchTemplate(config: TemplatePatchConfig): PatchedTemplate {
 
   const yaml = `kind: BotDefinition
 entity:
-  accessControlPolicy: Any
+  accessControlPolicy: GroupMembership
   authenticationMode: Integrated
   authenticationTrigger: Always
   configuration:
