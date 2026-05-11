@@ -17,7 +17,7 @@ beginDialog:
       - Build an agent from my connectors
 
   actions:
-    # ── Step 1: Get session context to find environment ID ──
+    # ── Step 1: Get session context ──
 
     - kind: BeginDialog
       id: beginDialog_sessionContext
@@ -28,7 +28,33 @@ beginDialog:
           hasDesignContext: Topic.hasDesignContext
           baseName: Topic.baseName
 
-    # ── Step 2: Guard — require a design context (means research was done) ──
+    # ── Step 1b: Get agent context (deployed connectors + design context) ──
+
+    - kind: BeginDialog
+      id: beginDialog_agentContext
+      dialog: copilots_header_91a5e.action.GCFRESTConnector-GetAgentContext
+      output:
+        binding:
+          body: Topic.agentContextBody
+
+    # ── Step 1c: Extract design fields from agent context ──
+
+    - kind: SetVariable
+      id: setVar_designAgentName
+      variable: Topic.designAgentName
+      value: =Text(Topic.agentContextBody.designContext.agentName)
+
+    - kind: SetVariable
+      id: setVar_designAgentPurpose
+      variable: Topic.designAgentPurpose
+      value: =Text(Topic.agentContextBody.designContext.agentPurpose)
+
+    - kind: SetVariable
+      id: setVar_deployedConnectorCount
+      variable: Topic.deployedConnectorCount
+      value: =Text(CountRows(Table(Topic.agentContextBody.deployedConnectors)))
+
+    # ── Step 2: Guard — require deployed connectors ──
 
     - kind: ConditionGroup
       id: condGroup_checkContext
@@ -78,7 +104,7 @@ beginDialog:
               type: "Input.Text",
               id: "agentName",
               placeholder: "Enter agent name",
-              value: Coalesce(Topic.baseName, "My Custom Agent")
+              value: Coalesce(Topic.designAgentName, Topic.baseName, "My Custom Agent")
             },
             {
               type: "TextBlock",
@@ -89,11 +115,12 @@ beginDialog:
               type: "Input.Text",
               id: "agentPurpose",
               placeholder: "Describe what this agent should do",
-              isMultiline: true
+              isMultiline: true,
+              value: Coalesce(Topic.designAgentPurpose, "")
             },
             {
               type: "TextBlock",
-              text: "📦 Deployed Connectors",
+              text: Concatenate("📦 Deployed Connectors (", Coalesce(Topic.deployedConnectorCount, "0"), " in session)"),
               weight: "Bolder",
               spacing: "Large"
             },
@@ -105,13 +132,13 @@ beginDialog:
             },
             {
               type: "TextBlock",
-              text: "🔌 Knowledge Sources",
+              text: "🔌 Knowledge Sources (SharePoint)",
               weight: "Bolder",
               spacing: "Large"
             },
             {
               type: "TextBlock",
-              text: "Add SharePoint sites or web URLs as knowledge sources for the agent.",
+              text: "Add SharePoint site URLs as knowledge sources for the agent.",
               wrap: true,
               size: "Small",
               isSubtle: true
@@ -128,8 +155,8 @@ beginDialog:
             },
             {
               type: "Input.Text",
-              id: "webUrl1",
-              placeholder: "https://docs.microsoft.com/... (optional web URL)"
+              id: "sharepointUrl3",
+              placeholder: "Additional SharePoint URL (optional)"
             },
             {
               type: "TextBlock",
@@ -201,7 +228,7 @@ beginDialog:
           agentPurpose: Topic.agentPurpose
           sharepointUrl1: Topic.sharepointUrl1
           sharepointUrl2: Topic.sharepointUrl2
-          webUrl1: Topic.webUrl1
+          sharepointUrl3: Topic.sharepointUrl3
           mcp_mslearn: Topic.mcpMslearn
           mcp_azure: Topic.mcpAzure
           mcp_dataverse: Topic.mcpDataverse
@@ -216,7 +243,7 @@ beginDialog:
           agentPurpose: String
           sharepointUrl1: String
           sharepointUrl2: String
-          webUrl1: String
+          sharepointUrl3: String
           mcp_mslearn: String
           mcp_azure: String
           mcp_dataverse: String
@@ -270,24 +297,31 @@ beginDialog:
       id: setVar_knowledgeSources
       variable: Topic.knowledgeSourcesJson
       value: |-
-        =Concatenate(
-          "[",
-          If(!IsBlank(Topic.sharepointUrl1),
-            Concatenate("{""type"":""sharepoint"",""url"":""", Topic.sharepointUrl1, """},"),
-            ""
-          ),
-          If(!IsBlank(Topic.sharepointUrl2),
-            Concatenate("{""type"":""sharepoint"",""url"":""", Topic.sharepointUrl2, """},"),
-            ""
-          ),
-          If(!IsBlank(Topic.webUrl1),
-            Concatenate("{""type"":""url"",""url"":""", Topic.webUrl1, """},"),
-            ""
-          ),
-          "]"
+        =With(
+          {
+            sp1: If(!IsBlank(Topic.sharepointUrl1), Concatenate("{""type"":""sharepoint"",""url"":""", Topic.sharepointUrl1, """,""displayName"":""SharePoint Source 1"",""description"":""SharePoint knowledge source""}"), ""),
+            sp2: If(!IsBlank(Topic.sharepointUrl2), Concatenate("{""type"":""sharepoint"",""url"":""", Topic.sharepointUrl2, """,""displayName"":""SharePoint Source 2"",""description"":""SharePoint knowledge source""}"), ""),
+            sp3: If(!IsBlank(Topic.sharepointUrl3), Concatenate("{""type"":""sharepoint"",""url"":""", Topic.sharepointUrl3, """,""displayName"":""SharePoint Source 3"",""description"":""SharePoint knowledge source""}"), "")
+          },
+          Concatenate(
+            "[",
+            Concat(
+              Filter(
+                Table(
+                  {v: sp1},
+                  {v: sp2},
+                  {v: sp3}
+                ),
+                !IsBlank(v)
+              ),
+              v,
+              ","
+            ),
+            "]"
+          )
         )
 
-    # ── Step 7: Confirmation ──
+    # ── Step 7: Confirmation card ──
 
     - kind: SendActivity
       id: sendActivity_generating
@@ -312,9 +346,10 @@ beginDialog:
                     facts: [
                       { title: "Name", value: Topic.agentName },
                       { title: "Purpose", value: Topic.agentPurpose },
-                      { title: "Knowledge Sources", value: If(IsBlank(Topic.knowledgeSourcesJson) Or Topic.knowledgeSourcesJson = "[]", "None", Topic.knowledgeSourcesJson) },
+                      { title: "Connectors", value: Concatenate(Coalesce(Topic.deployedConnectorCount, "0"), " deployed connector(s)") },
+                      { title: "Knowledge Sources", value: If(Or(IsBlank(Topic.knowledgeSourcesJson), Topic.knowledgeSourcesJson = "[]"), "None", Topic.knowledgeSourcesJson) },
                       { title: "MCP Servers", value: If(IsBlank(Topic.mcpServerIds), "None", Topic.mcpServerIds) },
-                      { title: "CUA", value: If(Topic.includeCua = "true", "Yes", "No") }
+                      { title: "CUA", value: If(Or(Topic.includeCua = "true", Topic.includeCua = "True"), "Yes", "No") }
                     ]
                   },
                   {
@@ -337,8 +372,8 @@ beginDialog:
           environmentId: =Topic.environmentId
           solutionName: ="GCFApps"
           mcpServerIds: =If(IsBlank(Topic.mcpServerIds), "none", Topic.mcpServerIds)
-          knowledgeSourcesJson: =If(IsBlank(Topic.knowledgeSourcesJson), "[]", Topic.knowledgeSourcesJson)
-          includeCua: =If(IsBlank(Topic.includeCua), "false", Topic.includeCua)
+          knowledgeSourcesJson: =If(Or(IsBlank(Topic.knowledgeSourcesJson), Topic.knowledgeSourcesJson = "[]"), "[]", Topic.knowledgeSourcesJson)
+          includeCua: =If(Or(Topic.includeCua = "true", Topic.includeCua = "True"), "true", "false")
           instructionsOverride: ="auto"
       dialog: copilots_header_91a5e.action.GCFRESTConnector-GenerateAgent
       output:
@@ -346,7 +381,7 @@ beginDialog:
           jobId: Topic.agentJobId
           status: Topic.agentJobStatus
 
-    # ── Step 9: Poll for completion (server long-polls ~30s) ──
+    # ── Step 9: Poll for completion ──
 
     - kind: SendActivity
       id: sendActivity_polling

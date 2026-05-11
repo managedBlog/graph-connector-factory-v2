@@ -147,6 +147,48 @@ function generateMcpActionComponent(
 `;
 }
 
+// CUA connector API name — globally stable across Power Platform environments
+const CUA_CONNECTOR_API_NAME = "shared_computeroperator";
+
+function generateCuaActionComponent(prefix: string): string {
+  const actionSchemaName = `${prefix}_action_ComputeruseComputeruse`;
+  const connRef = connRefLogicalName(prefix, CUA_CONNECTOR_API_NAME);
+
+  return `
+  - kind: DialogComponent
+    managedProperties:
+      isCustomizable: false
+
+    displayName: "Computer use - Computer use"
+    parentBotId: ${SOURCE_BOT_ID}
+    shareContext: {}
+    state: Active
+    status: Active
+    schemaName: ${actionSchemaName}
+    dialog:
+      kind: TaskDialog
+      modelDisplayName: "Computer use"
+      modelDescription: "Use a computer to navigate websites or operate desktop apps to complete tasks."
+      action:
+        kind: InvokeComputerUsingAgentTaskAction
+        connectionReference: ${connRef}
+        connectionProperties:
+          name: ${connRef}
+          mode: Invoker
+
+        operationId: ComputerOperatorInvokeMcpCua
+        instructions: "Perform the task you are asked to do using the computer. Follow instructions carefully and report results."
+        model:
+          modelNameHint: sonnet4-5
+
+        initializeContext:
+          enforceHttps: true
+          requestForInformationInput:
+            timeToCompleteInMinutes: 60
+            version: 2
+`;
+}
+
 // ΓöÇΓöÇΓöÇ System topic components (from base template) ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 
 function generateSystemTopics(prefix: string): string {
@@ -357,6 +399,14 @@ export function patchTemplate(config: TemplatePatchConfig): PatchedTemplate {
     allConnectorApiNames.add(mcp.connectorApiName);
     actionComponents.push(generateMcpActionComponent(prefix, mcp));
     componentCount++;
+  }
+
+  // 2b. Generate CUA component if requested
+  if (config.includeCua) {
+    allConnectorApiNames.add(CUA_CONNECTOR_API_NAME);
+    actionComponents.push(generateCuaActionComponent(prefix));
+    componentCount++;
+    log(`[TemplatePatcher] Added CUA component (Computer Operator connector)`);
   }
 
   // 3. Generate system topics

@@ -23,6 +23,7 @@ import { resolveMcpServers } from "./mcpCatalog";
 import { generateInstructions, generateStarterPrompts } from "./instructionsGenerator";
 import { patchTemplate, cleanupTemplateDir, buildSchemaName } from "./templatePatcher";
 import { isPacAvailable, pacCopilotCreate, getPublisherPrefix, resolveEnvironmentId } from "./pacRunner";
+import { addKnowledgeSources } from "./dataverseClient";
 
 /**
  * Generate and deploy a Copilot Studio agent.
@@ -42,6 +43,7 @@ export async function generateAgent(
       success: false,
       pendingConnections: [],
       starterPrompts: [],
+      warnings: [],
       error:
         "PAC CLI is not available. Install the Power Platform CLI and run 'pac auth create' to authenticate. " +
         "See: https://learn.microsoft.com/power-platform/developer/cli/introduction",
@@ -53,6 +55,7 @@ export async function generateAgent(
       success: false,
       pendingConnections: [],
       starterPrompts: [],
+      warnings: [],
       error: "No deployed connectors found. Deploy at least one connector before creating an agent.",
     };
   }
@@ -124,6 +127,7 @@ export async function generateAgent(
       success: false,
       pendingConnections: [],
       starterPrompts,
+      warnings: [],
       error: `Template patching failed: ${message}`,
     };
   }
@@ -146,13 +150,14 @@ export async function generateAgent(
         success: false,
         pendingConnections: [],
         starterPrompts,
+        warnings: [],
         error: `PAC copilot create failed: ${result.stderr || result.stdout}`,
         pacOutput: result.stdout + "\n" + result.stderr,
       };
     }
 
     // Build pending connections list
-    const pendingConnections = buildPendingConnections(deployedConnectors, mcpServers);
+    const pendingConnections = buildPendingConnections(deployedConnectors, mcpServers, input.includeCua);
 
     // Derive agent URL if not in output
     const agentUrl = result.agentUrl ??
@@ -162,6 +167,21 @@ export async function generateAgent(
 
     log(`[AgentGenerator] Agent created successfully: ${result.agentId}`);
 
+    // 8. Post-creation: add knowledge sources via Dataverse API
+    const warnings: string[] = [];
+    const knowledgeSources = input.knowledgeSources ?? [];
+    if (knowledgeSources.length > 0 && result.agentId) {
+      log(`[AgentGenerator] Adding ${knowledgeSources.length} knowledge source(s) post-creation...`);
+      const ksWarnings = await addKnowledgeSources(
+        resolvedEnvId,
+        result.agentId,
+        knowledgeSources,
+        publisherPrefix,
+        agentSchemaName,
+      );
+      warnings.push(...ksWarnings);
+    }
+
     return {
       success: true,
       agentId: result.agentId,
@@ -170,6 +190,7 @@ export async function generateAgent(
       componentCount: patchedTemplate.componentCount,
       pendingConnections,
       starterPrompts,
+      warnings,
       pacOutput: result.stdout,
     };
   } catch (err) {
@@ -180,6 +201,7 @@ export async function generateAgent(
       success: false,
       pendingConnections: [],
       starterPrompts,
+      warnings: [],
       error: `PAC execution error: ${message}`,
     };
   }
@@ -191,6 +213,7 @@ export async function generateAgent(
 function buildPendingConnections(
   connectors: DeployedConnectorInfo[],
   mcpServers: import("./types").McpServerCatalogEntry[],
+  includeCua?: boolean,
 ): PendingConnection[] {
   const pending: PendingConnection[] = [];
 
@@ -213,6 +236,15 @@ function buildPendingConnections(
       instructions: mcp.requiresOAuth
         ? "Configure the MCP server connection and sign in."
         : "Add the MCP server connection (no credentials required).",
+    });
+  }
+
+  if (includeCua) {
+    pending.push({
+      connectorApiName: "shared_computeroperator",
+      displayName: "Computer Use Agent (CUA)",
+      requiresOAuth: true,
+      instructions: "Configure the Computer Operator connection. This enables the agent to use a browser to perform tasks on behalf of the user.",
     });
   }
 

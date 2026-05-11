@@ -17,3 +17,4 @@ server-err.log
 # Server certificates (private keys)
 certs/
 csdl-cache/
+kickStartTemplate-1.0.0.json

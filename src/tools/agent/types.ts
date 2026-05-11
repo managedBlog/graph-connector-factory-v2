@@ -119,6 +119,8 @@ export interface AgentGenerationResult {
   pendingConnections: PendingConnection[];
   /** Suggested starter prompts */
   starterPrompts: string[];
+  /** Non-fatal warnings (e.g., knowledge source failed to add) */
+  warnings: string[];
   error?: string | undefined;
   /** PAC CLI output for debugging */
   pacOutput?: string | undefined;

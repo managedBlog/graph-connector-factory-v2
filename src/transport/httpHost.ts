@@ -45,7 +45,7 @@ import { executeDeployPipeline } from "../tools/deploy/pipeline";
 import type { DeployPipelineInput } from "../tools/deploy/pipeline";
 import type { EnrichedOperation } from "../tools/graph/types";
 import { listMcpServers as agentListMcpServers, generateAgent } from "../tools/agent";
-import type { DeployedConnectorInfo, AgentGenerationInput } from "../tools/agent";
+import type { DeployedConnectorInfo, AgentGenerationInput, KnowledgeSource } from "../tools/agent";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -2218,6 +2218,47 @@ export function startHttpServer(options: HttpHostOptions): void {
 
   const agentJobs = new Map<string, DeployJob>();
 
+  // Input normalization helpers — CS topic sends strings, endpoint expects typed values
+  function normalizeMcpServerIds(raw: unknown): string[] | undefined {
+    if (!raw) return undefined;
+    if (Array.isArray(raw)) return raw.filter((s) => typeof s === "string" && s.trim());
+    if (typeof raw === "string") {
+      const trimmed = raw.trim();
+      if (!trimmed || trimmed === "none" || trimmed === "[]") return undefined;
+      return trimmed.split(",").map((s) => s.trim()).filter(Boolean);
+    }
+    return undefined;
+  }
+
+  function normalizeKnowledgeSources(raw: unknown): KnowledgeSource[] | undefined {
+    if (!raw) return undefined;
+    // Already an array of objects
+    if (Array.isArray(raw)) return raw.length > 0 ? raw : undefined;
+    // JSON string from topic
+    if (typeof raw === "string") {
+      const trimmed = raw.trim();
+      if (!trimmed || trimmed === "none" || trimmed === "[]") return undefined;
+      try {
+        const parsed = JSON.parse(trimmed);
+        return Array.isArray(parsed) && parsed.length > 0 ? parsed : undefined;
+      } catch {
+        log(`[Agent Generate] Could not parse knowledgeSources JSON: ${trimmed.slice(0, 200)}`);
+        return undefined;
+      }
+    }
+    return undefined;
+  }
+
+  function normalizeBool(raw: unknown): boolean | undefined {
+    if (typeof raw === "boolean") return raw;
+    if (typeof raw === "string") {
+      const lower = raw.trim().toLowerCase();
+      if (lower === "true" || lower === "yes" || lower === "1") return true;
+      if (lower === "false" || lower === "no" || lower === "0") return false;
+    }
+    return undefined;
+  }
+
   app.post("/api/agent/generate", async (req, res) => {
     try {
       const body = req.body as Record<string, unknown>;
@@ -2264,9 +2305,9 @@ export function startHttpServer(options: HttpHostOptions): void {
       const generationInput: AgentGenerationInput = {
         agentName,
         agentPurpose,
-        mcpServerIds: body["mcpServerIds"] as string[] | undefined,
-        knowledgeSources: body["knowledgeSources"] as any[] | undefined,
-        includeCua: body["includeCua"] as boolean | undefined,
+        mcpServerIds: normalizeMcpServerIds(body["mcpServerIds"]),
+        knowledgeSources: normalizeKnowledgeSources(body["knowledgeSources"] ?? body["knowledgeSourcesJson"]),
+        includeCua: normalizeBool(body["includeCua"]),
         instructionsOverride: body["instructionsOverride"] as string | undefined,
         environmentId,
         solutionName,

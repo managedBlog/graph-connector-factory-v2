@@ -6,6 +6,7 @@ export { listMcpServers, getMcpServer, getStableMcpServers, resolveMcpServers } 
 export { generateInstructions, generateStarterPrompts } from "./instructionsGenerator";
 export { patchTemplate, cleanupTemplateDir, sanitizeSchemaName, buildSchemaName } from "./templatePatcher";
 export { runPac, isPacAvailable, getPacAuthInfo, pacCopilotCreate, getPublisherPrefix, resolveEnvironmentId } from "./pacRunner";
+export { addKnowledgeSources, resolveOrgUrl, getDataverseToken } from "./dataverseClient";
 export { generateAgent } from "./agentGenerator";
 
 export type {
