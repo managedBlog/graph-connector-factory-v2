@@ -562,10 +562,6 @@
                 "recommendedKnowledgeSourcesJson": {
                   "type": "string",
                   "x-ms-summary": "Recommended Knowledge Sources JSON"
-                },
-                "includeCua": {
-                  "type": "string",
-                  "x-ms-summary": "Include CUA"
                 }
               }
             }
@@ -622,11 +618,6 @@
                   "type": "string",
                   "description": "JSON array of knowledge sources.",
                   "x-ms-summary": "Knowledge Sources JSON"
-                },
-                "includeCua": {
-                  "type": "string",
-                  "description": "Include CUA (true/false).",
-                  "x-ms-summary": "Include CUA"
                 },
                 "instructionsOverride": {
                   "type": "string",
