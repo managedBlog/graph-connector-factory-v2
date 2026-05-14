@@ -9,6 +9,7 @@
  */
 
 import type { McpServerCatalogEntry } from "./types";
+import { log } from "../../logging/logger";
 
 const MCP_CATALOG: McpServerCatalogEntry[] = [
   {
@@ -153,6 +154,8 @@ export function resolveMcpServers(ids: string[]): McpServerCatalogEntry[] {
     const entry = getMcpServer(id);
     if (entry) {
       resolved.push(entry);
+    } else {
+      log(`[MCP Catalog] Unknown MCP server ID "${id}" — skipping`);
     }
   }
   return resolved;

@@ -23,9 +23,9 @@ import type {
   DeployedConnectorInfo,
   ConnectorOperationGroup,
   PendingConnection,
-} from "./types";
-import { resolveMcpServers } from "./mcpCatalog";
+} from "./types";import { resolveMcpServers } from "./mcpCatalog";
 import { generateInstructions, generateStarterPrompts } from "./instructionsGenerator";
+import { truncateInstructions } from "./instructionUtils";
 import { patchTemplate, cleanupTemplateDir, buildSchemaName } from "./templatePatcher";
 import { isPacAvailable, pacCopilotCreate, getPublisherPrefix, resolveEnvironmentId } from "./pacRunner";
 import { addKnowledgeSources, setAgentInstructions } from "./dataverseClient";
@@ -86,8 +86,8 @@ export async function generateAgent(
         })),
   }));
 
-  // 4. Generate instructions (or use override)
-  const instructions = input.instructionsOverride ??
+  // 4. Generate instructions (or use override), enforce 8K limit
+  const rawInstructions = input.instructionsOverride ??
     generateInstructions({
       agentName: input.agentName,
       agentPurpose: input.agentPurpose,
@@ -95,6 +95,7 @@ export async function generateAgent(
       mcpServers,
       knowledgeSources: input.knowledgeSources ?? [],
     });
+  const instructions = truncateInstructions(rawInstructions);
 
   const starterPrompts = generateStarterPrompts({
     agentName: input.agentName,
@@ -118,14 +119,10 @@ export async function generateAgent(
   try {
     patchedTemplate = patchTemplate({
       agentName: input.agentName,
-      agentSchemaName,
       agentDescription: input.agentPurpose,
       instructions,
-      publisherPrefix,
       connectors: deployedConnectors,
       mcpServers,
-      knowledgeSources: input.knowledgeSources ?? [],
-      includeCua: input.includeCua ?? false,
     });
     log(`[AgentGenerator] Template patched: ${patchedTemplate.componentCount} components`);
   } catch (err) {
@@ -158,7 +155,11 @@ export async function generateAgent(
       environmentId: resolvedEnvId,
     });
 
-    log(`[AgentGenerator] PAC result: success=${result.success}, agentId=${result.agentId}, stdout=${result.stdout}, stderr=${result.stderr}`);
+    if (process.env.MCP_DEBUG === "1") {
+      log(`[AgentGenerator] PAC result: success=${result.success}, agentId=${result.agentId}, stdout=${result.stdout}, stderr=${result.stderr}`);
+    } else {
+      log(`[AgentGenerator] PAC result: success=${result.success}, agentId=${result.agentId}`);
+    }
 
     // Clean up temp files
     cleanupTemplateDir(patchedTemplate.yamlPath);
@@ -175,7 +176,7 @@ export async function generateAgent(
     }
 
     // Build pending connections list
-    const pendingConnections = buildPendingConnections(deployedConnectors, mcpServers, input.includeCua);
+    const pendingConnections = buildPendingConnections(deployedConnectors, mcpServers);
 
     // Derive agent URL if not in output
     const agentUrl = result.agentUrl ??
@@ -246,7 +247,6 @@ export async function generateAgent(
 function buildPendingConnections(
   connectors: DeployedConnectorInfo[],
   mcpServers: import("./types").McpServerCatalogEntry[],
-  includeCua?: boolean,
 ): PendingConnection[] {
   const pending: PendingConnection[] = [];
 
@@ -269,15 +269,6 @@ function buildPendingConnections(
       instructions: mcp.requiresOAuth
         ? "Configure the MCP server connection and sign in."
         : "Add the MCP server connection (no credentials required).",
-    });
-  }
-
-  if (includeCua) {
-    pending.push({
-      connectorApiName: "shared_computeroperator",
-      displayName: "Computer Use Agent (CUA)",
-      requiresOAuth: true,
-      instructions: "Configure the Computer Operator connection. This enables the agent to use a browser to perform tasks on behalf of the user.",
     });
   }
 

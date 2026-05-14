@@ -90,8 +90,6 @@ export interface AgentFactoryContext {
   selectedMcpServers?: string[];
   /** Knowledge sources (SharePoint sites, URLs) */
   knowledgeSources?: KnowledgeSource[];
-  /** Whether to include CUA capability */
-  includeCua?: boolean;
   /** User-provided instructions override (replaces auto-generated) */
   instructionsOverride?: string;
 }
@@ -103,7 +101,6 @@ export interface AgentGenerationInput {
   agentPurpose: string;
   mcpServerIds?: string[] | undefined;
   knowledgeSources?: KnowledgeSource[] | undefined;
-  includeCua?: boolean | undefined;
   instructionsOverride?: string | undefined;
   /** Target environment for pac copilot create */
   environmentId: string;
@@ -116,6 +113,7 @@ export interface AgentGenerationResult {
   agentId?: string | undefined;
   agentUrl?: string | undefined;
   displayName?: string | undefined;
+  /** Template component count (base + actions). Does not include post-creation components like instructions or knowledge sources. */
   componentCount?: number | undefined;
   /** Connections that need manual configuration */
   pendingConnections: PendingConnection[];
@@ -139,29 +137,6 @@ export interface PendingConnection {
   consentUrl?: string;
 }
 
-// ——— Connection Management ————————————————————————————————————————————
-
-export interface ConnectionInfo {
-  /** Connection GUID (e.g. "6a3f588225184c24a0a321041be01682") */
-  connectionId: string;
-  /** Connector API name (e.g. "shared_office365") */
-  connectorApiName: string;
-  /** Current status */
-  status: "Connected" | "Error" | "Unauthenticated";
-  /** OAuth consent URL (populated only for newly created connections) */
-  consentUrl?: string;
-}
-
-export interface ConnectionReferenceInfo {
-  /** Dataverse record GUID */
-  connectionreferenceid: string;
-  /** Logical name (e.g. "mme_MyBot.connectionreference.mme_shared_office365_t1") */
-  connectionreferencelogicalname: string;
-  /** Connector ID path (e.g. "/providers/Microsoft.PowerApps/apis/shared_office365") */
-  connectorid: string;
-  /** Current connection ID (null if not bound) */
-  connectionid: string | null;
-}
 
 // ΓöÇΓöÇΓöÇ Instructions Generation ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 
@@ -183,17 +158,10 @@ export interface ConnectorOperationGroup {
 
 export interface TemplatePatchConfig {
   agentName: string;
-  /** Sanitized schema name with publisher prefix (e.g. mme_MyAgent) */
-  agentSchemaName: string;
   agentDescription: string;
   instructions: string;
-  /** Publisher customization prefix (e.g. "mme") */
-  publisherPrefix: string;
   connectors: DeployedConnectorInfo[];
   mcpServers: McpServerCatalogEntry[];
-  knowledgeSources: KnowledgeSource[];
-  /** Whether to include CUA component */
-  includeCua?: boolean | undefined;
 }
 
 export interface PatchedTemplate {

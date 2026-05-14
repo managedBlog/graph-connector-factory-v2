@@ -10,6 +10,7 @@ import { randomUUID } from "crypto";
 import { log, logError } from "../../logging/logger";
 import { runPac } from "./pacRunner";
 import type { KnowledgeSource } from "./types";
+import { truncateInstructions } from "./instructionUtils";
 
 // ——— Auth ————————————————————————————————————————————————————————————
 
@@ -191,7 +192,6 @@ export async function addKnowledgeSources(
   return warnings;
 }
 
-const INSTRUCTION_CHAR_LIMIT = 8_000;
 
 /**
  * Set agent instructions by creating a GptComponentMetadata (type 15) component.
@@ -204,13 +204,7 @@ export async function setAgentInstructions(
   instructions: string,
   botSchemaName: string,
 ): Promise<void> {
-  // Guard: enforce character limit
-  let safeInstructions = instructions;
-  if (safeInstructions.length > INSTRUCTION_CHAR_LIMIT) {
-    log(`[Dataverse] Instructions ${safeInstructions.length} chars exceeds ${INSTRUCTION_CHAR_LIMIT} limit, truncating`);
-    safeInstructions = safeInstructions.slice(0, INSTRUCTION_CHAR_LIMIT - 50) +
-      "\n\n*(Instructions truncated due to length limit)*";
-  }
+  const safeInstructions = truncateInstructions(instructions);
 
   const orgUrl = await resolveOrgUrl(environmentId);
   const token = await getDataverseToken(orgUrl);

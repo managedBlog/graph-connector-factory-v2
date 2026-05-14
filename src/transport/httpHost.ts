@@ -1121,7 +1121,7 @@ export function startHttpServer(options: HttpHostOptions): void {
 
     const connectorCount = typeof designContext["connectorCount"] === "number"
       ? designContext["connectorCount"] as number
-      : 0;
+      : connectorGroups.length;
 
     const authType = typeof designContext["authType"] === "string" ? designContext["authType"] as string : null;
     const appRegistrationStrategy = typeof designContext["appRegistrationStrategy"] === "string"
@@ -1804,6 +1804,34 @@ export function startHttpServer(options: HttpHostOptions): void {
               });
               job.batchProgress!.succeeded++;
               log(`[BatchDeploy] Job ${jobId}: "${groupBaseName}" succeeded`);
+
+              // Persist deploy result for agent factory (mirrors single deploy logic)
+              if (connector?.connectorId && ownerKey) {
+                const designCtx = sessionContext.get(ownerKey)?.designContext;
+                const connectorGroups = designCtx?.["connectorGroups"] as Array<Record<string, unknown>> | undefined;
+                const matchingGroup = connectorGroups?.find((g) =>
+                  g["baseName"] === groupBaseName || g["name"] === groupBaseName,
+                );
+                const groupOps = matchingGroup?.["operations"] as Array<Record<string, unknown>> | undefined;
+                const operations = groupOps?.map((op) => ({
+                  operationId: String(op["operationId"] ?? ""),
+                  summary: String(op["summary"] ?? op["operationId"] ?? ""),
+                  method: String(op["method"] ?? "GET").toUpperCase(),
+                  path: String(op["path"] ?? ""),
+                })).filter((o) => o.operationId) ?? [];
+                appendDeployResult(ownerKey, {
+                  timestamp: Date.now(),
+                  connectorId: connector.connectorId,
+                  apiName: connector.connectorId.split("/").pop() ?? "",
+                  displayName: connector.displayName,
+                  baseName: groupBaseName,
+                  environmentId,
+                  authType: connector.authType ?? "Unknown",
+                  appRegistrationAppId: appReg?.appId ?? undefined,
+                  operationIds: (matchingGroup?.["operationIds"] as string[]) ?? [],
+                  operations,
+                });
+              }
             } catch (groupErr) {
               const msg = groupErr instanceof Error ? groupErr.message : String(groupErr);
               log(`[BatchDeploy] Job ${jobId}: "${groupBaseName}" FAILED: ${msg}`);
@@ -2219,7 +2247,9 @@ export function startHttpServer(options: HttpHostOptions): void {
       const connectorSummaries = (deployed as Array<Record<string, unknown>>).map((d) => ({
         displayName: d["displayName"] ?? "",
         apiName: d["apiName"] ?? "",
-        operationCount: Array.isArray(d["operationIds"]) ? (d["operationIds"] as string[]).length : 0,
+        operationCount: Array.isArray(d["operationIds"]) && (d["operationIds"] as string[]).length > 0
+          ? (d["operationIds"] as string[]).length
+          : Array.isArray(d["operations"]) ? (d["operations"] as unknown[]).length : 0,
       }));
 
       res.json({
@@ -2236,7 +2266,6 @@ export function startHttpServer(options: HttpHostOptions): void {
         recommendedKnowledgeSourcesJson: Array.isArray(ac?.["knowledgeSources"])
           ? JSON.stringify(ac["knowledgeSources"])
           : "[]",
-        includeCua: ac?.["includeCua"] === true ? "true" : "false",
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -2251,11 +2280,15 @@ export function startHttpServer(options: HttpHostOptions): void {
   // Input normalization helpers — CS topic sends strings, endpoint expects typed values
   function normalizeMcpServerIds(raw: unknown): string[] | undefined {
     if (!raw) return undefined;
-    if (Array.isArray(raw)) return raw.filter((s) => typeof s === "string" && s.trim());
+    if (Array.isArray(raw)) {
+      const filtered = raw.filter((s) => typeof s === "string" && s.trim());
+      return filtered.length > 0 ? filtered : undefined;
+    }
     if (typeof raw === "string") {
       const trimmed = raw.trim();
       if (!trimmed || trimmed === "none" || trimmed === "[]") return undefined;
-      return trimmed.split(",").map((s) => s.trim()).filter(Boolean);
+      const parts = trimmed.split(",").map((s) => s.trim()).filter(Boolean);
+      return parts.length > 0 ? parts : undefined;
     }
     return undefined;
   }
@@ -2279,31 +2312,29 @@ export function startHttpServer(options: HttpHostOptions): void {
     return undefined;
   }
 
-  function normalizeBool(raw: unknown): boolean | undefined {
-    if (typeof raw === "boolean") return raw;
-    if (typeof raw === "string") {
-      const lower = raw.trim().toLowerCase();
-      if (lower === "true" || lower === "yes" || lower === "1") return true;
-      if (lower === "false" || lower === "no" || lower === "0") return false;
-    }
-    return undefined;
-  }
 
   app.post("/api/agent/generate", async (req, res) => {
     try {
       const body = req.body as Record<string, unknown>;
-      const agentName = body["agentName"] as string;
-      const agentPurpose = body["agentPurpose"] as string;
+
+      // Resolve session context first — research-phase data falls back to agent/design context
+      const tracking = resolveSessionKeyForRequest(req, {});
+      const ownerKey = tracking.key;
+      const ctx = ownerKey ? resolveContextKey(ownerKey)?.ctx : undefined;
+      const ac = ctx?.agentContext as Record<string, unknown> | undefined;
+      const dc = ctx?.designContext as Record<string, unknown> | undefined;
+
+      // Agent name/purpose: body → agent context → design context
+      const agentName = (body["agentName"] as string) ||
+        (ac?.["agentName"] as string) || (dc?.["agentName"] as string) || "";
+      const agentPurpose = (body["agentPurpose"] as string) ||
+        (ac?.["agentPurpose"] as string) || (dc?.["agentPurpose"] as string) || "";
 
       if (!agentName || !agentPurpose) {
         res.status(400).json({ error: "agentName and agentPurpose are required." });
         return;
       }
 
-      // Resolve session context for deploy results
-      const tracking = resolveSessionKeyForRequest(req, {});
-      const ownerKey = tracking.key;
-      const ctx = ownerKey ? resolveContextKey(ownerKey)?.ctx : undefined;
       const deployedConnectors = (ctx?.deployResults ?? []) as unknown as DeployedConnectorInfo[];
 
       if (deployedConnectors.length === 0) {
@@ -2312,7 +2343,7 @@ export function startHttpServer(options: HttpHostOptions): void {
       }
 
       const environmentId = body["environmentId"] as string ??
-        (ctx?.designContext?.["environmentId"] as string) ?? "";
+        (dc?.["environmentId"] as string) ?? "";
       const solutionName = body["solutionName"] as string ?? "GCFApps";
 
       if (!environmentId) {
@@ -2335,10 +2366,12 @@ export function startHttpServer(options: HttpHostOptions): void {
       const generationInput: AgentGenerationInput = {
         agentName,
         agentPurpose,
-        mcpServerIds: normalizeMcpServerIds(body["mcpServerIds"]),
-        knowledgeSources: normalizeKnowledgeSources(body["knowledgeSources"] ?? body["knowledgeSourcesJson"]),
-        includeCua: normalizeBool(body["includeCua"]),
-        instructionsOverride: body["instructionsOverride"] as string | undefined,
+        mcpServerIds: normalizeMcpServerIds(body["mcpServerIds"]) ??
+          normalizeMcpServerIds(ac?.["selectedMcpServers"]),
+        knowledgeSources: normalizeKnowledgeSources(body["knowledgeSources"] ?? body["knowledgeSourcesJson"]) ??
+          normalizeKnowledgeSources(ac?.["knowledgeSources"]),
+        instructionsOverride: (body["instructionsOverride"] as string | undefined) ??
+          (ac?.["instructionsOverride"] as string | undefined),
         environmentId,
         solutionName,
       };
