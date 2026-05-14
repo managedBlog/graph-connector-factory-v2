@@ -3,11 +3,16 @@
  *
  * Used to add knowledge sources (and other components) that can't be
  * provisioned through `pac copilot create` template alone.
+ *
+ * Auth: Uses the server's CredentialProvider (certificate/secret/managed identity)
+ * with the Dataverse org URL as the token scope. This avoids depending on the
+ * Azure CLI being on PATH in the server process.
  */
 
-import { execFile } from "child_process";
 import { randomUUID } from "crypto";
 import { log, logError } from "../../logging/logger";
+import { createCredentialProvider } from "../../auth";
+import { loadConfig } from "../../config";
 import { runPac } from "./pacRunner";
 import type { KnowledgeSource } from "./types";
 import { truncateInstructions } from "./instructionUtils";
@@ -15,30 +20,22 @@ import { truncateInstructions } from "./instructionUtils";
 // ——— Auth ————————————————————————————————————————————————————————————
 
 /**
- * Get an access token for the Dataverse org URL using Azure CLI.
+ * Get an access token for the Dataverse org URL using the server's credential provider.
+ * Scope is `{orgUrl}/.default` (e.g., `https://orgd8cb0ffa.crm.dynamics.com/.default`).
  */
 export async function getDataverseToken(orgUrl: string): Promise<string> {
-  const resource = orgUrl.endsWith("/") ? orgUrl : `${orgUrl}/`;
+  const resource = orgUrl.replace(/\/$/, "");
+  const scope = `${resource}/.default`;
 
-  return new Promise<string>((resolve, reject) => {
-    execFile(
-      "az",
-      ["account", "get-access-token", "--resource", resource, "--query", "accessToken", "-o", "tsv"],
-      { timeout: 30_000 },
-      (error, stdout, stderr) => {
-        if (error) {
-          reject(new Error(`Failed to get Dataverse token: ${stderr || error.message}`));
-          return;
-        }
-        const token = stdout.trim();
-        if (!token || !token.startsWith("ey")) {
-          reject(new Error("Invalid Dataverse token received"));
-          return;
-        }
-        resolve(token);
-      },
-    );
-  });
+  const config = loadConfig();
+  const credential = createCredentialProvider(config.powerPlatform.auth);
+  const result = await credential.getToken(scope);
+
+  if (!result.accessToken) {
+    throw new Error("Failed to get Dataverse token: empty token received");
+  }
+
+  return result.accessToken;
 }
 
 // ——— Environment resolution ——————————————————————————————————————————
