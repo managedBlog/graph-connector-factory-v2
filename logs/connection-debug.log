@@ -1,0 +1,18 @@
+20:17:04.817 [graph-connector] Starting Graph Connector Factory v1.0.0-alpha.1
+20:17:04.821 [graph-connector] Config: graph-connector-factory (Graph Connector Factory — unified MCP server for Copilot Studio.)
+20:17:04.834 [graph-connector] Graph Connector Factory server listening on port 3001
+20:17:04.835 [graph-connector]   MCP endpoint:      POST   http://localhost:3001/mcp
+20:17:04.836 [graph-connector]   Session delete:    DELETE http://localhost:3001/mcp
+20:17:04.836 [graph-connector]   Health check:      GET    http://localhost:3001/health
+20:17:04.836 [graph-connector]   REST operations:   GET    http://localhost:3001/api/graph/operations?endpoint=/users
+20:17:04.837 [graph-connector]   Session endpoints: GET    http://localhost:3001/api/graph/session/endpoints
+20:17:04.837 [graph-connector]   Session context:   GET    http://localhost:3001/api/graph/session/context
+20:17:04.838 [graph-connector]   Environments:      GET    http://localhost:3001/api/graph/environments
+20:17:04.838 [graph-connector]   Name check:        GET    http://localhost:3001/api/graph/namecheck?names=...&environmentId=...
+20:17:04.838 [graph-connector]   Generate:          POST   http://localhost:3001/api/graph/connector
+20:17:04.839 [graph-connector]   Deploy:            POST   http://localhost:3001/api/graph/deploy
+20:17:04.839 [graph-connector]   Deploy status:     GET    http://localhost:3001/api/graph/deploy/status
+20:17:04.878 [graph-connector]   File downloads:    GET    http://localhost:3001/download/:id/:filename
+20:17:04.881 [graph-connector]   Output directory:  C:\Users\CloudAdmin\OneDrive - Managed Modern Endpoint\Documents\MCP Agents\graph-connector-factory-v2\output
+20:17:04.881 [graph-connector]   Output TTL:        60 minutes
+20:17:04.882 [graph-connector]   Auth mode:         authenticated

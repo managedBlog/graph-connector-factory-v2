@@ -1,15 +1,20 @@
 /**
- * Agent Generator ΓÇö orchestrates Copilot Studio agent creation.
+ * Agent Generator — orchestrates Copilot Studio agent creation.
  *
  * Flow:
- *   1. Validate prerequisites (PAC available, connectors deployed, etc.)
+ *   1. Validate prerequisites (PAC available, connectors deployed)
  *   2. Resolve MCP servers from catalog
- *   3. Generate agent instructions
- *   4. Patch template (YAML + JSON)
- *   5. Run pac copilot create
- *   6. Return result with post-deploy guidance
+ *   3. Build operation groups from deployed connectors
+ *   4. Generate agent instructions (or use override)
+ *   5. Resolve environment ID
+ *   6. Get publisher prefix and build schema name
+ *   7. Patch template (YAML + JSON)
+ *   8. Run pac copilot create
+ *   9. Set agent instructions via Dataverse API
+ *  10. Add knowledge sources via Dataverse API
  */
 
+import * as fs from "fs";
 import { log, logError } from "../../logging/logger";
 import type {
   AgentGenerationInput,
@@ -71,12 +76,14 @@ export async function generateAgent(
   const connectorOperations: ConnectorOperationGroup[] = deployedConnectors.map((conn) => ({
     connectorName: conn.displayName,
     apiName: conn.apiName,
-    operations: conn.operationIds.map((opId) => ({
-      operationId: opId,
-      summary: opId, // Operation summaries not available at this point
-      method: "GET", // Default; actual method not stored in deploy results
-      path: "",
-    })),
+    operations: conn.operations?.length
+      ? conn.operations
+      : conn.operationIds.map((opId) => ({
+          operationId: opId,
+          summary: opId,
+          method: "GET",
+          path: "",
+        })),
   }));
 
   // 4. Generate instructions (or use override)
@@ -106,7 +113,7 @@ export async function generateAgent(
   const agentSchemaName = buildSchemaName(publisherPrefix, input.agentName);
   log(`[AgentGenerator] Schema name: ${agentSchemaName}`);
 
-  // 6. Patch template
+  // 7. Patch template
   let patchedTemplate;
   try {
     patchedTemplate = patchTemplate({
@@ -122,28 +129,26 @@ export async function generateAgent(
     });
     log(`[AgentGenerator] Template patched: ${patchedTemplate.componentCount} components`);
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    logError(`[AgentGenerator] Template patching failed: ${message}`);
+    const msg = err instanceof Error ? err.message : String(err);
+    logError(`[AgentGenerator] Template patching failed: ${msg}`);
     return {
       success: false,
       pendingConnections: [],
       starterPrompts,
       warnings: [],
-      error: `Template patching failed: ${message}`,
+      error: `Template patching failed: ${msg}`,
     };
   }
 
-  // 7. Run pac copilot create
+  // 8. Run pac copilot create
   try {
-    // DEBUG: Log the YAML template content before creation
-    const fs = await import("fs");
-    const yamlContent = fs.readFileSync(patchedTemplate.yamlPath, "utf-8");
-    log(`[AgentGenerator] YAML template path: ${patchedTemplate.yamlPath}`);
-    log(`[AgentGenerator] YAML template content:\n${yamlContent}`);
-    // Also log the JSON template
-    const jsonPath = patchedTemplate.jsonPath;
-    const jsonContent = fs.readFileSync(jsonPath, "utf-8");
-    log(`[AgentGenerator] JSON template content:\n${jsonContent}`);
+    if (process.env.MCP_DEBUG === "1") {
+      const yamlContent = fs.readFileSync(patchedTemplate.yamlPath, "utf-8");
+      log(`[AgentGenerator] YAML template path: ${patchedTemplate.yamlPath}`);
+      log(`[AgentGenerator] YAML template content:\n${yamlContent}`);
+      const jsonContent = fs.readFileSync(patchedTemplate.jsonPath, "utf-8");
+      log(`[AgentGenerator] JSON template content:\n${jsonContent}`);
+    }
 
     const result = await pacCopilotCreate({
       displayName: input.agentName,
@@ -222,15 +227,15 @@ export async function generateAgent(
       pacOutput: result.stdout,
     };
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    logError(`[AgentGenerator] PAC execution error: ${message}`);
+    const msg = err instanceof Error ? err.message : String(err);
+    logError(`[AgentGenerator] PAC execution error: ${msg}`);
     cleanupTemplateDir(patchedTemplate.yamlPath);
     return {
       success: false,
       pendingConnections: [],
       starterPrompts,
       warnings: [],
-      error: `PAC execution error: ${message}`,
+      error: `PAC execution error: ${msg}`,
     };
   }
 }

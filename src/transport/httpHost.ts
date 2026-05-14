@@ -1645,6 +1645,13 @@ export function startHttpServer(options: HttpHostOptions): void {
             const matchingGroup = connectorGroups?.find((g) =>
               g["baseName"] === pipelineInput.baseName || g["name"] === pipelineInput.baseName,
             );
+            const groupOps = matchingGroup?.["operations"] as Array<Record<string, unknown>> | undefined;
+            const operations = groupOps?.map((op) => ({
+              operationId: String(op["operationId"] ?? ""),
+              summary: String(op["summary"] ?? op["operationId"] ?? ""),
+              method: String(op["method"] ?? "GET").toUpperCase(),
+              path: String(op["path"] ?? ""),
+            })).filter((o) => o.operationId) ?? [];
             appendDeployResult(ownerKey, {
               timestamp: Date.now(),
               connectorId: connector.connectorId,
@@ -1655,6 +1662,7 @@ export function startHttpServer(options: HttpHostOptions): void {
               authType: connector.authType ?? "Unknown",
               appRegistrationAppId: appReg?.appId ?? undefined,
               operationIds: (matchingGroup?.["operationIds"] as string[]) ?? [],
+              operations,
             });
           }
         } catch (err) {
@@ -2204,13 +2212,31 @@ export function startHttpServer(options: HttpHostOptions): void {
       const resolved = resolveContextKey(tracking.key);
       const ctx = resolved?.ctx;
       const dc = ctx?.designContext as Record<string, unknown> | undefined;
+      const ac = ctx?.agentContext as Record<string, unknown> | undefined;
       const deployed = ctx?.deployResults ?? [];
+
+      // Build deployed connector summaries for the card
+      const connectorSummaries = (deployed as Array<Record<string, unknown>>).map((d) => ({
+        displayName: d["displayName"] ?? "",
+        apiName: d["apiName"] ?? "",
+        operationCount: Array.isArray(d["operationIds"]) ? (d["operationIds"] as string[]).length : 0,
+      }));
+
       res.json({
-        agentName: dc?.agentName ?? "",
-        agentPurpose: dc?.agentPurpose ?? "",
+        agentName: ac?.["agentName"] ?? dc?.["agentName"] ?? "",
+        agentPurpose: ac?.["agentPurpose"] ?? dc?.["agentPurpose"] ?? "",
         deployedConnectorCount: String(deployed.length),
         hasDeployedConnectors: deployed.length > 0 ? "true" : "false",
         deployedConnectorsJson: JSON.stringify(deployed),
+        connectorSummariesJson: JSON.stringify(connectorSummaries),
+        // Research-phase recommendations from agent context
+        recommendedMcpServers: Array.isArray(ac?.["selectedMcpServers"])
+          ? (ac["selectedMcpServers"] as string[]).join(",")
+          : "",
+        recommendedKnowledgeSourcesJson: Array.isArray(ac?.["knowledgeSources"])
+          ? JSON.stringify(ac["knowledgeSources"])
+          : "[]",
+        includeCua: ac?.["includeCua"] === true ? "true" : "false",
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);

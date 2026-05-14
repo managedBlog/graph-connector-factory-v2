@@ -53,6 +53,7 @@ function connRefLogicalName(apiName: string): string {
 // ——— Base template loader ————————————————————————————————————————————
 
 let _cachedBaseTemplate: string | null = null;
+let _baseComponentCount: number = 0;
 
 function loadBaseTemplate(): string {
   if (_cachedBaseTemplate) return _cachedBaseTemplate;
@@ -66,7 +67,8 @@ function loadBaseTemplate(): string {
   for (const candidate of candidates) {
     if (fs.existsSync(candidate)) {
       _cachedBaseTemplate = fs.readFileSync(candidate, "utf-8");
-      log(`[TemplatePatcher] Loaded base template from: ${candidate}`);
+      _baseComponentCount = (_cachedBaseTemplate.match(/kind: DialogComponent/g) ?? []).length;
+      log(`[TemplatePatcher] Loaded base template from: ${candidate} (${_baseComponentCount} base components)`);
       return _cachedBaseTemplate;
     }
   }
@@ -252,7 +254,7 @@ export function patchTemplate(config: TemplatePatchConfig): PatchedTemplate {
   const actionCount = actions.length;
   log(`[TemplatePatcher] Generated template: ${actionCount} tools, ${connectorApiList.length} connectors → ${tmpDir}`);
 
-  return { yamlPath, jsonPath, componentCount: 8 + actionCount };
+  return { yamlPath, jsonPath, componentCount: _baseComponentCount + actionCount };
 }
 
 // ——— JSON template builder ———————————————————————————————————————————

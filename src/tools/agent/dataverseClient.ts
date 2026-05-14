@@ -171,11 +171,9 @@ export async function addKnowledgeSources(
 
   // Add each knowledge source with retry
   for (const ks of spSources) {
-    let success = false;
     for (let attempt = 1; attempt <= 3; attempt++) {
       try {
         await addSharePointKnowledgeSource(orgUrl, token, botId, ks, publisherPrefix, botSchemaName);
-        success = true;
         break;
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
@@ -191,4 +189,66 @@ export async function addKnowledgeSources(
   }
 
   return warnings;
+}
+
+const INSTRUCTION_CHAR_LIMIT = 8_000;
+
+/**
+ * Set agent instructions by creating a GptComponentMetadata (type 15) component.
+ * PAC copilot create does not create this from the JSON template — we must add it post-creation.
+ */
+export async function setAgentInstructions(
+  environmentId: string,
+  botId: string,
+  agentName: string,
+  instructions: string,
+  botSchemaName: string,
+): Promise<void> {
+  // Guard: enforce character limit
+  let safeInstructions = instructions;
+  if (safeInstructions.length > INSTRUCTION_CHAR_LIMIT) {
+    log(`[Dataverse] Instructions ${safeInstructions.length} chars exceeds ${INSTRUCTION_CHAR_LIMIT} limit, truncating`);
+    safeInstructions = safeInstructions.slice(0, INSTRUCTION_CHAR_LIMIT - 50) +
+      "\n\n*(Instructions truncated due to length limit)*";
+  }
+
+  const orgUrl = await resolveOrgUrl(environmentId);
+  const token = await getDataverseToken(orgUrl);
+
+  const schemaName = `${botSchemaName}.gpt.default`;
+
+  const data = [
+    "kind: GptComponentMetadata",
+    `displayName: ${agentName}`,
+    `instructions: ${safeInstructions.replace(/\n/g, "\\n")}`,
+    "gptCapabilities:",
+    "  webBrowsing: false",
+    "  codeInterpreter: false",
+  ].join("\n");
+
+  const body = {
+    componenttype: 15,
+    name: "Agent 1",
+    schemaname: schemaName,
+    data,
+    "parentbotid@odata.bind": `/bots(${botId})`,
+  };
+
+  const response = await fetch(`${orgUrl}/api/data/v9.2/botcomponents`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+      "OData-MaxVersion": "4.0",
+      "OData-Version": "4.0",
+    },
+    body: JSON.stringify(body),
+  });
+
+  if (!response.ok) {
+    const errText = await response.text();
+    throw new Error(`Failed to set agent instructions (${response.status}): ${errText}`);
+  }
+
+  log(`[Dataverse] Set instructions for bot ${botId} (${schemaName})`);
 }

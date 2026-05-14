@@ -550,6 +550,22 @@
                 "deployedConnectorsJson": {
                   "type": "string",
                   "x-ms-summary": "Deployed Connectors JSON"
+                },
+                "connectorSummariesJson": {
+                  "type": "string",
+                  "x-ms-summary": "Connector Summaries JSON"
+                },
+                "recommendedMcpServers": {
+                  "type": "string",
+                  "x-ms-summary": "Recommended MCP Servers"
+                },
+                "recommendedKnowledgeSourcesJson": {
+                  "type": "string",
+                  "x-ms-summary": "Recommended Knowledge Sources JSON"
+                },
+                "includeCua": {
+                  "type": "string",
+                  "x-ms-summary": "Include CUA"
                 }
               }
             }

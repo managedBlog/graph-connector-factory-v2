@@ -68,6 +68,8 @@ export interface DeployedConnectorInfo {
   appRegistrationAppId?: string;
   /** Exact operation IDs from design context */
   operationIds: string[];
+  /** Full operation metadata (method, summary, path) when available from design context */
+  operations?: OperationRef[];
 }
 
 export interface OperationRef {
@@ -131,6 +133,34 @@ export interface PendingConnection {
   displayName: string;
   requiresOAuth: boolean;
   instructions: string;
+  /** Connection ID if already connected or just created */
+  connectionId?: string;
+  /** OAuth consent URL if connection was just created and needs authentication */
+  consentUrl?: string;
+}
+
+// ——— Connection Management ————————————————————————————————————————————
+
+export interface ConnectionInfo {
+  /** Connection GUID (e.g. "6a3f588225184c24a0a321041be01682") */
+  connectionId: string;
+  /** Connector API name (e.g. "shared_office365") */
+  connectorApiName: string;
+  /** Current status */
+  status: "Connected" | "Error" | "Unauthenticated";
+  /** OAuth consent URL (populated only for newly created connections) */
+  consentUrl?: string;
+}
+
+export interface ConnectionReferenceInfo {
+  /** Dataverse record GUID */
+  connectionreferenceid: string;
+  /** Logical name (e.g. "mme_MyBot.connectionreference.mme_shared_office365_t1") */
+  connectionreferencelogicalname: string;
+  /** Connector ID path (e.g. "/providers/Microsoft.PowerApps/apis/shared_office365") */
+  connectorid: string;
+  /** Current connection ID (null if not bound) */
+  connectionid: string | null;
 }
 
 // ΓöÇΓöÇΓöÇ Instructions Generation ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ

@@ -28,6 +28,22 @@ beginDialog:
           hasDesignContext: Topic.hasDesignContext
           baseName: Topic.baseName
 
+    # ── Step 1b: Get agent factory context (research-phase recommendations) ──
+
+    - kind: BeginDialog
+      id: beginDialog_agentContext
+      dialog: copilots_header_91a5e.action.GCFRESTConnector-GetAgentContext
+      output:
+        binding:
+          agentName: Topic.recAgentName
+          agentPurpose: Topic.recAgentPurpose
+          deployedConnectorCount: Topic.deployedConnectorCount
+          hasDeployedConnectors: Topic.hasDeployedConnectors
+          connectorSummariesJson: Topic.connectorSummariesJson
+          recommendedMcpServers: Topic.recommendedMcpServers
+          recommendedKnowledgeSourcesJson: Topic.recommendedKnowledgeSourcesJson
+          includeCua: Topic.recIncludeCua
+
     # ── Step 2: Guard — require deployed connectors ──
 
     - kind: ConditionGroup
@@ -65,8 +81,9 @@ beginDialog:
             },
             {
               type: "TextBlock",
-              text: "Create a new Copilot Studio agent using your deployed connectors.",
-              wrap: true
+              text: "Create a new Copilot Studio agent from your deployed connectors, MCP servers, and knowledge sources.",
+              wrap: true,
+              spacing: "Small"
             },
             {
               type: "TextBlock",
@@ -78,7 +95,7 @@ beginDialog:
               type: "Input.Text",
               id: "agentName",
               placeholder: "Enter agent name",
-              value: Coalesce(Topic.baseName, "My Custom Agent")
+              value: Coalesce(Topic.recAgentName, Topic.baseName, "My Custom Agent")
             },
             {
               type: "TextBlock",
@@ -90,102 +107,256 @@ beginDialog:
               id: "agentPurpose",
               placeholder: "Describe what this agent should do",
               isMultiline: true,
-              value: ""
+              value: Coalesce(Topic.recAgentPurpose, "")
+            },
+
+            {
+              type: "ColumnSet",
+              spacing: "Large",
+              separator: true,
+              selectAction: {
+                type: "Action.ToggleVisibility",
+                targetElements: ["d-connectors"]
+              },
+              columns: [
+                {
+                  type: "Column",
+                  width: "stretch",
+                  items: [
+                    {
+                      type: "TextBlock",
+                      text: Concatenate("📦 Deployed Connectors (", Topic.deployedConnectorCount, ")"),
+                      weight: "Bolder",
+                      color: "Accent",
+                      wrap: true
+                    }
+                  ]
+                },
+                {
+                  type: "Column",
+                  width: "auto",
+                  verticalContentAlignment: "Center",
+                  items: [
+                    {type: "Icon", name: "ChevronDown", size: "Small", color: "Accent"}
+                  ]
+                }
+              ]
             },
             {
-              type: "TextBlock",
-              text: "📦 Deployed Connectors",
-              weight: "Bolder",
-              spacing: "Large"
+              type: "Container",
+              id: "d-connectors",
+              isVisible: false,
+              spacing: "None",
+              items: If(
+                IsBlank(Topic.connectorSummariesJson) Or Topic.connectorSummariesJson = "[]",
+                [
+                  {
+                    type: "TextBlock",
+                    text: "No connectors deployed yet.",
+                    isSubtle: true,
+                    wrap: true
+                  }
+                ],
+                ForAll(
+                  Table(ParseJSON(Topic.connectorSummariesJson)),
+                  {
+                    type: "ColumnSet",
+                    spacing: "Small",
+                    columns: [
+                      { type: "Column", width: "auto", verticalContentAlignment: "Center", items: [{ type: "TextBlock", text: "✅" }] },
+                      { type: "Column", width: "stretch", items: [{ type: "TextBlock", text: Concatenate(Text(Value.displayName), " — ", Text(Value.operationCount), " operations"), wrap: true }] }
+                    ]
+                  }
+                )
+              )
+            },
+
+            {
+              type: "ColumnSet",
+              spacing: "Small",
+              separator: true,
+              selectAction: {
+                type: "Action.ToggleVisibility",
+                targetElements: ["d-knowledge"]
+              },
+              columns: [
+                {
+                  type: "Column",
+                  width: "stretch",
+                  items: [
+                    {
+                      type: "TextBlock",
+                      text: "🔌 Knowledge Sources (SharePoint)",
+                      weight: "Bolder",
+                      color: "Accent",
+                      wrap: true
+                    }
+                  ]
+                },
+                {
+                  type: "Column",
+                  width: "auto",
+                  verticalContentAlignment: "Center",
+                  items: [
+                    {type: "Icon", name: "ChevronDown", size: "Small", color: "Accent"}
+                  ]
+                }
+              ]
             },
             {
-              type: "TextBlock",
-              text: "All connectors deployed in this session will be automatically included as tools.",
-              wrap: true,
-              color: "Good"
+              type: "Container",
+              id: "d-knowledge",
+              isVisible: false,
+              spacing: "None",
+              items: [
+                {
+                  type: "TextBlock",
+                  text: "Add SharePoint site URLs as knowledge sources for the agent.",
+                  wrap: true,
+                  size: "Small",
+                  isSubtle: true
+                },
+                {
+                  type: "Input.Text",
+                  id: "sharepointUrl1",
+                  placeholder: "https://tenant.sharepoint.com/sites/..."
+                },
+                {
+                  type: "Input.Text",
+                  id: "sharepointUrl2",
+                  placeholder: "Additional SharePoint URL (optional)"
+                },
+                {
+                  type: "Input.Text",
+                  id: "sharepointUrl3",
+                  placeholder: "Additional SharePoint URL (optional)"
+                }
+              ]
+            },
+
+            {
+              type: "ColumnSet",
+              spacing: "Small",
+              separator: true,
+              selectAction: {
+                type: "Action.ToggleVisibility",
+                targetElements: ["d-mcp"]
+              },
+              columns: [
+                {
+                  type: "Column",
+                  width: "stretch",
+                  items: [
+                    {
+                      type: "TextBlock",
+                      text: "🤖 MCP Servers",
+                      weight: "Bolder",
+                      color: "Accent",
+                      wrap: true
+                    }
+                  ]
+                },
+                {
+                  type: "Column",
+                  width: "auto",
+                  verticalContentAlignment: "Center",
+                  items: [
+                    {type: "Icon", name: "ChevronDown", size: "Small", color: "Accent"}
+                  ]
+                }
+              ]
             },
             {
-              type: "TextBlock",
-              text: "🔌 Knowledge Sources (SharePoint)",
-              weight: "Bolder",
-              spacing: "Large"
+              type: "Container",
+              id: "d-mcp",
+              isVisible: false,
+              spacing: "None",
+              items: [
+                {
+                  type: "TextBlock",
+                  text: If(!IsBlank(Topic.recommendedMcpServers), "Pre-selected based on research phase. Adjust as needed.", "Select Microsoft MCP servers to add as tools."),
+                  wrap: true,
+                  size: "Small",
+                  isSubtle: true
+                },
+                {
+                  type: "Input.Toggle",
+                  id: "mcp_mslearn",
+                  title: "Microsoft Learn Docs MCP",
+                  value: If(And(!IsBlank(Topic.recommendedMcpServers), Find("ms-learn-docs", Topic.recommendedMcpServers) > 0), "true", "false")
+                },
+                {
+                  type: "Input.Toggle",
+                  id: "mcp_azure",
+                  title: "Azure MCP Server",
+                  value: If(And(!IsBlank(Topic.recommendedMcpServers), Find("azure", Topic.recommendedMcpServers) > 0), "true", "false")
+                },
+                {
+                  type: "Input.Toggle",
+                  id: "mcp_dataverse",
+                  title: "Microsoft Dataverse MCP",
+                  value: If(And(!IsBlank(Topic.recommendedMcpServers), Find("dataverse", Topic.recommendedMcpServers) > 0), "true", "false")
+                },
+                {
+                  type: "Input.Toggle",
+                  id: "mcp_m365",
+                  title: "Microsoft 365 MCP",
+                  value: If(And(!IsBlank(Topic.recommendedMcpServers), Find("m365", Topic.recommendedMcpServers) > 0), "true", "false")
+                },
+                {
+                  type: "Input.Toggle",
+                  id: "mcp_playwright",
+                  title: "Playwright MCP (Browser Automation)",
+                  value: If(And(!IsBlank(Topic.recommendedMcpServers), Find("playwright", Topic.recommendedMcpServers) > 0), "true", "false")
+                }
+              ]
+            },
+
+            {
+              type: "ColumnSet",
+              spacing: "Small",
+              separator: true,
+              selectAction: {
+                type: "Action.ToggleVisibility",
+                targetElements: ["d-options"]
+              },
+              columns: [
+                {
+                  type: "Column",
+                  width: "stretch",
+                  items: [
+                    {
+                      type: "TextBlock",
+                      text: "⚙️ Additional Options",
+                      weight: "Bolder",
+                      color: "Accent",
+                      wrap: true
+                    }
+                  ]
+                },
+                {
+                  type: "Column",
+                  width: "auto",
+                  verticalContentAlignment: "Center",
+                  items: [
+                    {type: "Icon", name: "ChevronDown", size: "Small", color: "Accent"}
+                  ]
+                }
+              ]
             },
             {
-              type: "TextBlock",
-              text: "Add SharePoint site URLs as knowledge sources for the agent.",
-              wrap: true,
-              size: "Small",
-              isSubtle: true
-            },
-            {
-              type: "Input.Text",
-              id: "sharepointUrl1",
-              placeholder: "https://tenant.sharepoint.com/sites/..."
-            },
-            {
-              type: "Input.Text",
-              id: "sharepointUrl2",
-              placeholder: "Additional SharePoint URL (optional)"
-            },
-            {
-              type: "Input.Text",
-              id: "sharepointUrl3",
-              placeholder: "Additional SharePoint URL (optional)"
-            },
-            {
-              type: "TextBlock",
-              text: "🤖 MCP Servers (optional)",
-              weight: "Bolder",
-              spacing: "Large"
-            },
-            {
-              type: "TextBlock",
-              text: "Select Microsoft MCP servers to add as tools.",
-              wrap: true,
-              size: "Small",
-              isSubtle: true
-            },
-            {
-              type: "Input.Toggle",
-              id: "mcp_mslearn",
-              title: "Microsoft Learn Docs MCP",
-              value: "false"
-            },
-            {
-              type: "Input.Toggle",
-              id: "mcp_azure",
-              title: "Azure MCP Server",
-              value: "false"
-            },
-            {
-              type: "Input.Toggle",
-              id: "mcp_dataverse",
-              title: "Microsoft Dataverse MCP",
-              value: "false"
-            },
-            {
-              type: "Input.Toggle",
-              id: "mcp_m365",
-              title: "Microsoft 365 MCP",
-              value: "false"
-            },
-            {
-              type: "Input.Toggle",
-              id: "mcp_playwright",
-              title: "Playwright MCP (Browser Automation)",
-              value: "false"
-            },
-            {
-              type: "TextBlock",
-              text: "⚙️ Additional Options",
-              weight: "Bolder",
-              spacing: "Large"
-            },
-            {
-              type: "Input.Toggle",
-              id: "includeCua",
-              title: "Include Computer Use Agent capability",
-              value: "false"
+              type: "Container",
+              id: "d-options",
+              isVisible: false,
+              spacing: "None",
+              items: [
+                {
+                  type: "Input.Toggle",
+                  id: "includeCua",
+                  title: "Include Computer Use Agent capability",
+                  value: If(Topic.recIncludeCua = "true", "true", "false")
+                }
+              ]
             }
           ],
           actions: [

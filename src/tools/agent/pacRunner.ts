@@ -144,14 +144,45 @@ export async function pacCopilotCreate(params: {
  * Get publisher prefix for a solution by querying Dataverse.
  * Falls back to "mme" if lookup fails (default for this environment).
  */
+/**
+ * Get publisher prefix for a solution by querying the Dataverse publisher API.
+ * Falls back to "mme" if lookup fails.
+ */
 export async function getPublisherPrefix(
   environmentId: string,
   solutionName: string,
 ): Promise<string> {
-  // For MVP, we use the known prefix for this environment.
-  // The spike proved that "mme" is the correct prefix for GCF solutions.
-  // A full implementation would query the Dataverse publisher API.
-  log(`[PAC] Using publisher prefix "mme" for solution "${solutionName}"`);
+  try {
+    const { resolveOrgUrl, getDataverseToken } = await import("./dataverseClient");
+    const orgUrl = await resolveOrgUrl(environmentId);
+    const token = await getDataverseToken(orgUrl);
+
+    // Query the solution's publisher prefix
+    const filter = encodeURIComponent(`uniquename eq '${solutionName}'`);
+    const uri = `${orgUrl}/api/data/v9.2/solutions?$filter=${filter}&$select=uniquename&$expand=publisherid($select=customizationprefix,uniquename)`;
+    const response = await fetch(uri, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "OData-MaxVersion": "4.0",
+        "OData-Version": "4.0",
+        Accept: "application/json",
+      },
+    });
+
+    if (response.ok) {
+      const data = (await response.json()) as { value: Array<{ publisherid?: { customizationprefix?: string; uniquename?: string } }> };
+      const prefix = data.value?.[0]?.publisherid?.customizationprefix;
+      if (prefix) {
+        log(`[PAC] Resolved publisher prefix "${prefix}" for solution "${solutionName}"`);
+        return prefix;
+      }
+    }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    log(`[PAC] Publisher prefix lookup failed (using fallback): ${msg}`);
+  }
+
+  log(`[PAC] Using fallback publisher prefix "mme" for solution "${solutionName}"`);
   return "mme";
 }
 

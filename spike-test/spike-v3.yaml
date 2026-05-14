@@ -1,0 +1,266 @@
+kind: BotDefinition
+entity:
+  accessControlPolicy: GroupMembership
+  authenticationMode: Integrated
+  authenticationTrigger: Always
+  configuration:
+    settings:
+      GenerativeActionsEnabled: true
+
+  template: kickStartTemplate-1.0.0
+
+components:
+  - kind: DialogComponent
+    managedProperties:
+      isCustomizable: false
+
+    displayName: On Error
+    parentBotId: 81e6e367-4e49-f111-bec6-7ced8d6e690c
+    shareContext: {}
+    state: Active
+    status: Active
+    publisherUniqueName: DefaultPublisherorgd8cb0ffa
+    schemaName: template-content.topic.OnError
+    dialog:
+      startBehavior: UseLatestPublishedContentAndCancelOtherTopics
+      beginDialog:
+        kind: OnError
+        id: main
+        actions:
+          - kind: SendActivity
+            id: sendMessage_error
+            activity: I encountered an error. Please try again or rephrase your request.
+
+  - kind: DialogComponent
+    managedProperties:
+      isCustomizable: false
+
+    displayName: Conversation Start
+    parentBotId: 81e6e367-4e49-f111-bec6-7ced8d6e690c
+    shareContext: {}
+    state: Active
+    status: Active
+    publisherUniqueName: DefaultPublisherorgd8cb0ffa
+    schemaName: template-content.topic.ConversationStart
+    dialog:
+      startBehavior: UseLatestPublishedContentAndCancelOtherTopics
+      beginDialog:
+        kind: OnConversationStart
+        id: main
+        actions:
+          - kind: SendActivity
+            id: sendMessage_start
+            activity: Hello! I'm here to help. What can I do for you?
+
+  - kind: DialogComponent
+    managedProperties:
+      isCustomizable: false
+
+    displayName: End of Conversation
+    parentBotId: 81e6e367-4e49-f111-bec6-7ced8d6e690c
+    shareContext: {}
+    state: Active
+    status: Active
+    publisherUniqueName: DefaultPublisherorgd8cb0ffa
+    schemaName: template-content.topic.EndofConversation
+    dialog:
+      startBehavior: UseLatestPublishedContentAndCancelOtherTopics
+      beginDialog:
+        kind: OnSystemMessage
+        condition: =Topic.EndConversation
+        id: main
+        actions:
+          - kind: SendActivity
+            id: sendMessage_end
+            activity: Thank you! Have a great day.
+
+  - kind: DialogComponent
+    managedProperties:
+      isCustomizable: false
+
+    displayName: Fallback
+    parentBotId: 81e6e367-4e49-f111-bec6-7ced8d6e690c
+    shareContext: {}
+    state: Active
+    status: Active
+    publisherUniqueName: DefaultPublisherorgd8cb0ffa
+    schemaName: template-content.topic.Fallback
+    dialog:
+      startBehavior: UseLatestPublishedContentAndCancelOtherTopics
+      beginDialog:
+        kind: OnUnknownIntent
+        id: main
+        actions:
+          - kind: SendActivity
+            id: sendMessage_fallback
+            activity: I'm not sure I understand. Could you rephrase your request?
+
+  - kind: DialogComponent
+    managedProperties:
+      isCustomizable: false
+
+    displayName: Reset Conversation
+    parentBotId: 81e6e367-4e49-f111-bec6-7ced8d6e690c
+    shareContext: {}
+    state: Active
+    status: Active
+    publisherUniqueName: DefaultPublisherorgd8cb0ffa
+    schemaName: template-content.topic.ResetConversation
+    dialog:
+      startBehavior: UseLatestPublishedContentAndCancelOtherTopics
+      beginDialog:
+        kind: OnSystemRedirect
+        id: main
+        actions:
+          - kind: SendActivity
+            id: sendMessage_reset
+            activity: What can I help you with?
+
+          - kind: ClearAllVariables
+            id: clearAllVariables_reset
+            variables: ConversationScopedVariables
+
+          - kind: CancelAllDialogs
+            id: cancelAllDialogs_reset
+
+  - kind: DialogComponent
+    managedProperties:
+      isCustomizable: false
+
+    displayName: Sign In
+    parentBotId: 81e6e367-4e49-f111-bec6-7ced8d6e690c
+    shareContext: {}
+    state: Active
+    status: Active
+    publisherUniqueName: DefaultPublisherorgd8cb0ffa
+    schemaName: template-content.topic.SignIn
+    dialog:
+      startBehavior: UseLatestPublishedContentAndCancelOtherTopics
+      beginDialog:
+        kind: OnSignIn
+        id: main
+        actions:
+          - kind: SignInCard
+            id: signInCard_main
+            title: Login
+            text: To continue, please login
+
+  - kind: DialogComponent
+    managedProperties:
+      isCustomizable: false
+
+    displayName: Generative Answers
+    parentBotId: 81e6e367-4e49-f111-bec6-7ced8d6e690c
+    shareContext: {}
+    state: Active
+    status: Active
+    publisherUniqueName: DefaultPublisherorgd8cb0ffa
+    schemaName: template-content.gpt.default
+    dialog:
+      kind: Gpt
+
+  - kind: DialogComponent
+    managedProperties:
+      isCustomizable: false
+
+    displayName: E2E Users - List users
+    parentBotId: 81e6e367-4e49-f111-bec6-7ced8d6e690c
+    shareContext: {}
+    state: Active
+    status: Active
+    publisherUniqueName: DefaultPublisherorgd8cb0ffa
+    schemaName: template-content.action.E2EUsersListusers
+    dialog:
+      kind: TaskDialog
+      modelDisplayName: List users
+      modelDescription: Retrieve a list of users.
+      outputs:
+        - propertyName: value
+
+      action:
+        kind: InvokeConnectorTaskAction
+        connectionReference: template-content.connectionreference.spike_shared_e2e_users_idm
+        connectionProperties:
+          name: template-content.connectionreference.spike_shared_e2e_users_idm
+          mode: Invoker
+
+        operationId: users.list
+
+      outputMode: All
+
+  - kind: DialogComponent
+    managedProperties:
+      isCustomizable: false
+
+    displayName: E2E Users - Get user
+    parentBotId: 81e6e367-4e49-f111-bec6-7ced8d6e690c
+    shareContext: {}
+    state: Active
+    status: Active
+    publisherUniqueName: DefaultPublisherorgd8cb0ffa
+    schemaName: template-content.action.E2EUsersGetuser
+    dialog:
+      kind: TaskDialog
+      modelDisplayName: Get user
+      modelDescription: Retrieve a single user by ID.
+      outputs:
+        - propertyName: Response
+
+      action:
+        kind: InvokeConnectorTaskAction
+        connectionReference: template-content.connectionreference.spike_shared_e2e_users_idm
+        connectionProperties:
+          name: template-content.connectionreference.spike_shared_e2e_users_idm
+          mode: Invoker
+
+        operationId: users.get
+
+      outputMode: All
+
+  - kind: DialogComponent
+    managedProperties:
+      isCustomizable: false
+
+    displayName: Microsoft Learn Docs MCP - Microsoft Learn Docs MCP Server
+    parentBotId: 81e6e367-4e49-f111-bec6-7ced8d6e690c
+    shareContext: {}
+    state: Active
+    status: Active
+    publisherUniqueName: DefaultPublisherorgd8cb0ffa
+    schemaName: template-content.action.MicrosoftLearnDocsMCPServer
+    dialog:
+      kind: TaskDialog
+      modelDisplayName: Microsoft Learn Docs MCP Server
+      modelDescription: Search and retrieve Microsoft Learn documentation, API references, and technical guides.
+      action:
+        kind: InvokeExternalAgentTaskAction
+        connectionReference: template-content.connectionreference.spike_shared_microsoftlearndocsmc
+        connectionProperties:
+          name: template-content.connectionreference.spike_shared_microsoftlearndocsmc
+          mode: Invoker
+
+        operationDetails:
+          kind: ModelContextProtocolMetadata
+          operationId: microsoft_docs_search
+
+connectionReferences:
+
+  - managedProperties:
+      isCustomizable: false
+
+    connectorId: /providers/Microsoft.PowerApps/apis/shared_e2e-201-2e3-20-2d-20users-20-26-20idm-5f251f982-125beae362ae1bce
+    connectionReferenceLogicalName: template-content.connectionreference.spike_shared_e2e_users_idm
+    displayName: spike_shared_e2e_users_idm
+
+  - managedProperties:
+      isCustomizable: false
+
+    connectorId: /providers/Microsoft.PowerApps/apis/shared_microsoftlearndocsmcpserver
+    connectionReferenceLogicalName: template-content.connectionreference.spike_shared_microsoftlearndocsmc
+    displayName: spike_shared_microsoftlearndocsmc
+
+connectorDefinitions:
+
+  - connectorId: /providers/Microsoft.PowerApps/apis/shared_e2e-201-2e3-20-2d-20users-20-26-20idm-5f251f982-125beae362ae1bce
+
+  - connectorId: /providers/Microsoft.PowerApps/apis/shared_microsoftlearndocsmcpserver
