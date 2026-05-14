@@ -23,7 +23,8 @@ import { resolveMcpServers } from "./mcpCatalog";
 import { generateInstructions, generateStarterPrompts } from "./instructionsGenerator";
 import { patchTemplate, cleanupTemplateDir, buildSchemaName } from "./templatePatcher";
 import { isPacAvailable, pacCopilotCreate, getPublisherPrefix, resolveEnvironmentId } from "./pacRunner";
-import { addKnowledgeSources } from "./dataverseClient";
+import { addKnowledgeSources, setAgentInstructions } from "./dataverseClient";
+
 
 /**
  * Generate and deploy a Copilot Studio agent.
@@ -134,6 +135,16 @@ export async function generateAgent(
 
   // 7. Run pac copilot create
   try {
+    // DEBUG: Log the YAML template content before creation
+    const fs = await import("fs");
+    const yamlContent = fs.readFileSync(patchedTemplate.yamlPath, "utf-8");
+    log(`[AgentGenerator] YAML template path: ${patchedTemplate.yamlPath}`);
+    log(`[AgentGenerator] YAML template content:\n${yamlContent}`);
+    // Also log the JSON template
+    const jsonPath = patchedTemplate.jsonPath;
+    const jsonContent = fs.readFileSync(jsonPath, "utf-8");
+    log(`[AgentGenerator] JSON template content:\n${jsonContent}`);
+
     const result = await pacCopilotCreate({
       displayName: input.agentName,
       schemaName: agentSchemaName,
@@ -141,6 +152,8 @@ export async function generateAgent(
       solution: input.solutionName,
       environmentId: resolvedEnvId,
     });
+
+    log(`[AgentGenerator] PAC result: success=${result.success}, agentId=${result.agentId}, stdout=${result.stdout}, stderr=${result.stderr}`);
 
     // Clean up temp files
     cleanupTemplateDir(patchedTemplate.yamlPath);
@@ -167,8 +180,23 @@ export async function generateAgent(
 
     log(`[AgentGenerator] Agent created successfully: ${result.agentId}`);
 
-    // 8. Post-creation: add knowledge sources via Dataverse API
+    // Connection binding removed — Copilot Studio handles connections via its own UI
     const warnings: string[] = [];
+
+    // 9. Post-creation: set agent instructions via Dataverse API
+    if (result.agentId && instructions) {
+      log(`[AgentGenerator] Setting agent instructions...`);
+      try {
+        await setAgentInstructions(resolvedEnvId, result.agentId, input.agentName, instructions, agentSchemaName);
+        log(`[AgentGenerator] Instructions set successfully`);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        logError(`[AgentGenerator] Failed to set instructions (non-fatal): ${msg}`);
+        warnings.push(`Failed to set agent instructions: ${msg}. You can add them manually in Copilot Studio.`);
+      }
+    }
+
+    // 10. Post-creation: add knowledge sources via Dataverse API
     const knowledgeSources = input.knowledgeSources ?? [];
     if (knowledgeSources.length > 0 && result.agentId) {
       log(`[AgentGenerator] Adding ${knowledgeSources.length} knowledge source(s) post-creation...`);

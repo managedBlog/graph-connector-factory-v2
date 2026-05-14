@@ -1,19 +1,13 @@
 /**
  * Template patcher for Copilot Studio agent creation.
  *
- * Takes the base template YAML + JSON extracted from the reference agent
- * and patches them with the agent factory's composition decisions:
- *   - Rewrites connection references with publisher prefix
- *   - Strips existing action components
- *   - Adds new action components for each deployed connector operation
- *   - Adds MCP server action components
- *   - Patches JSON with instructions, knowledge sources, connector metadata
+ * Loads a clean base template (system topics only) and appends:
+ *   - Action components for each connector operation and MCP server (tools)
+ *   - connectionReferences (which connectors the agent uses)
+ *   - connectorDefinitions (connector metadata)
  *
- * Critical spike findings applied:
- *   - All `template-content.` refs must be replaced with `{prefix}_` names
- *   - schemaName on `pac copilot create` must start with publisher prefix
- *   - connectionReferenceLogicalName must start with publisher prefix
- *   - New DialogComponent entries ARE accepted by pac copilot create
+ * Format is derived directly from extracting a working manually-created agent
+ * via `pac copilot extract-template` — we match that format exactly.
  */
 
 import * as fs from "fs";
@@ -24,420 +18,228 @@ import { log } from "../../logging/logger";
 import type {
   TemplatePatchConfig,
   PatchedTemplate,
-  DeployedConnectorInfo,
-  McpServerCatalogEntry,
-  KnowledgeSource,
 } from "./types";
 
-// ΓöÇΓöÇΓöÇ Constants ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+// ——— Constants ————————————————————————————————————————————————————————
 
-const BASE_TEMPLATE_DIR = path.resolve(__dirname, "../../../artifacts/agent-template");
-const BASE_YAML = "base-template.yaml";
+const BASE_TEMPLATE_PATH = path.resolve(__dirname, "./templates/agent-base-template.yaml");
 const BASE_JSON = "kickStartTemplate-1.0.0.json";
+const PLACEHOLDER_BOT_ID = "00000000-0000-0000-0000-000000000000";
 
-// Bot ID from the source template ΓÇö PAC replaces this during creation
-const SOURCE_BOT_ID = "81e6e367-4e49-f111-bec6-7ced8d6e690c";
+// ——— Schema name helpers —————————————————————————————————————————————
 
-// ΓöÇΓöÇΓöÇ Schema name sanitization ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
-
-/**
- * Sanitize a display name into a valid Dataverse schema name.
- * Rules: alphanumeric + underscores only, no leading digits.
- */
 export function sanitizeSchemaName(displayName: string): string {
   return displayName
     .replace(/[^a-zA-Z0-9_]/g, "")
     .replace(/^[0-9]+/, "");
 }
 
-/**
- * Build the full schema name with publisher prefix.
- */
 export function buildSchemaName(prefix: string, displayName: string): string {
-  const sanitized = sanitizeSchemaName(displayName);
-  return `${prefix}_${sanitized}`;
+  return `${prefix}_${sanitizeSchemaName(displayName)}`;
 }
 
-// ΓöÇΓöÇΓöÇ Connection reference naming ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+// ——— Connection reference key ————————————————————————————————————————
+// Just needs to be a short consistent key used across all references to
+// the same connector. PAC handles the rest.
 
-function connRefLogicalName(prefix: string, connectorApiName: string): string {
-  // Sanitize the API name: replace hyphens with underscores
-  const sanitized = connectorApiName.replace(/-/g, "_");
-  return `${prefix}_${sanitized}`;
+function connRefKey(apiName: string): string {
+  return apiName.replace(/^shared_/, "").replace(/[^a-z0-9]/g, "").slice(0, 20);
 }
 
-function connRefDisplayName(prefix: string, connectorApiName: string): string {
-  const sanitized = connectorApiName.replace(/-/g, "_");
-  return `${prefix}_${sanitized}`;
+function connRefLogicalName(apiName: string): string {
+  return `template-content.connectionreference.${connRefKey(apiName)}`;
 }
 
-// ΓöÇΓöÇΓöÇ Component generators ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+// ——— Base template loader ————————————————————————————————————————————
 
-function generateConnectorActionComponent(
-  prefix: string,
-  connectorApiName: string,
-  operationId: string,
-  displayName: string,
-  description: string,
-): string {
-  const actionSchemaName = `${prefix}_action_${sanitizeSchemaName(operationId)}`;
-  const connRef = connRefLogicalName(prefix, connectorApiName);
+let _cachedBaseTemplate: string | null = null;
 
-  return `
-  - kind: DialogComponent
-    managedProperties:
-      isCustomizable: false
+function loadBaseTemplate(): string {
+  if (_cachedBaseTemplate) return _cachedBaseTemplate;
 
-    displayName: "${displayName}"
-    parentBotId: ${SOURCE_BOT_ID}
-    shareContext: {}
-    state: Active
-    status: Active
-    schemaName: ${actionSchemaName}
-    dialog:
-      kind: TaskDialog
-      modelDisplayName: "${displayName}"
-      modelDescription: "${description}"
-      action:
-        kind: InvokeConnectorTaskAction
-        connectionReference: ${connRef}
-        connectionProperties:
-          name: ${connRef}
-          mode: Invoker
-        operationId: ${operationId}
-      outputMode: All
-`;
-}
+  const candidates = [
+    BASE_TEMPLATE_PATH,
+    path.resolve(__dirname, "../templates/agent-base-template.yaml"),
+    path.resolve(__dirname, "../../tools/agent/templates/agent-base-template.yaml"),
+  ];
 
-function generateMcpActionComponent(
-  prefix: string,
-  mcp: McpServerCatalogEntry,
-): string {
-  const actionSchemaName = `${prefix}_action_${sanitizeSchemaName(mcp.id)}`;
-  const connRef = connRefLogicalName(prefix, mcp.connectorApiName);
-  const opId = mcp.operationId ?? mcp.id;
-
-  return `
-  - kind: DialogComponent
-    managedProperties:
-      isCustomizable: false
-
-    displayName: "${mcp.displayName}"
-    parentBotId: ${SOURCE_BOT_ID}
-    shareContext: {}
-    state: Active
-    status: Active
-    schemaName: ${actionSchemaName}
-    dialog:
-      kind: TaskDialog
-      modelDisplayName: "${mcp.displayName}"
-      modelDescription: "${mcp.description}"
-      action:
-        kind: InvokeExternalAgentTaskAction
-        connectionReference: ${connRef}
-        connectionProperties:
-          name: ${connRef}
-          mode: Invoker
-        operationDetails:
-          kind: ModelContextProtocolMetadata
-          operationId: ${opId}
-`;
-}
-
-// CUA connector API name — globally stable across Power Platform environments
-const CUA_CONNECTOR_API_NAME = "shared_computeroperator";
-
-function generateCuaActionComponent(prefix: string): string {
-  const actionSchemaName = `${prefix}_action_ComputeruseComputeruse`;
-  const connRef = connRefLogicalName(prefix, CUA_CONNECTOR_API_NAME);
-
-  return `
-  - kind: DialogComponent
-    managedProperties:
-      isCustomizable: false
-
-    displayName: "Computer use - Computer use"
-    parentBotId: ${SOURCE_BOT_ID}
-    shareContext: {}
-    state: Active
-    status: Active
-    schemaName: ${actionSchemaName}
-    dialog:
-      kind: TaskDialog
-      modelDisplayName: "Computer use"
-      modelDescription: "Use a computer to navigate websites or operate desktop apps to complete tasks."
-      action:
-        kind: InvokeComputerUsingAgentTaskAction
-        connectionReference: ${connRef}
-        connectionProperties:
-          name: ${connRef}
-          mode: Invoker
-        operationId: ComputerOperatorInvokeMcpCua
-        instructions: "Perform the task you are asked to do using the computer. Follow instructions carefully and report results."
-        model:
-          modelNameHint: sonnet4-5
-        initializeContext:
-          enforceHttps: true
-          requestForInformationInput:
-            timeToCompleteInMinutes: 60
-            version: 2
-`;
-}
-
-// ΓöÇΓöÇΓöÇ System topic components (from base template) ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
-
-function generateSystemTopics(prefix: string): string {
-  return `
-  - kind: DialogComponent
-    managedProperties:
-      isCustomizable: false
-
-    displayName: Reset Conversation
-    parentBotId: ${SOURCE_BOT_ID}
-    shareContext: {}
-    state: Active
-    status: Active
-    schemaName: ${prefix}_topic_ResetConversation
-    dialog:
-      startBehavior: UseLatestPublishedContentAndCancelOtherTopics
-      beginDialog:
-        kind: OnSystemRedirect
-        id: main
-        actions:
-          - kind: SendActivity
-            id: sendMessage_reset
-            activity: What can I help you with?
-
-          - kind: ClearAllVariables
-            id: clearAllVariables_reset
-            variables: ConversationScopedVariables
-
-          - kind: CancelAllDialogs
-            id: cancelAllDialogs_reset
-
-  - kind: DialogComponent
-    managedProperties:
-      isCustomizable: false
-
-    displayName: Conversation Start
-    parentBotId: ${SOURCE_BOT_ID}
-    shareContext: {}
-    state: Active
-    status: Active
-    schemaName: ${prefix}_topic_ConversationStart
-    dialog:
-      startBehavior: UseLatestPublishedContentAndCancelOtherTopics
-      beginDialog:
-        kind: OnConversationStart
-        id: main
-        actions:
-          - kind: SendActivity
-            id: sendMessage_start
-            activity: Hello! I'm here to help. What can I do for you?
-
-  - kind: DialogComponent
-    managedProperties:
-      isCustomizable: false
-
-    displayName: End of Conversation
-    parentBotId: ${SOURCE_BOT_ID}
-    shareContext: {}
-    state: Active
-    status: Active
-    schemaName: ${prefix}_topic_EndofConversation
-    dialog:
-      startBehavior: UseLatestPublishedContentAndCancelOtherTopics
-      beginDialog:
-        kind: OnSystemMessage
-        condition: =Topic.EndConversation
-        id: main
-        actions:
-          - kind: SendActivity
-            id: sendMessage_end
-            activity: Thank you! Have a great day.
-
-  - kind: DialogComponent
-    managedProperties:
-      isCustomizable: false
-
-    displayName: Fallback
-    parentBotId: ${SOURCE_BOT_ID}
-    shareContext: {}
-    state: Active
-    status: Active
-    schemaName: ${prefix}_topic_Fallback
-    dialog:
-      startBehavior: UseLatestPublishedContentAndCancelOtherTopics
-      beginDialog:
-        kind: OnUnknownIntent
-        id: main
-        actions:
-          - kind: SendActivity
-            id: sendMessage_fallback
-            activity: I'm not sure I understand. Could you rephrase your request?
-
-  - kind: DialogComponent
-    managedProperties:
-      isCustomizable: false
-
-    displayName: On Error
-    parentBotId: ${SOURCE_BOT_ID}
-    shareContext: {}
-    state: Active
-    status: Active
-    schemaName: ${prefix}_topic_OnError
-    dialog:
-      startBehavior: UseLatestPublishedContentAndCancelOtherTopics
-      beginDialog:
-        kind: OnError
-        id: main
-        actions:
-          - kind: SendActivity
-            id: sendMessage_error
-            activity: I encountered an error. Please try again or rephrase your request.
-
-  - kind: DialogComponent
-    managedProperties:
-      isCustomizable: false
-
-    displayName: Sign In
-    parentBotId: ${SOURCE_BOT_ID}
-    shareContext: {}
-    state: Active
-    status: Active
-    schemaName: ${prefix}_topic_SignIn
-    dialog:
-      startBehavior: UseLatestPublishedContentAndCancelOtherTopics
-      beginDialog:
-        kind: OnSignIn
-        id: main
-        actions:
-          - kind: SignInCard
-            id: signInCard_main
-            title: Login
-            text: To continue, please login
-
-  - kind: DialogComponent
-    managedProperties:
-      isCustomizable: false
-
-    displayName: Generative Answers
-    parentBotId: ${SOURCE_BOT_ID}
-    shareContext: {}
-    state: Active
-    status: Active
-    schemaName: ${prefix}_gpt_default
-    dialog:
-      kind: Gpt
-`;
-}
-
-// ΓöÇΓöÇΓöÇ Connection references section ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
-
-function generateConnectionReferences(
-  prefix: string,
-  connectorApiNames: string[],
-): string {
-  const refs = connectorApiNames.map((apiName) => {
-    const logicalName = connRefLogicalName(prefix, apiName);
-    const display = connRefDisplayName(prefix, apiName);
-    return `
-  - managedProperties:
-      isCustomizable: false
-
-    connectorId: /providers/Microsoft.PowerApps/apis/${apiName}
-    connectionReferenceLogicalName: ${logicalName}
-    displayName: ${display}`;
-  });
-
-  return `connectionReferences:${refs.join("\n")}`;
-}
-
-function generateConnectorDefinitions(connectorApiNames: string[]): string {
-  const defs = connectorApiNames.map(
-    (apiName) => `\n  - connectorId: /providers/Microsoft.PowerApps/apis/${apiName}`,
-  );
-  return `connectorDefinitions:${defs.join("")}`;
-}
-
-// ΓöÇΓöÇΓöÇ Main patcher ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
-
-/**
- * Patch the base template with agent factory composition.
- * Produces a YAML + JSON pair ready for `pac copilot create`.
- */
-export function patchTemplate(config: TemplatePatchConfig): PatchedTemplate {
-  const prefix = config.publisherPrefix;
-  const allConnectorApiNames = new Set<string>();
-  const actionComponents: string[] = [];
-  let componentCount = 0;
-
-  // 1. Generate action components for each deployed connector's operations
-  for (const conn of config.connectors) {
-    allConnectorApiNames.add(conn.apiName);
-    for (const opId of conn.operationIds) {
-      actionComponents.push(
-        generateConnectorActionComponent(
-          prefix,
-          conn.apiName,
-          opId,
-          `${conn.displayName} - ${opId}`,
-          `Operation ${opId} from ${conn.displayName}`,
-        ),
-      );
-      componentCount++;
+  for (const candidate of candidates) {
+    if (fs.existsSync(candidate)) {
+      _cachedBaseTemplate = fs.readFileSync(candidate, "utf-8");
+      log(`[TemplatePatcher] Loaded base template from: ${candidate}`);
+      return _cachedBaseTemplate;
     }
   }
 
-  // 2. Generate MCP server action components
+  throw new Error(
+    `Base template not found. Searched:\n${candidates.join("\n")}\n` +
+    `Ensure agent-base-template.yaml is copied to the build output.`,
+  );
+}
+
+// ——— Action component generators ————————————————————————————————————
+
+function connectorAction(
+  connectorDisplayName: string,
+  connectorApiName: string,
+  operationId: string,
+  opDisplayName: string,
+  description: string,
+): string {
+  const ref = connRefLogicalName(connectorApiName);
+  const schemaName = `template-content.action.${sanitizeSchemaName(connectorDisplayName)}${sanitizeSchemaName(opDisplayName)}`;
+
+  return [
+    `  - kind: DialogComponent`,
+    `    managedProperties:`,
+    `      isCustomizable: false`,
+    ``,
+    `    displayName: ${connectorDisplayName} - ${opDisplayName}`,
+    `    parentBotId: ${PLACEHOLDER_BOT_ID}`,
+    `    shareContext: {}`,
+    `    state: Active`,
+    `    status: Active`,
+    `    publisherUniqueName: DefaultPublisherorgd8cb0ffa`,
+    `    schemaName: ${schemaName}`,
+    `    dialog:`,
+    `      kind: TaskDialog`,
+    `      modelDisplayName: ${opDisplayName}`,
+    `      modelDescription: "${description}"`,
+    `      outputs:`,
+    `        - propertyName: Response`,
+    ``,
+    `      action:`,
+    `        kind: InvokeConnectorTaskAction`,
+    `        connectionReference: ${ref}`,
+    `        connectionProperties:`,
+    `          name: ${ref}`,
+    `          mode: Invoker`,
+    ``,
+    `        operationId: ${operationId}`,
+    ``,
+    `      outputMode: All`,
+  ].join("\n");
+}
+
+function mcpAction(
+  displayName: string,
+  connectorApiName: string,
+  operationId: string,
+  description: string,
+): string {
+  const ref = connRefLogicalName(connectorApiName);
+  const schemaName = `template-content.action.${sanitizeSchemaName(displayName)}`;
+
+  return [
+    `  - kind: DialogComponent`,
+    `    managedProperties:`,
+    `      isCustomizable: false`,
+    ``,
+    `    displayName: ${displayName}`,
+    `    parentBotId: ${PLACEHOLDER_BOT_ID}`,
+    `    shareContext: {}`,
+    `    state: Active`,
+    `    status: Active`,
+    `    publisherUniqueName: DefaultPublisherorgd8cb0ffa`,
+    `    schemaName: ${schemaName}`,
+    `    dialog:`,
+    `      kind: TaskDialog`,
+    `      modelDisplayName: ${displayName}`,
+    `      modelDescription: ${description}`,
+    `      action:`,
+    `        kind: InvokeExternalAgentTaskAction`,
+    `        connectionReference: ${ref}`,
+    `        connectionProperties:`,
+    `          name: ${ref}`,
+    `          mode: Invoker`,
+    ``,
+    `        operationDetails:`,
+    `          kind: ModelContextProtocolMetadata`,
+    `          operationId: ${operationId}`,
+  ].join("\n");
+}
+
+// ——— Connection references & connector definitions ———————————————————
+
+function generateConnectionReferences(connectorApiNames: string[]): string {
+  const entries = connectorApiNames.map((apiName) => {
+    const logName = connRefLogicalName(apiName);
+    const guid = randomUUID().replace(/-/g, "");
+    return [
+      `  - connectorId: /providers/Microsoft.PowerApps/apis/${apiName}`,
+      `    connectionReferenceLogicalName: ${logName}`,
+      `    displayName: ${connRefKey(apiName)}.${apiName}.${guid}`,
+    ].join("\n");
+  });
+  return `connectionReferences:\n${entries.join("\n\n")}`;
+}
+
+function generateConnectorDefinitions(connectorApiNames: string[]): string {
+  const entries = connectorApiNames.map(
+    (apiName) => `  - connectorId: /providers/Microsoft.PowerApps/apis/${apiName}`,
+  );
+  return `connectorDefinitions:\n${entries.join("\n\n")}`;
+}
+
+// ——— Main patcher ————————————————————————————————————————————————————
+
+export function patchTemplate(config: TemplatePatchConfig): PatchedTemplate {
+  const allConnectorApiNames = new Set<string>();
+  const actions: string[] = [];
+
+  // Generate connector actions
+  for (const conn of config.connectors) {
+    allConnectorApiNames.add(conn.apiName);
+    for (const opId of conn.operationIds) {
+      const opDisplay = opId
+        .replace(/\./g, " ")
+        .replace(/\b\w/g, (c) => c.toUpperCase())
+        .trim();
+      actions.push(
+        connectorAction(
+          conn.displayName,
+          conn.apiName,
+          opId,
+          opDisplay,
+          `Operation ${opId} from ${conn.displayName}`,
+        ),
+      );
+    }
+  }
+
+  // Generate MCP actions
   for (const mcp of config.mcpServers) {
     allConnectorApiNames.add(mcp.connectorApiName);
-    actionComponents.push(generateMcpActionComponent(prefix, mcp));
-    componentCount++;
+    actions.push(
+      mcpAction(
+        mcp.displayName,
+        mcp.connectorApiName,
+        mcp.operationId ?? mcp.id,
+        mcp.description,
+      ),
+    );
   }
 
-  // 2b. Generate CUA component if requested
-  if (config.includeCua) {
-    allConnectorApiNames.add(CUA_CONNECTOR_API_NAME);
-    actionComponents.push(generateCuaActionComponent(prefix));
-    componentCount++;
-    log(`[TemplatePatcher] Added CUA component (Computer Operator connector)`);
-  }
-
-  // 3. Generate system topics
-  const systemTopics = generateSystemTopics(prefix);
-  // Count system topic components (8 topics)
-  componentCount += 8;
-
-  // 4. Build full YAML
   const connectorApiList = [...allConnectorApiNames];
-  const connectionRefs = generateConnectionReferences(prefix, connectorApiList);
-  const connectorDefs = generateConnectorDefinitions(connectorApiList);
 
-  const yaml = `kind: BotDefinition
-entity:
-  accessControlPolicy: GroupMembership
-  authenticationMode: Integrated
-  authenticationTrigger: Always
-  configuration:
-    settings:
-      GenerativeActionsEnabled: true
+  // Assemble YAML: base template + actions + connectionReferences + connectorDefinitions
+  const baseYaml = loadBaseTemplate();
+  const parts = [
+    baseYaml.trimEnd(),
+    "",
+    ...actions,
+    "",
+    generateConnectionReferences(connectorApiList),
+    "",
+    generateConnectorDefinitions(connectorApiList),
+    "",
+  ];
+  const yaml = parts.join("\n");
 
-  template: kickStartTemplate-1.0.0
+  // Build JSON
+  const jsonTemplate = buildJsonTemplate(config, connectorApiList);
 
-components:
-${systemTopics}
-${actionComponents.join("\n")}
-
-${connectionRefs}
-
-${connectorDefs}
-`;
-
-  // 5. Patch JSON template
-  const jsonTemplate = buildJsonTemplate(config);
-
-  // 6. Write to temp directory
+  // Write to temp directory
   const tmpDir = path.join(os.tmpdir(), `gcf-agent-${randomUUID().slice(0, 8)}`);
   fs.mkdirSync(tmpDir, { recursive: true });
 
@@ -447,53 +249,77 @@ ${connectorDefs}
   fs.writeFileSync(yamlPath, yaml, "utf-8");
   fs.writeFileSync(jsonPath, JSON.stringify(jsonTemplate, null, 2), "utf-8");
 
-  log(`[TemplatePatcher] Generated template: ${componentCount} components ΓåÆ ${tmpDir}`);
+  const actionCount = actions.length;
+  log(`[TemplatePatcher] Generated template: ${actionCount} tools, ${connectorApiList.length} connectors → ${tmpDir}`);
 
-  return { yamlPath, jsonPath, componentCount };
+  return { yamlPath, jsonPath, componentCount: 8 + actionCount };
 }
 
-// ΓöÇΓöÇΓöÇ JSON template builder ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+// ——— JSON template builder ———————————————————————————————————————————
 
-function buildJsonTemplate(config: TemplatePatchConfig): Record<string, unknown> {
-  const prefix = config.publisherPrefix;
-
-  // Build connector references for JSON spec
-  const allConnectorApiNames = new Set<string>();
-  for (const conn of config.connectors) allConnectorApiNames.add(conn.apiName);
-  for (const mcp of config.mcpServers) allConnectorApiNames.add(mcp.connectorApiName);
-
-  const connectors = [...allConnectorApiNames].map((apiName) => ({
-    connectionReference: connRefLogicalName(prefix, apiName),
-    connectorId: `/providers/Microsoft.PowerApps/apis/${apiName}`,
+function buildJsonTemplate(
+  config: TemplatePatchConfig,
+  connectorApiNames: string[],
+): Record<string, unknown> {
+  const connectors = connectorApiNames.map((apiName) => ({
+    "connectionReference": `connectionreference.${connRefKey(apiName)}`,
+    "_connectionReference.comment": "{locked}",
+    "connectorId": `/providers/Microsoft.PowerApps/apis/${apiName}`,
+    "_connectorId.comment": "{locked}",
   }));
 
-  // Build SharePoint knowledge sources
-  const sharepointSites = config.knowledgeSources
-    .filter((ks) => ks.type === "sharepoint")
-    .map((ks) => ({
-      name: ks.displayName,
-      description: ks.description,
-      site: ks.url,
-    }));
-
   return {
-    "$schema": "https://schema.mp.microsoft.com/schema/copilot-kickstart-template/1.0",
-    "schemaVersion": "1.0.0",
+    "version": "1.0.0",
+    "_version.comment": "{locked}",
     "metadata": {
-      name: "kickStartTemplate",
-      version: "1.0.0",
+      "templateName": "kickStartTemplate",
+      "_templateName.comment": "{locked}",
+      "templateVersion": "1.0.0",
+      "_templateVersion.comment": "{locked}",
+      "name": config.agentName,
+      "description": config.agentDescription ?? "A basic agent.",
+      "source": "CopilotStudio",
+      "_source.comment": "{locked}",
+      "quality": "PrivatePreview",
+      "_quality.comment": "{locked}",
+      "iconBase64": null,
+      "_iconBase64.comment": "{locked}",
+      "iconAltText": null,
+      "isGpt": false,
+      "_isGpt.comment": "{locked}",
+      "documentationUri": null,
+      "_documentationUri.comment": "{locked}",
+      "supportedLanguages": [],
+      "_supportedLanguages.comment": "{locked}",
+      "industries": [],
+      "_industries.comment": "{locked}",
+      "categories": [],
+      "_categories.comment": "{locked}",
     },
     "content": {
-      displayName: config.agentName,
-      description: config.agentDescription,
-      instructions: config.instructions,
-      conversationStarters: [],
+      "displayName": config.agentName,
+      "description": config.agentDescription ?? "A basic agent.",
+      "instructions": config.instructions ?? "",
+      "conversationStarters": [],
+    },
+    "customizations": {
+      "schema": {
+        "type": "object",
+        "_type.comment": "{locked}",
+        "properties": {
+          "Property1": {
+            "type": "string",
+            "_type.comment": "{locked}",
+            "title": "An overridable property",
+            "description": "This is a property that can be added anywhere in the content.yml as {{Property1}}.",
+            "default": "Default value.",
+            "_default.comment": "{locked}",
+          },
+        },
+      },
     },
     "spec": {
-      connectors,
-      knowledgeSources: {
-        sharepointSites: sharepointSites.length > 0 ? sharepointSites : undefined,
-      },
+      "connectors": connectors,
     },
   };
 }
