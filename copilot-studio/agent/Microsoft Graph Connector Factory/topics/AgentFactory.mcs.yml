@@ -42,7 +42,6 @@ beginDialog:
           connectorSummariesJson: Topic.connectorSummariesJson
           recommendedMcpServers: Topic.recommendedMcpServers
           recommendedKnowledgeSourcesJson: Topic.recommendedKnowledgeSourcesJson
-          includeCua: Topic.recIncludeCua
 
     # ── Step 2: Guard — require deployed connectors ──
 
@@ -310,53 +309,6 @@ beginDialog:
                   value: If(And(!IsBlank(Topic.recommendedMcpServers), Find("playwright", Topic.recommendedMcpServers) > 0), "true", "false")
                 }
               ]
-            },
-
-            {
-              type: "ColumnSet",
-              spacing: "Small",
-              separator: true,
-              selectAction: {
-                type: "Action.ToggleVisibility",
-                targetElements: ["d-options"]
-              },
-              columns: [
-                {
-                  type: "Column",
-                  width: "stretch",
-                  items: [
-                    {
-                      type: "TextBlock",
-                      text: "⚙️ Additional Options",
-                      weight: "Bolder",
-                      color: "Accent",
-                      wrap: true
-                    }
-                  ]
-                },
-                {
-                  type: "Column",
-                  width: "auto",
-                  verticalContentAlignment: "Center",
-                  items: [
-                    {type: "Icon", name: "ChevronDown", size: "Small", color: "Accent"}
-                  ]
-                }
-              ]
-            },
-            {
-              type: "Container",
-              id: "d-options",
-              isVisible: false,
-              spacing: "None",
-              items: [
-                {
-                  type: "Input.Toggle",
-                  id: "includeCua",
-                  title: "Include Computer Use Agent capability",
-                  value: If(Topic.recIncludeCua = "true", "true", "false")
-                }
-              ]
             }
           ],
           actions: [
@@ -379,7 +331,6 @@ beginDialog:
           mcp_dataverse: Topic.mcpDataverse
           mcp_m365: Topic.mcpM365
           mcp_playwright: Topic.mcpPlaywright
-          includeCua: Topic.includeCua
 
       outputType:
         properties:
@@ -394,7 +345,6 @@ beginDialog:
           mcp_dataverse: String
           mcp_m365: String
           mcp_playwright: String
-          includeCua: String
 
     # ── Step 4: Validate required fields ──
 
@@ -493,8 +443,7 @@ beginDialog:
                       { title: "Purpose", value: Topic.agentPurpose },
                       { title: "Connectors", value: "All deployed connectors included" },
                       { title: "Knowledge Sources", value: If(Or(IsBlank(Topic.knowledgeSourcesJson), Topic.knowledgeSourcesJson = "[]"), "None", Topic.knowledgeSourcesJson) },
-                      { title: "MCP Servers", value: If(IsBlank(Topic.mcpServerIds), "None", Topic.mcpServerIds) },
-                      { title: "CUA", value: If(Or(Topic.includeCua = "true", Topic.includeCua = "True"), "Yes", "No") }
+                      { title: "MCP Servers", value: If(IsBlank(Topic.mcpServerIds), "None", Topic.mcpServerIds) }
                     ]
                   },
                   {
@@ -518,7 +467,6 @@ beginDialog:
           solutionName: ="GCFApps"
           mcpServerIds: =If(IsBlank(Topic.mcpServerIds), "none", Topic.mcpServerIds)
           knowledgeSourcesJson: =If(Or(IsBlank(Topic.knowledgeSourcesJson), Topic.knowledgeSourcesJson = "[]"), "[]", Topic.knowledgeSourcesJson)
-          includeCua: =If(Or(Topic.includeCua = "true", Topic.includeCua = "True"), "true", "false")
           instructionsOverride: ="auto"
       dialog: copilots_header_91a5e.action.GCFRESTConnector-GenerateAgent
       output:

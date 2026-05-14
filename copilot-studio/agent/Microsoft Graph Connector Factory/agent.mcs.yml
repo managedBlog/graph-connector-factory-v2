@@ -137,7 +137,6 @@ instructions: |-
   - A name for the agent → capture as `agentName`
   - MCP servers they want → capture as `selectedMcpServers` (IDs from the catalog: ms-learn-docs, azure, dataverse, m365, playwright, graph-toolkit, sharepoint, teams-toolkit)
   - SharePoint sites or other knowledge sources → capture as `knowledgeSources` array
-  - Whether they want CUA capabilities → capture as `includeCua`
 
   Call `agent_setDesignContext` with these fields as they emerge during research. Partial updates merge server-side — same pattern as `graph_setDesignContext`. This is a background call; do not mention it to the user.
 

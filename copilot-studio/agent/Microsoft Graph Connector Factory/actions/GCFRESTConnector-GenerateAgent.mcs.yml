@@ -33,11 +33,6 @@ inputs:
     description: JSON array of knowledge sources with type url displayName description
     isRequired: true
   - kind: AutomaticTaskInput
-    propertyName: includeCua
-    name: Include CUA
-    description: Whether to include Computer Use Agent capability (true or false)
-    isRequired: true
-  - kind: AutomaticTaskInput
     propertyName: instructionsOverride
     name: Instructions Override
     description: Custom instructions text or auto for auto-generated
@@ -84,11 +79,6 @@ action:
       knowledgeSourcesJson:
         description: JSON array of knowledge source objects
         displayName: Knowledge Sources JSON
-        isRequired: true
-        type: String
-      includeCua:
-        description: Include Computer Use Agent true or false
-        displayName: Include CUA
         isRequired: true
         type: String
       instructionsOverride:
