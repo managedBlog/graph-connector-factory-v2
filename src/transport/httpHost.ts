@@ -2252,6 +2252,9 @@ export function startHttpServer(options: HttpHostOptions): void {
           : Array.isArray(d["operations"]) ? (d["operations"] as unknown[]).length : 0,
       }));
 
+      // Extract flat knowledge source URLs for card pre-population
+      const ksList = Array.isArray(ac?.["knowledgeSources"]) ? ac["knowledgeSources"] as Array<Record<string, unknown>> : [];
+
       res.json({
         agentName: ac?.["agentName"] ?? dc?.["agentName"] ?? "",
         agentPurpose: ac?.["agentPurpose"] ?? dc?.["agentPurpose"] ?? "",
@@ -2266,6 +2269,13 @@ export function startHttpServer(options: HttpHostOptions): void {
         recommendedKnowledgeSourcesJson: Array.isArray(ac?.["knowledgeSources"])
           ? JSON.stringify(ac["knowledgeSources"])
           : "[]",
+        // Flat knowledge source URLs for card pre-population
+        recKsUrl1: ksList.length > 0 ? String(ksList[0]?.["url"] ?? "") : "",
+        recKsUrl2: ksList.length > 1 ? String(ksList[1]?.["url"] ?? "") : "",
+        recKsUrl3: ksList.length > 2 ? String(ksList[2]?.["url"] ?? "") : "",
+        recKsName1: ksList.length > 0 ? String(ksList[0]?.["displayName"] ?? "") : "",
+        recKsName2: ksList.length > 1 ? String(ksList[1]?.["displayName"] ?? "") : "",
+        recKsName3: ksList.length > 2 ? String(ksList[2]?.["displayName"] ?? "") : "",
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);

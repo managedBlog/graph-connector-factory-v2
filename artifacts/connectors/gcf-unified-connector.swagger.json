@@ -562,6 +562,30 @@
                 "recommendedKnowledgeSourcesJson": {
                   "type": "string",
                   "x-ms-summary": "Recommended Knowledge Sources JSON"
+                },
+                "recKsUrl1": {
+                  "type": "string",
+                  "x-ms-summary": "Recommended KS URL 1"
+                },
+                "recKsUrl2": {
+                  "type": "string",
+                  "x-ms-summary": "Recommended KS URL 2"
+                },
+                "recKsUrl3": {
+                  "type": "string",
+                  "x-ms-summary": "Recommended KS URL 3"
+                },
+                "recKsName1": {
+                  "type": "string",
+                  "x-ms-summary": "Recommended KS Name 1"
+                },
+                "recKsName2": {
+                  "type": "string",
+                  "x-ms-summary": "Recommended KS Name 2"
+                },
+                "recKsName3": {
+                  "type": "string",
+                  "x-ms-summary": "Recommended KS Name 3"
                 }
               }
             }

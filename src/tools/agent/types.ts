@@ -15,7 +15,7 @@ export interface McpServerCatalogEntry {
   /** What this MCP server provides */
   description: string;
   /** Categorization for filtering */
-  category: "graph" | "azure" | "data" | "devtools" | "m365" | "security";
+  category: "graph" | "azure" | "data" | "devtools" | "m365" | "security" | "admin" | "retail" | "dynamics";
   /** Power Platform connector API name (globally stable for first-party) */
   connectorApiName: string;
   /** Full connector ID path */

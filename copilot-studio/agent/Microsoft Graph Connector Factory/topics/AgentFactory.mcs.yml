@@ -42,6 +42,12 @@ beginDialog:
           connectorSummariesJson: Topic.connectorSummariesJson
           recommendedMcpServers: Topic.recommendedMcpServers
           recommendedKnowledgeSourcesJson: Topic.recommendedKnowledgeSourcesJson
+          recKsUrl1: Topic.recKsUrl1
+          recKsUrl2: Topic.recKsUrl2
+          recKsUrl3: Topic.recKsUrl3
+          recKsName1: Topic.recKsName1
+          recKsName2: Topic.recKsName2
+          recKsName3: Topic.recKsName3
 
     # ── Step 2: Guard — require deployed connectors ──
 
@@ -216,19 +222,61 @@ beginDialog:
                   isSubtle: true
                 },
                 {
+                  type: "TextBlock",
+                  text: "Source 1",
+                  weight: "Bolder",
+                  size: "Small",
+                  spacing: "Medium"
+                },
+                {
+                  type: "Input.Text",
+                  id: "sharepointName1",
+                  placeholder: "Name (optional — derived from URL if blank)",
+                  value: =Coalesce(Topic.recKsName1, "")
+                },
+                {
                   type: "Input.Text",
                   id: "sharepointUrl1",
-                  placeholder: "https://tenant.sharepoint.com/sites/..."
+                  placeholder: "https://tenant.sharepoint.com/sites/...",
+                  value: =Coalesce(Topic.recKsUrl1, "")
+                },
+                {
+                  type: "TextBlock",
+                  text: "Source 2 (optional)",
+                  weight: "Bolder",
+                  size: "Small",
+                  spacing: "Medium"
+                },
+                {
+                  type: "Input.Text",
+                  id: "sharepointName2",
+                  placeholder: "Name (optional)",
+                  value: =Coalesce(Topic.recKsName2, "")
                 },
                 {
                   type: "Input.Text",
                   id: "sharepointUrl2",
-                  placeholder: "Additional SharePoint URL (optional)"
+                  placeholder: "https://tenant.sharepoint.com/sites/...",
+                  value: =Coalesce(Topic.recKsUrl2, "")
+                },
+                {
+                  type: "TextBlock",
+                  text: "Source 3 (optional)",
+                  weight: "Bolder",
+                  size: "Small",
+                  spacing: "Medium"
+                },
+                {
+                  type: "Input.Text",
+                  id: "sharepointName3",
+                  placeholder: "Name (optional)",
+                  value: =Coalesce(Topic.recKsName3, "")
                 },
                 {
                   type: "Input.Text",
                   id: "sharepointUrl3",
-                  placeholder: "Additional SharePoint URL (optional)"
+                  placeholder: "https://tenant.sharepoint.com/sites/...",
+                  value: =Coalesce(Topic.recKsUrl3, "")
                 }
               ]
             },
@@ -273,7 +321,7 @@ beginDialog:
               items: [
                 {
                   type: "TextBlock",
-                  text: If(!IsBlank(Topic.recommendedMcpServers), "Pre-selected based on research phase. Adjust as needed.", "Select Microsoft MCP servers to add as tools."),
+                  text: If(!IsBlank(Topic.recommendedMcpServers), "Pre-selected based on research phase. Adjust as needed.", "Select MCP servers to add as agent tools."),
                   wrap: true,
                   size: "Small",
                   isSubtle: true
@@ -281,32 +329,132 @@ beginDialog:
                 {
                   type: "Input.Toggle",
                   id: "mcp_mslearn",
-                  title: "Microsoft Learn Docs MCP",
-                  value: If(And(!IsBlank(Topic.recommendedMcpServers), Find("ms-learn-docs", Topic.recommendedMcpServers) > 0), "true", "false")
+                  title: "📚 Microsoft Learn Docs MCP",
+                  value: If(And(!IsBlank(Topic.recommendedMcpServers), Find(",ms-learn-docs,", Concatenate(",", Topic.recommendedMcpServers, ",")) > 0), "true", "false"),
+                  spacing: "Small"
                 },
                 {
                   type: "Input.Toggle",
-                  id: "mcp_azure",
-                  title: "Azure MCP Server",
-                  value: If(And(!IsBlank(Topic.recommendedMcpServers), Find("azure", Topic.recommendedMcpServers) > 0), "true", "false")
+                  id: "mcp_sentinel",
+                  title: "🛡️ Microsoft Sentinel MCP",
+                  value: If(And(!IsBlank(Topic.recommendedMcpServers), Find(",sentinel,", Concatenate(",", Topic.recommendedMcpServers, ",")) > 0), "true", "false"),
+                  spacing: "Small"
                 },
                 {
                   type: "Input.Toggle",
-                  id: "mcp_dataverse",
-                  title: "Microsoft Dataverse MCP",
-                  value: If(And(!IsBlank(Topic.recommendedMcpServers), Find("dataverse", Topic.recommendedMcpServers) > 0), "true", "false")
+                  id: "mcp_m365admin",
+                  title: "⚙️ Microsoft 365 Admin Center MCP",
+                  value: If(And(!IsBlank(Topic.recommendedMcpServers), Find(",m365-admin,", Concatenate(",", Topic.recommendedMcpServers, ",")) > 0), "true", "false"),
+                  spacing: "Small"
                 },
                 {
                   type: "Input.Toggle",
-                  id: "mcp_m365",
-                  title: "Microsoft 365 MCP",
-                  value: If(And(!IsBlank(Topic.recommendedMcpServers), Find("m365", Topic.recommendedMcpServers) > 0), "true", "false")
+                  id: "mcp_fabriciq",
+                  title: "📊 Fabric IQ Ontology MCP",
+                  value: If(And(!IsBlank(Topic.recommendedMcpServers), Find(",fabric-iq,", Concatenate(",", Topic.recommendedMcpServers, ",")) > 0), "true", "false"),
+                  spacing: "Small"
                 },
                 {
-                  type: "Input.Toggle",
-                  id: "mcp_playwright",
-                  title: "Playwright MCP (Browser Automation)",
-                  value: If(And(!IsBlank(Topic.recommendedMcpServers), Find("playwright", Topic.recommendedMcpServers) > 0), "true", "false")
+                  type: "ColumnSet",
+                  spacing: "Medium",
+                  selectAction: {
+                    type: "Action.ToggleVisibility",
+                    targetElements: ["d-workiq"]
+                  },
+                  columns: [
+                    {
+                      type: "Column",
+                      width: "stretch",
+                      items: [
+                        {
+                          type: "TextBlock",
+                          text: "📧 Work IQ — M365 (Preview)",
+                          weight: "Bolder",
+                          size: "Small",
+                          color: "Accent"
+                        }
+                      ]
+                    },
+                    {
+                      type: "Column",
+                      width: "auto",
+                      verticalContentAlignment: "Center",
+                      items: [
+                        {type: "Icon", name: "ChevronDown", size: "xxSmall", color: "Accent"}
+                      ]
+                    }
+                  ]
+                },
+                {
+                  type: "Container",
+                  id: "d-workiq",
+                  isVisible: false,
+                  spacing: "None",
+                  items: [
+                    {
+                      type: "TextBlock",
+                      text: "Work IQ servers provide M365 productivity tools. These features are in preview.",
+                      wrap: true,
+                      size: "Small",
+                      isSubtle: true
+                    },
+                    {
+                      type: "Input.Toggle",
+                      id: "mcp_workiq_mail",
+                      title: "Mail (Outlook)",
+                      value: If(And(!IsBlank(Topic.recommendedMcpServers), Find(",workiq-mail,", Concatenate(",", Topic.recommendedMcpServers, ",")) > 0), "true", "false"),
+                      spacing: "Small"
+                    },
+                    {
+                      type: "Input.Toggle",
+                      id: "mcp_workiq_calendar",
+                      title: "Calendar (Outlook)",
+                      value: If(And(!IsBlank(Topic.recommendedMcpServers), Find(",workiq-calendar,", Concatenate(",", Topic.recommendedMcpServers, ",")) > 0), "true", "false"),
+                      spacing: "Small"
+                    },
+                    {
+                      type: "Input.Toggle",
+                      id: "mcp_workiq_teams",
+                      title: "Teams",
+                      value: If(And(!IsBlank(Topic.recommendedMcpServers), Find(",workiq-teams,", Concatenate(",", Topic.recommendedMcpServers, ",")) > 0), "true", "false"),
+                      spacing: "Small"
+                    },
+                    {
+                      type: "Input.Toggle",
+                      id: "mcp_workiq_word",
+                      title: "Word",
+                      value: If(And(!IsBlank(Topic.recommendedMcpServers), Find(",workiq-word,", Concatenate(",", Topic.recommendedMcpServers, ",")) > 0), "true", "false"),
+                      spacing: "Small"
+                    },
+                    {
+                      type: "Input.Toggle",
+                      id: "mcp_workiq_user",
+                      title: "User (Profile & Presence)",
+                      value: If(And(!IsBlank(Topic.recommendedMcpServers), Find(",workiq-user,", Concatenate(",", Topic.recommendedMcpServers, ",")) > 0), "true", "false"),
+                      spacing: "Small"
+                    },
+                    {
+                      type: "Input.Toggle",
+                      id: "mcp_workiq_copilot",
+                      title: "Copilot Search",
+                      value: If(And(!IsBlank(Topic.recommendedMcpServers), Find(",workiq-copilot,", Concatenate(",", Topic.recommendedMcpServers, ",")) > 0), "true", "false"),
+                      spacing: "Small"
+                    },
+                    {
+                      type: "Input.Toggle",
+                      id: "mcp_workiq_onedrive",
+                      title: "OneDrive",
+                      value: If(And(!IsBlank(Topic.recommendedMcpServers), Find(",workiq-onedrive,", Concatenate(",", Topic.recommendedMcpServers, ",")) > 0), "true", "false"),
+                      spacing: "Small"
+                    },
+                    {
+                      type: "Input.Toggle",
+                      id: "mcp_workiq_sharepoint",
+                      title: "SharePoint",
+                      value: If(And(!IsBlank(Topic.recommendedMcpServers), Find(",workiq-sharepoint,", Concatenate(",", Topic.recommendedMcpServers, ",")) > 0), "true", "false"),
+                      spacing: "Small"
+                    }
+                  ]
                 }
               ]
             }
@@ -323,28 +471,48 @@ beginDialog:
           actionSubmitId: Topic.cardActionId
           agentName: Topic.agentName
           agentPurpose: Topic.agentPurpose
+          sharepointName1: Topic.sharepointName1
+          sharepointName2: Topic.sharepointName2
+          sharepointName3: Topic.sharepointName3
           sharepointUrl1: Topic.sharepointUrl1
           sharepointUrl2: Topic.sharepointUrl2
           sharepointUrl3: Topic.sharepointUrl3
           mcp_mslearn: Topic.mcpMslearn
-          mcp_azure: Topic.mcpAzure
-          mcp_dataverse: Topic.mcpDataverse
-          mcp_m365: Topic.mcpM365
-          mcp_playwright: Topic.mcpPlaywright
+          mcp_sentinel: Topic.mcpSentinel
+          mcp_m365admin: Topic.mcpM365Admin
+          mcp_fabriciq: Topic.mcpFabricIq
+          mcp_workiq_mail: Topic.mcpWorkiqMail
+          mcp_workiq_calendar: Topic.mcpWorkiqCalendar
+          mcp_workiq_teams: Topic.mcpWorkiqTeams
+          mcp_workiq_word: Topic.mcpWorkiqWord
+          mcp_workiq_user: Topic.mcpWorkiqUser
+          mcp_workiq_copilot: Topic.mcpWorkiqCopilot
+          mcp_workiq_onedrive: Topic.mcpWorkiqOnedrive
+          mcp_workiq_sharepoint: Topic.mcpWorkiqSharepoint
 
       outputType:
         properties:
           actionSubmitId: String
           agentName: String
           agentPurpose: String
+          sharepointName1: String
+          sharepointName2: String
+          sharepointName3: String
           sharepointUrl1: String
           sharepointUrl2: String
           sharepointUrl3: String
           mcp_mslearn: String
-          mcp_azure: String
-          mcp_dataverse: String
-          mcp_m365: String
-          mcp_playwright: String
+          mcp_sentinel: String
+          mcp_m365admin: String
+          mcp_fabriciq: String
+          mcp_workiq_mail: String
+          mcp_workiq_calendar: String
+          mcp_workiq_teams: String
+          mcp_workiq_word: String
+          mcp_workiq_user: String
+          mcp_workiq_copilot: String
+          mcp_workiq_onedrive: String
+          mcp_workiq_sharepoint: String
 
     # ── Step 4: Validate required fields ──
 
@@ -380,10 +548,17 @@ beginDialog:
       value: |-
         =Concatenate(
           If(Or(Topic.mcpMslearn = "true", Topic.mcpMslearn = "True"), "ms-learn-docs,", ""),
-          If(Or(Topic.mcpAzure = "true", Topic.mcpAzure = "True"), "azure,", ""),
-          If(Or(Topic.mcpDataverse = "true", Topic.mcpDataverse = "True"), "dataverse,", ""),
-          If(Or(Topic.mcpM365 = "true", Topic.mcpM365 = "True"), "m365,", ""),
-          If(Or(Topic.mcpPlaywright = "true", Topic.mcpPlaywright = "True"), "playwright,", "")
+          If(Or(Topic.mcpSentinel = "true", Topic.mcpSentinel = "True"), "sentinel,", ""),
+          If(Or(Topic.mcpM365Admin = "true", Topic.mcpM365Admin = "True"), "m365-admin,", ""),
+          If(Or(Topic.mcpFabricIq = "true", Topic.mcpFabricIq = "True"), "fabric-iq,", ""),
+          If(Or(Topic.mcpWorkiqMail = "true", Topic.mcpWorkiqMail = "True"), "workiq-mail,", ""),
+          If(Or(Topic.mcpWorkiqCalendar = "true", Topic.mcpWorkiqCalendar = "True"), "workiq-calendar,", ""),
+          If(Or(Topic.mcpWorkiqTeams = "true", Topic.mcpWorkiqTeams = "True"), "workiq-teams,", ""),
+          If(Or(Topic.mcpWorkiqWord = "true", Topic.mcpWorkiqWord = "True"), "workiq-word,", ""),
+          If(Or(Topic.mcpWorkiqUser = "true", Topic.mcpWorkiqUser = "True"), "workiq-user,", ""),
+          If(Or(Topic.mcpWorkiqCopilot = "true", Topic.mcpWorkiqCopilot = "True"), "workiq-copilot,", ""),
+          If(Or(Topic.mcpWorkiqOnedrive = "true", Topic.mcpWorkiqOnedrive = "True"), "workiq-onedrive,", ""),
+          If(Or(Topic.mcpWorkiqSharepoint = "true", Topic.mcpWorkiqSharepoint = "True"), "workiq-sharepoint,", "")
         )
 
     # ── Step 6: Build knowledge sources JSON ──
@@ -394,9 +569,9 @@ beginDialog:
       value: |-
         =With(
           {
-            sp1: If(!IsBlank(Topic.sharepointUrl1), Concatenate("{""type"":""sharepoint"",""url"":""", Topic.sharepointUrl1, """,""displayName"":""SharePoint Source 1"",""description"":""SharePoint knowledge source""}"), ""),
-            sp2: If(!IsBlank(Topic.sharepointUrl2), Concatenate("{""type"":""sharepoint"",""url"":""", Topic.sharepointUrl2, """,""displayName"":""SharePoint Source 2"",""description"":""SharePoint knowledge source""}"), ""),
-            sp3: If(!IsBlank(Topic.sharepointUrl3), Concatenate("{""type"":""sharepoint"",""url"":""", Topic.sharepointUrl3, """,""displayName"":""SharePoint Source 3"",""description"":""SharePoint knowledge source""}"), "")
+            sp1: If(!IsBlank(Topic.sharepointUrl1), Concatenate("{""type"":""sharepoint"",""url"":""", Topic.sharepointUrl1, """,""displayName"":""", If(!IsBlank(Topic.sharepointName1), Topic.sharepointName1, "SharePoint Source 1"), """,""description"":""SharePoint knowledge source""}"), ""),
+            sp2: If(!IsBlank(Topic.sharepointUrl2), Concatenate("{""type"":""sharepoint"",""url"":""", Topic.sharepointUrl2, """,""displayName"":""", If(!IsBlank(Topic.sharepointName2), Topic.sharepointName2, "SharePoint Source 2"), """,""description"":""SharePoint knowledge source""}"), ""),
+            sp3: If(!IsBlank(Topic.sharepointUrl3), Concatenate("{""type"":""sharepoint"",""url"":""", Topic.sharepointUrl3, """,""displayName"":""", If(!IsBlank(Topic.sharepointName3), Topic.sharepointName3, "SharePoint Source 3"), """,""description"":""SharePoint knowledge source""}"), "")
           },
           Concatenate(
             "[",
@@ -441,8 +616,8 @@ beginDialog:
                     facts: [
                       { title: "Name", value: Topic.agentName },
                       { title: "Purpose", value: Topic.agentPurpose },
-                      { title: "Connectors", value: "All deployed connectors included" },
-                      { title: "Knowledge Sources", value: If(Or(IsBlank(Topic.knowledgeSourcesJson), Topic.knowledgeSourcesJson = "[]"), "None", Topic.knowledgeSourcesJson) },
+                      { title: "Connectors", value: Concatenate(Topic.deployedConnectorCount, " deployed connector(s)") },
+                      { title: "Knowledge Sources", value: If(Or(IsBlank(Topic.knowledgeSourcesJson), Topic.knowledgeSourcesJson = "[]"), "None", Concatenate(Text(CountRows(Filter(Table({u: Topic.sharepointUrl1}, {u: Topic.sharepointUrl2}, {u: Topic.sharepointUrl3}), !IsBlank(u)))), " SharePoint site(s)")) },
                       { title: "MCP Servers", value: If(IsBlank(Topic.mcpServerIds), "None", Topic.mcpServerIds) }
                     ]
                   },
