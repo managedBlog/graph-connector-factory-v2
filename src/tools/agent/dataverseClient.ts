@@ -83,6 +83,39 @@ function generateRandomSuffix(): string {
 }
 
 /**
+ * Derive a meaningful display name for a knowledge source.
+ * If the name is generic (e.g., "SharePoint Source 1"), extract the site name from the URL.
+ * Example: "https://tenant.sharepoint.com/sites/ServiceDesk" → "ServiceDesk"
+ */
+function deriveKnowledgeSourceName(ks: KnowledgeSource): string {
+  const generic = /^SharePoint\s+(Source|Knowledge\s+Source)\s*\d*$/i;
+  if (ks.displayName && !generic.test(ks.displayName)) {
+    return ks.displayName;
+  }
+
+  // Extract site name from URL path
+  if (ks.url) {
+    try {
+      const url = new URL(ks.url);
+      const segments = url.pathname.split("/").filter(Boolean);
+      // Common patterns: /sites/SiteName or /teams/TeamName
+      const siteIdx = segments.findIndex((s) => s === "sites" || s === "teams");
+      const siteName = siteIdx >= 0 ? segments[siteIdx + 1] : undefined;
+      if (siteName) {
+        return decodeURIComponent(siteName);
+      }
+      // Fallback: last path segment
+      const last = segments[segments.length - 1];
+      if (last) return decodeURIComponent(last);
+    } catch {
+      // URL parse failed — fall through
+    }
+  }
+
+  return ks.displayName || "SharePoint Knowledge Source";
+}
+
+/**
  * Add a SharePoint knowledge source to an existing bot via Dataverse API.
  */
 async function addSharePointKnowledgeSource(
@@ -93,7 +126,9 @@ async function addSharePointKnowledgeSource(
   prefix: string,
   botSchemaName: string,
 ): Promise<void> {
-  const sanitizedName = sanitizeForSchema(ks.displayName);
+  // Derive a meaningful name from the URL if the display name is generic
+  const displayName = deriveKnowledgeSourceName(ks);
+  const sanitizedName = sanitizeForSchema(displayName);
   const suffix = generateRandomSuffix();
   const schemaName = `${prefix}_${botSchemaName}.topic.${sanitizedName}_${suffix}`;
 
@@ -106,7 +141,7 @@ async function addSharePointKnowledgeSource(
 
   const body = {
     componenttype: 16,
-    name: ks.displayName,
+    name: displayName,
     description: ks.description || `Knowledge source from ${ks.url}`,
     schemaname: schemaName,
     data,
@@ -129,7 +164,7 @@ async function addSharePointKnowledgeSource(
     throw new Error(`Dataverse POST failed (${response.status}): ${errText}`);
   }
 
-  log(`[Dataverse] Added knowledge source "${ks.displayName}" to bot ${botId}`);
+  log(`[Dataverse] Added knowledge source "${displayName}" to bot ${botId}`);
 }
 
 /**

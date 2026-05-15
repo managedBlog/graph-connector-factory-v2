@@ -87,14 +87,15 @@ export async function generateAgent(
   }));
 
   // 4. Generate instructions (or use override), enforce 8K limit
-  const rawInstructions = input.instructionsOverride ??
-    generateInstructions({
-      agentName: input.agentName,
-      agentPurpose: input.agentPurpose,
-      connectorOperations,
-      mcpServers,
-      knowledgeSources: input.knowledgeSources ?? [],
-    });
+  const rawInstructions = (input.instructionsOverride && input.instructionsOverride !== "auto")
+    ? input.instructionsOverride
+    : generateInstructions({
+        agentName: input.agentName,
+        agentPurpose: input.agentPurpose,
+        connectorOperations,
+        mcpServers,
+        knowledgeSources: input.knowledgeSources ?? [],
+      });
   const instructions = truncateInstructions(rawInstructions);
 
   const starterPrompts = generateStarterPrompts({

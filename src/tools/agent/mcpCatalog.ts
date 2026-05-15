@@ -26,7 +26,7 @@ const MCP_CATALOG: McpServerCatalogEntry[] = [
     stable: true,
   },
   {
-    id: "azure-mcp",
+    id: "azure",
     displayName: "Azure MCP Server",
     description: "Manage Azure resources ΓÇö storage, compute, networking, and monitoring.",
     category: "azure",
@@ -38,7 +38,7 @@ const MCP_CATALOG: McpServerCatalogEntry[] = [
     stable: false, // connector name may vary by tenant
   },
   {
-    id: "m365-mcp",
+    id: "m365",
     displayName: "Microsoft 365 MCP Server",
     description: "Access Microsoft 365 data ΓÇö emails, calendar, files, contacts via Microsoft Graph.",
     category: "m365",
@@ -50,7 +50,7 @@ const MCP_CATALOG: McpServerCatalogEntry[] = [
     stable: false,
   },
   {
-    id: "dataverse-mcp",
+    id: "dataverse",
     displayName: "Microsoft Dataverse MCP Server",
     description: "Query and manage Dataverse tables, entities, and business data.",
     category: "data",
@@ -62,7 +62,7 @@ const MCP_CATALOG: McpServerCatalogEntry[] = [
     stable: false,
   },
   {
-    id: "playwright-mcp",
+    id: "playwright",
     displayName: "Playwright MCP Server",
     description: "Browser automation for web testing, scraping, and interaction.",
     category: "devtools",
@@ -74,7 +74,7 @@ const MCP_CATALOG: McpServerCatalogEntry[] = [
     stable: false,
   },
   {
-    id: "kusto-mcp",
+    id: "kusto",
     displayName: "Azure Data Explorer (Kusto) MCP Server",
     description: "Query Azure Data Explorer clusters with KQL.",
     category: "data",
@@ -86,7 +86,7 @@ const MCP_CATALOG: McpServerCatalogEntry[] = [
     stable: false,
   },
   {
-    id: "entra-mcp",
+    id: "entra",
     displayName: "Microsoft Entra MCP Server",
     description: "Manage Entra ID identities, groups, and applications.",
     category: "security",
@@ -98,7 +98,7 @@ const MCP_CATALOG: McpServerCatalogEntry[] = [
     stable: false,
   },
   {
-    id: "intune-mcp",
+    id: "intune",
     displayName: "Microsoft Intune MCP Server",
     description: "Manage device policies, compliance, and configurations via Intune.",
     category: "m365",
