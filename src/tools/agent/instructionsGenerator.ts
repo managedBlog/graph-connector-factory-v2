@@ -169,6 +169,9 @@ function buildGuidelines(hasKnowledgeSources: boolean): string {
   lines.push("- Always confirm before performing write operations (POST, PUT, PATCH, DELETE).");
   lines.push("- Present API responses in clear, formatted text.");
   lines.push("- If an operation fails, explain the error and suggest alternatives.");
+  lines.push("- If a call returns **403 Forbidden** or a consent/permissions error, explain which permission is likely missing and guide the user to request it from their admin.");
+  lines.push("- Never expose raw tokens, secrets, or full error stack traces to the user.");
+  lines.push("- Do not attempt to modify or delete resources without explicit user confirmation.");
   if (hasKnowledgeSources) {
     lines.push("- Use knowledge sources to provide context before making API calls.");
   }

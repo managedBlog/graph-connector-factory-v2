@@ -2216,10 +2216,8 @@ export function startHttpServer(options: HttpHostOptions): void {
   app.get("/api/agent/mcp-servers", (req, res) => {
     try {
       const category = req.query["category"] as string | undefined;
-      const stableOnly = req.query["stableOnly"] === "true";
-      const filter: { category?: string; stableOnly?: boolean } = {};
+      const filter: { category?: string } = {};
       if (category != null) filter.category = category;
-      if (stableOnly) filter.stableOnly = stableOnly;
       const servers = agentListMcpServers(filter);
       res.json({ servers, count: servers.length });
     } catch (err) {
@@ -2263,9 +2261,7 @@ export function startHttpServer(options: HttpHostOptions): void {
         deployedConnectorsJson: JSON.stringify(deployed),
         connectorSummariesJson: JSON.stringify(connectorSummaries),
         // Research-phase recommendations from agent context
-        recommendedMcpServers: Array.isArray(ac?.["selectedMcpServers"])
-          ? (ac["selectedMcpServers"] as string[]).join(",")
-          : "",
+        recommendedMcpServers: (normalizeMcpServerIds(ac?.["selectedMcpServers"]) ?? []).join(","),
         recommendedKnowledgeSourcesJson: Array.isArray(ac?.["knowledgeSources"])
           ? JSON.stringify(ac["knowledgeSources"])
           : "[]",

@@ -155,15 +155,11 @@ const MCP_CATALOG: McpServerCatalogEntry[] = [
  */
 export function listMcpServers(filter?: {
   category?: string;
-  stableOnly?: boolean;
 }): McpServerCatalogEntry[] {
   let results = [...MCP_CATALOG];
 
   if (filter?.category) {
     results = results.filter((s) => s.category === filter.category);
-  }
-  if (filter?.stableOnly) {
-    results = results.filter((s) => s.stable);
   }
 
   return results;

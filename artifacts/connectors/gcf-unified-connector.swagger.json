@@ -455,24 +455,7 @@
         "summary": "List available MCP servers",
         "description": "Returns a curated catalog of Microsoft MCP servers that can be added as tools to a generated agent.",
         "x-ms-visibility": "important",
-        "parameters": [
-          {
-            "name": "category",
-            "in": "query",
-            "required": false,
-            "type": "string",
-            "description": "Filter by category (graph, azure, data, devtools, m365, security).",
-            "x-ms-summary": "Category"
-          },
-          {
-            "name": "stableOnly",
-            "in": "query",
-            "required": false,
-            "type": "string",
-            "description": "If true, only return servers with known stable connector names.",
-            "x-ms-summary": "Stable Only"
-          }
-        ],
+        "parameters": [],
         "responses": {
           "200": {
             "description": "List of MCP servers",

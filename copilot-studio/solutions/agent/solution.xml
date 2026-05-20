@@ -1,8 +1,8 @@
-<ImportExportXml version="9.2.26041.143" SolutionPackageVersion="9.2" languagecode="1033" generatedBy="CrmLive" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" OrganizationVersion="9.2.26041.143" OrganizationSchemaType="Standard" CRMServerServiceabilityVersion="9.2.26042.00146">
+<ImportExportXml version="9.2.26051.134" SolutionPackageVersion="9.2" languagecode="1033" generatedBy="CrmLive" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" OrganizationVersion="9.2.26051.134" OrganizationSchemaType="Standard" CRMServerServiceabilityVersion="9.2.26052.00133">
   <SolutionManifest>
-    <UniqueName>GraphConnectorFactoryFull</UniqueName>
+    <UniqueName>GraphConnectorandAgentFactoryFull</UniqueName>
     <LocalizedNames>
-      <LocalizedName description="Graph Connector Factory - Full" languagecode="1033" />
+      <LocalizedName description="Graph Connector and Agent Factory - Full" languagecode="1033" />
     </LocalizedNames>
     <Descriptions />
     <Version>1.0.0.1</Version>

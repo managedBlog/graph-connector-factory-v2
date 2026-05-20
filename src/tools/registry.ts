@@ -300,7 +300,6 @@ const graphToolDefinitions: AvailableTool[] = [
       type: "object",
       properties: {
         category: { type: "string", description: "Filter by category: graph, azure, data, devtools, m365, security." },
-        stableOnly: { type: "boolean", description: "Only return servers with globally stable connector names." },
       },
     },
   },
@@ -766,9 +765,8 @@ async function invokeAgentTool(
   switch (toolName) {
     case "agent_listMcpServers": {
       const typedInput = input as Record<string, unknown>;
-      const filter: { category?: string; stableOnly?: boolean } = {};
+      const filter: { category?: string } = {};
       if (typedInput["category"] != null) filter.category = typedInput["category"] as string;
-      if (typedInput["stableOnly"] != null) filter.stableOnly = typedInput["stableOnly"] as boolean;
       const servers = listMcpServers(filter);
       return { ok: true, toolName, result: { servers, count: servers.length } };
     }

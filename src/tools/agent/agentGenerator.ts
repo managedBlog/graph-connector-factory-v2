@@ -165,13 +165,19 @@ export async function generateAgent(
     // Clean up temp files
     cleanupTemplateDir(patchedTemplate.yamlPath);
 
-    if (!result.success && !result.agentId) {
+    if (!result.success) {
+      // PAC may output an agent ID even when creation fails (e.g., schema name conflict)
+      // — don't treat that as success
+      const errorMsg = result.stderr || result.stdout || "Unknown error";
+      const isSchemaConflict = errorMsg.includes("ExportKeyInvalidCreate") || errorMsg.includes("violates a database constraint");
       return {
         success: false,
         pendingConnections: [],
         starterPrompts,
         warnings: [],
-        error: `PAC copilot create failed: ${result.stderr || result.stdout}`,
+        error: isSchemaConflict
+          ? `Agent with schema name "${agentSchemaName}" already exists. Delete the existing agent or use a different name. PAC output: ${errorMsg}`
+          : `PAC copilot create failed: ${errorMsg}`,
         pacOutput: result.stdout + "\n" + result.stderr,
       };
     }

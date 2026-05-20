@@ -1,7 +1,7 @@
 <botcomponent schemaname="copilots_header_91a5e.action.MicrosoftLearnDocsMCP-MicrosoftLearnDocsMCPServer">
   <componenttype>9</componenttype>
   <iscustomizable>0</iscustomizable>
-  <name>Microsoft Learn Docs MCP - Microsoft Learn Docs MCP Server</name>
+  <name>MicrosoftLearnDocsMCP-MicrosoftLearnDocsMCPServer</name>
   <parentbotid>
     <schemaname>copilots_header_91a5e</schemaname>
   </parentbotid>

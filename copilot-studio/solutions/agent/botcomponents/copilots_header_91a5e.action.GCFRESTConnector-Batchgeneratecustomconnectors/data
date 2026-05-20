@@ -1,6 +1,16 @@
 kind: TaskDialog
 modelDisplayName: Batch generate custom connectors
-modelDescription: Generate Power Platform custom connector Swagger files for multiple connector groups in a single call. Accepts a JSON string of groups (each with baseName and ops), generates each connector, publishes to Gist, and returns results as a JSON string for Parse value node consumption.
+modelDescription: Generate Power Platform custom connector Swagger files for multiple connector groups in a single call.
+inputs:
+  - kind: AutomaticTaskInput
+    propertyName: groupsJson
+    name: Groups JSON
+    description: JSON string containing an array of connector groups
+  - kind: AutomaticTaskInput
+    propertyName: version
+    name: API Version
+    description: Graph API version (v1.0 or beta)
+
 outputs:
   - propertyName: groupCount
 
@@ -10,10 +20,23 @@ outputs:
 
 action:
   kind: InvokeConnectorTaskAction
-  connectionReference: copilots_header_91a5e.shared_new-5fgcf-20rest-20connector-5f251f982b189de9d2.52f1402e515247c1ae6cdbfa6793c46d
+  connectionReference: copilots_header_91a5e.shared_new-5fgcf-20rest-20connector-5f251f982b189de9d2.3b64b1b7818145a59f83da81404dde8e
   connectionProperties:
     mode: Invoker
 
   operationId: graph_batchGenerate
+
+  inputType:
+    properties:
+      groupsJson:
+        displayName: Groups JSON
+        description: JSON string containing an array of connector groups
+        isRequired: true
+        type: String
+      version:
+        displayName: API Version
+        description: Graph API version (v1.0 or beta)
+        isRequired: false
+        type: String
 
 outputMode: All

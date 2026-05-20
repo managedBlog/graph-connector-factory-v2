@@ -1,7 +1,7 @@
 <botcomponent schemaname="copilots_header_91a5e.action.GCFMCPAgent-GCFMCPAgent">
   <componenttype>9</componenttype>
   <iscustomizable>0</iscustomizable>
-  <name>GCF MCP Agent - GCF MCP Agent</name>
+  <name>GCFMCPAgent-GCFMCPAgent</name>
   <parentbotid>
     <schemaname>copilots_header_91a5e</schemaname>
   </parentbotid>

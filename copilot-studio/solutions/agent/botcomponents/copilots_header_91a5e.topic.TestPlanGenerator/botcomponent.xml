@@ -1,0 +1,10 @@
+<botcomponent schemaname="copilots_header_91a5e.topic.TestPlanGenerator">
+  <componenttype>9</componenttype>
+  <iscustomizable>0</iscustomizable>
+  <name>TestPlanGenerator</name>
+  <parentbotid>
+    <schemaname>copilots_header_91a5e</schemaname>
+  </parentbotid>
+  <statecode>0</statecode>
+  <statuscode>1</statuscode>
+</botcomponent>

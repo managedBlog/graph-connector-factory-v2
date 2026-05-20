@@ -896,7 +896,7 @@ beginDialog:
                   environmentId: =Topic.cfmEnvId
                   authType: =If(IsBlank(Topic.cfmAuthType), Blank(), Topic.cfmAuthType)
                   swaggerUrl: =Topic.gen1SwaggerUrl
-              dialog: copilots_header_91a5e.action.GCFRESTConnector-Deployconnectorpipeline
+              dialog: copilots_header_91a5e.action.GCFRESTConnector-Deployconnectorpipelineasync
               output:
                 binding:
                   jobId: Topic.dep1JobId
@@ -919,7 +919,7 @@ beginDialog:
                       input:
                         binding:
                           jobId: =Topic.dep1JobId
-                      dialog: copilots_header_91a5e.action.GCFRESTConnector-Polldeploystatus
+                      dialog: copilots_header_91a5e.action.GCFRESTConnector-Polldeployjobstatus
                       output:
                         binding:
                           status: Topic.dep1Status
@@ -987,7 +987,7 @@ beginDialog:
                           environmentId: =Topic.cfmEnvId
                           authType: =If(IsBlank(Topic.cfmAuthType), Blank(), Topic.cfmAuthType)
                           swaggerUrl: =Topic.gen2SwaggerUrl
-                      dialog: copilots_header_91a5e.action.GCFRESTConnector-Deployconnectorpipeline
+                      dialog: copilots_header_91a5e.action.GCFRESTConnector-Deployconnectorpipelineasync
                       output:
                         binding:
                           jobId: Topic.dep2JobId
@@ -1009,7 +1009,7 @@ beginDialog:
                               input:
                                 binding:
                                   jobId: =Topic.dep2JobId
-                              dialog: copilots_header_91a5e.action.GCFRESTConnector-Polldeploystatus
+                              dialog: copilots_header_91a5e.action.GCFRESTConnector-Polldeployjobstatus
                               output:
                                 binding:
                                   status: Topic.dep2Status
@@ -1077,7 +1077,7 @@ beginDialog:
                           environmentId: =Topic.cfmEnvId
                           authType: =If(IsBlank(Topic.cfmAuthType), Blank(), Topic.cfmAuthType)
                           swaggerUrl: =Topic.gen3SwaggerUrl
-                      dialog: copilots_header_91a5e.action.GCFRESTConnector-Deployconnectorpipeline
+                      dialog: copilots_header_91a5e.action.GCFRESTConnector-Deployconnectorpipelineasync
                       output:
                         binding:
                           jobId: Topic.dep3JobId
@@ -1099,7 +1099,7 @@ beginDialog:
                               input:
                                 binding:
                                   jobId: =Topic.dep3JobId
-                              dialog: copilots_header_91a5e.action.GCFRESTConnector-Polldeploystatus
+                              dialog: copilots_header_91a5e.action.GCFRESTConnector-Polldeployjobstatus
                               output:
                                 binding:
                                   status: Topic.dep3Status

@@ -243,10 +243,16 @@ export async function setAgentInstructions(
 
   const schemaName = `${botSchemaName}.gpt.default`;
 
+  // YAML-safe: double-quote the instructions value and escape special chars
+  const yamlEscapedInstructions = safeInstructions
+    .replace(/\\/g, "\\\\")   // escape backslashes
+    .replace(/"/g, '\\"')     // escape double quotes
+    .replace(/\n/g, "\\n");   // newlines as literal \n
+
   const data = [
     "kind: GptComponentMetadata",
     `displayName: ${agentName}`,
-    `instructions: ${safeInstructions.replace(/\n/g, "\\n")}`,
+    `instructions: "${yamlEscapedInstructions}"`,
     "gptCapabilities:",
     "  webBrowsing: false",
     "  codeInterpreter: false",

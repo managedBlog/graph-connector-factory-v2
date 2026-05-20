@@ -1,1 +1,46 @@
-{"swagger":"2.0","info":{"title":"GCF MCP Agent","description":"MCP agent connector for Graph Connector Factory v2. Enables AI-powered research of Microsoft Graph API endpoints and custom connector generation via MCP Streamable protocol.","version":"1.0","contact":{"name":"Graph Connector Factory","url":"https://github.com/managedBlog/graph-connector-factory-v2"}},"host":"__SERVER_HOST__","basePath":"/","schemes":["https"],"paths":{"/mcp":{"post":{"operationId":"InvokeServer","summary":"GCF MCP Agent","description":"MCP agent connector for Graph Connector Factory v2. Enables AI-powered research of Microsoft Graph API endpoints and custom connector generation via MCP Streamable protocol.","x-ms-agentic-protocol":"mcp-streamable-1.0","responses":{"200":{"description":"Immediate Response"}}}}},"securityDefinitions":{"oauth2-auth":{"type":"oauth2","flow":"accessCode","tokenUrl":"https://login.windows.net/common/oauth2/authorize","scopes":{},"authorizationUrl":"https://login.microsoftonline.com/common/oauth2/authorize"}},"security":[{"oauth2-auth":[]}]}
+{
+  "swagger": "2.0",
+  "info": {
+    "title": "GCF MCP Agent",
+    "description": "MCP agent connector for Graph Connector Factory v2. Enables AI-powered research of Microsoft Graph API endpoints and custom connector generation via MCP Streamable protocol.",
+    "version": "1.0",
+    "contact": {
+      "name": "Graph Connector Factory",
+      "url": "https://github.com/managedBlog/graph-connector-factory-v2"
+    }
+  },
+  "host": "__SERVER_HOST__",
+  "basePath": "/",
+  "schemes": [
+    "https"
+  ],
+  "paths": {
+    "/mcp": {
+      "post": {
+        "operationId": "InvokeServer",
+        "summary": "GCF MCP Agent",
+        "description": "MCP agent connector for Graph Connector Factory v2. Enables AI-powered research of Microsoft Graph API endpoints and custom connector generation via MCP Streamable protocol.",
+        "x-ms-agentic-protocol": "mcp-streamable-1.0",
+        "responses": {
+          "200": {
+            "description": "Immediate Response"
+          }
+        }
+      }
+    }
+  },
+  "securityDefinitions": {
+    "oauth2-auth": {
+      "type": "oauth2",
+      "flow": "accessCode",
+      "tokenUrl": "https://login.windows.net/common/oauth2/authorize",
+      "scopes": {},
+      "authorizationUrl": "https://login.microsoftonline.com/common/oauth2/authorize"
+    }
+  },
+  "security": [
+    {
+      "oauth2-auth": []
+    }
+  ]
+}

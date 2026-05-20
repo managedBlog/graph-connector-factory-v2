@@ -1,8 +1,7 @@
 <botcomponent schemaname="copilots_header_91a5e.topic.ConversationStart">
   <componenttype>9</componenttype>
-  <description>This system topic triggers when the agent receives an Activity indicating the beginning of a new conversation. If you do not want the agent to initiate the conversation, disable this topic.</description>
   <iscustomizable>0</iscustomizable>
-  <name>Conversation Start</name>
+  <name>ConversationStart</name>
   <parentbotid>
     <schemaname>copilots_header_91a5e</schemaname>
   </parentbotid>

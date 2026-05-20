@@ -1,1 +1,879 @@
-{"swagger":"2.0","info":{"title":"GCF REST Connector","description":"Unified custom connector for Graph Connector Factory. Exposes research operations (list Graph API operations, generate connectors, manage session context) and deployment operations (deploy connectors, check names, list environments). All operations require OAuth authentication.","version":"1.0","contact":{"name":"Graph Connector Factory","url":"https://github.com/managedBlog/graph-connector-factory-v2"}},"host":"__SERVER_HOST__","basePath":"/","schemes":["https"],"consumes":["application/json"],"produces":["application/json"],"paths":{"/api/graph/connector/batch":{"post":{"operationId":"graph_batchGenerate","summary":"Batch generate custom connectors","description":"Generate Power Platform custom connector Swagger files for multiple connector groups in a single call. Accepts a JSON string of groups (each with baseName and ops), generates each connector, publishes to Gist, and returns results as a JSON string for Parse value node consumption.","x-ms-visibility":"important","x-ms-api-timeout":120,"parameters":[{"name":"body","in":"body","required":true,"schema":{"type":"object","required":["groupsJson"],"properties":{"groupsJson":{"type":"string","description":"JSON string containing an array of connector groups. Each group has baseName (string) and ops (comma-separated operation IDs string). Example: [{\"baseName\":\"Users\",\"ops\":\"users.list,users.get\"},{\"baseName\":\"Groups\",\"ops\":\"groups.list\"}]","x-ms-summary":"Groups JSON"},"version":{"type":"string","default":"v1.0","enum":["v1.0","beta"],"description":"Graph API version","x-ms-summary":"API Version","x-ms-visibility":"advanced"}}}}],"responses":{"200":{"description":"Successful response","schema":{"type":"object","properties":{"groupCount":{"type":"integer","description":"Total number of groups processed","x-ms-summary":"Group Count"},"successCount":{"type":"integer","description":"Number of groups that generated successfully","x-ms-summary":"Success Count"},"resultsJson":{"type":"string","description":"JSON string containing per-group results array. Each item has baseName, gistUrl, swaggerRawUrl, totalOperations, status, warnings, and optional error. Use Parse value node with sample JSON to convert to typed Table.","x-ms-summary":"Results JSON"}}}}}}},"/api/graph/session/context":{"get":{"operationId":"graph_getSessionContext","summary":"Get session context","description":"Returns the full session context including explored endpoints and design decisions captured via graph_setDesignContext. Flat response: all endpoint tracking fields plus all design context fields merged at top level.","x-ms-visibility":"important","parameters":[],"responses":{"200":{"description":"Successful response","schema":{"type":"object","properties":{"endpoints":{"type":"array","x-ms-summary":"Endpoints","items":{"type":"string"}},"endpointCount":{"type":"integer","x-ms-summary":"Endpoint Count"},"latestEndpoint":{"type":"string","x-ms-summary":"Latest Endpoint","x-nullable":true},"endpointPath":{"type":"string","x-ms-summary":"Endpoint Path","x-nullable":true,"description":"Comma-separated endpoint paths from design context."},"hasDesignContext":{"type":"boolean","x-ms-summary":"Has Design Context","description":"True if graph_setDesignContext was called during this session."},"authType":{"type":"string","x-ms-summary":"Auth Type","x-nullable":true,"description":"Desired auth type: NoAuth, OAuthAAD, or FederatedIdentity."},"connectorCount":{"type":"integer","x-ms-summary":"Connector Count","x-nullable":true},"maxOperations":{"type":"integer","x-ms-summary":"Max Operations Per Connector","description":"Maximum operations allowed per connector (from server config)."},"appRegistrationStrategy":{"type":"string","x-ms-summary":"App Registration Strategy","x-nullable":true},"environmentId":{"type":"string","x-ms-summary":"Environment ID","x-nullable":true},"baseName":{"type":"string","x-ms-summary":"Base Name","x-nullable":true},"baseNameSource":{"type":"string","x-ms-summary":"Base Name Source","x-nullable":true,"enum":["ai","generated"],"description":"'ai' = name provided by the AI during research, 'generated' = auto-generated from endpoint paths."},"targetVersion":{"type":"string","x-ms-summary":"Target Version","x-nullable":true},"notes":{"type":"string","x-ms-summary":"Notes","x-nullable":true},"connectorGroupsJson":{"type":"string","x-ms-summary":"Connector Groups JSON","description":"Deprecated — kept for backward compatibility. Always empty string. Use group1Json, group2Json, group3Json instead."},"group1Json":{"type":"string","x-ms-summary":"Group 1 JSON","description":"JSON-serialized connector group 1 object with baseName and operations array. Empty string if fewer than 1 group."},"group2Json":{"type":"string","x-ms-summary":"Group 2 JSON","description":"JSON-serialized connector group 2 object. Empty string if fewer than 2 groups."},"group3Json":{"type":"string","x-ms-summary":"Group 3 JSON","description":"JSON-serialized connector group 3 object. Empty string if fewer than 3 groups."}}}}}}},"/api/graph/deploy":{"post":{"operationId":"graph_deployPipeline","summary":"Deploy connector pipeline (async)","description":"Start an asynchronous deploy of a Power Platform custom connector. Returns a jobId immediately. Poll graph_deployStatus with the jobId to track progress and get results.","x-ms-visibility":"important","parameters":[{"name":"body","in":"body","required":true,"schema":{"type":"object","required":["baseName","swaggerUrl","environmentId","authType"],"properties":{"baseName":{"type":"string","description":"Validated connector display name. Used as-is for the connector and app registration.","x-ms-summary":"Base Name"},"environmentId":{"type":"string","description":"Target Power Platform environment ID (GUID).","x-ms-summary":"Environment ID"},"authType":{"type":"string","description":"Auth type for the deployed connector: NoAuth, OAuthAAD, or FederatedIdentity.","x-ms-summary":"Auth Type"},"swaggerUrl":{"type":"string","description":"URL to the generated Swagger definition (from graph_generateConnector Gist URL).","x-ms-summary":"Swagger URL"},"apiDefinition":{"type":"string","description":"Inline Swagger JSON string. Use this OR swaggerUrl, not both.","x-ms-summary":"API Definition","x-ms-visibility":"advanced"}}}}],"responses":{"202":{"description":"Job accepted — poll graph_deployStatus for result","schema":{"$ref":"#/definitions/DeployJobResponse"}}}}},"/api/graph/deploy/status":{"get":{"operationId":"graph_deployStatus","summary":"Poll deploy job status","description":"Long-polls a deploy or batch-deploy job. Returns the current status and, when complete, the full result. If the job is still running, holds the request up to 25 seconds before returning the latest progress. Topic should loop on this until status is success, partial, or failed.","x-ms-visibility":"important","x-ms-api-timeout":30,"parameters":[{"name":"jobId","in":"query","required":true,"type":"string","description":"The deploy job ID returned by graph_deployPipeline or graph_batchDeploy.","x-ms-summary":"Job ID"}],"responses":{"200":{"description":"Job status and result (when complete)","schema":{"$ref":"#/definitions/DeployJobResponse"}}}}},"/api/graph/environments":{"get":{"operationId":"graph_getEnvironments","summary":"List Power Platform environments","description":"Returns available Power Platform environments for the deployment picker.","x-ms-visibility":"important","parameters":[],"responses":{"200":{"description":"Successful response","schema":{"type":"object","properties":{"environments":{"type":"array","x-ms-summary":"Environments","items":{"type":"object","properties":{"id":{"type":"string","description":"Environment ID (GUID)."},"displayName":{"type":"string","description":"Human-readable environment name."},"type":{"type":"string","description":"Environment type (e.g. Production, Sandbox, Developer)."}}}}}}}}}},"/api/graph/namecheck":{"get":{"operationId":"graph_namecheck","summary":"Check connector and app registration names","description":"Pre-flight name conflict check. Verifies that proposed connector base names do not conflict with existing connectors or app registrations.","x-ms-visibility":"important","parameters":[{"name":"environmentId","in":"query","required":true,"type":"string","description":"Target Power Platform environment ID (GUID).","x-ms-summary":"Environment ID"},{"name":"names","in":"query","required":true,"type":"string","description":"Comma-separated list of proposed connector base names to check.","x-ms-summary":"Names"}],"responses":{"200":{"description":"Successful response","schema":{"type":"object","properties":{"resultsJson":{"type":"string","x-ms-summary":"Results JSON","description":"JSON-serialized array of per-name conflict check results."},"hasConflicts":{"type":"boolean","x-ms-summary":"Has Conflicts"},"conflictCount":{"type":"integer","x-ms-summary":"Conflict Count"}}}}}}}},"definitions":{"DeployJobResponse":{"type":"object","properties":{"jobId":{"type":"string","description":"Unique identifier for the deploy job.","x-ms-summary":"Job ID"},"jobType":{"type":"string","description":"Type of job: deploy or batchDeploy.","x-ms-summary":"Job Type"},"status":{"type":"string","description":"Current job status: accepted, running, success, partial, failed, expired, or unauthorized.","x-ms-summary":"Status"},"retryAfter":{"type":"integer","description":"Seconds to wait before polling again. Null when job is complete.","x-ms-summary":"Retry After","x-nullable":true},"summary":{"type":"string","description":"Human-readable summary of the result.","x-ms-summary":"Summary","x-nullable":true},"connectorId":{"type":"string","x-ms-summary":"Connector ID","x-nullable":true},"connectorDisplayName":{"type":"string","x-ms-summary":"Connector Display Name","x-nullable":true},"connectorEnvironmentId":{"type":"string","x-ms-summary":"Connector Environment ID","x-nullable":true},"connectorStatus":{"type":"string","x-ms-summary":"Connector Status","x-nullable":true},"connectorAuthType":{"type":"string","x-ms-summary":"Connector Auth Type","x-nullable":true},"connectorRedirectUri":{"type":"string","x-ms-summary":"Connector Redirect URI","x-nullable":true},"appRegistrationConfigured":{"type":"boolean","x-ms-summary":"App Registration Configured","x-nullable":true},"appRegistrationAppId":{"type":"string","x-ms-summary":"App Registration App ID","x-nullable":true},"appRegistrationObjectId":{"type":"string","x-ms-summary":"App Registration Object ID","x-nullable":true},"appRegistrationDisplayName":{"type":"string","x-ms-summary":"App Registration Display Name","x-nullable":true},"appRegistrationSkipped":{"type":"boolean","x-ms-summary":"App Registration Skipped","x-nullable":true},"appRegistrationSkipReason":{"type":"string","x-ms-summary":"App Registration Skip Reason","x-nullable":true},"errors":{"type":"array","items":{"type":"string"},"x-ms-summary":"Errors"},"batchTotal":{"type":"integer","description":"Total groups in batch deploy.","x-ms-summary":"Batch Total","x-nullable":true},"batchCompleted":{"type":"integer","description":"Groups completed so far.","x-ms-summary":"Batch Completed","x-nullable":true},"batchSucceeded":{"type":"integer","description":"Groups that succeeded.","x-ms-summary":"Batch Succeeded","x-nullable":true},"batchCurrentBaseName":{"type":"string","description":"Name of the group currently being deployed.","x-ms-summary":"Batch Current","x-nullable":true},"batchResultsJson":{"type":"string","description":"JSON string with per-group results (when batch completes).","x-ms-summary":"Batch Results JSON","x-nullable":true},"error":{"type":"string","description":"Error message if job failed.","x-ms-summary":"Error","x-nullable":true}}}},"securityDefinitions":{"oauth2-auth":{"type":"oauth2","flow":"accessCode","tokenUrl":"https://login.windows.net/common/oauth2/authorize","scopes":{},"authorizationUrl":"https://login.microsoftonline.com/common/oauth2/authorize"}},"security":[{"oauth2-auth":[]}]}
+{
+  "swagger": "2.0",
+  "info": {
+    "title": "GCF REST Connector",
+    "description": "Unified custom connector for Graph Connector Factory. Exposes research operations (list Graph API operations, generate connectors, manage session context) and deployment operations (deploy connectors, check names, list environments). All operations require OAuth authentication.",
+    "version": "1.1",
+    "contact": {
+      "name": "Graph Connector Factory",
+      "url": "https://github.com/managedBlog/graph-connector-factory-v2"
+    }
+  },
+  "host": "__SERVER_HOST__",
+  "basePath": "/",
+  "schemes": [
+    "https"
+  ],
+  "consumes": [
+    "application/json"
+  ],
+  "produces": [
+    "application/json"
+  ],
+  "paths": {
+    "/api/graph/connector/batch": {
+      "post": {
+        "operationId": "graph_batchGenerate",
+        "summary": "Batch generate custom connectors",
+        "description": "Generate Power Platform custom connector Swagger files for multiple connector groups in a single call. Accepts a JSON string of groups (each with baseName and ops), generates each connector, publishes to Gist, and returns results as a JSON string for Parse value node consumption.",
+        "x-ms-visibility": "important",
+        "x-ms-api-timeout": 120,
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "type": "object",
+              "required": [
+                "groupsJson"
+              ],
+              "properties": {
+                "groupsJson": {
+                  "type": "string",
+                  "description": "JSON string containing an array of connector groups. Each group has baseName (string) and ops (comma-separated operation IDs string). Example: [{\u0022baseName\u0022:\u0022Users\u0022,\u0022ops\u0022:\u0022users.list,users.get\u0022},{\u0022baseName\u0022:\u0022Groups\u0022,\u0022ops\u0022:\u0022groups.list\u0022}]",
+                  "x-ms-summary": "Groups JSON"
+                },
+                "version": {
+                  "type": "string",
+                  "default": "v1.0",
+                  "enum": [
+                    "v1.0",
+                    "beta"
+                  ],
+                  "description": "Graph API version",
+                  "x-ms-summary": "API Version",
+                  "x-ms-visibility": "advanced"
+                }
+              }
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "groupCount": {
+                  "type": "integer",
+                  "description": "Total number of groups processed",
+                  "x-ms-summary": "Group Count"
+                },
+                "successCount": {
+                  "type": "integer",
+                  "description": "Number of groups that generated successfully",
+                  "x-ms-summary": "Success Count"
+                },
+                "resultsJson": {
+                  "type": "string",
+                  "description": "JSON string containing per-group results array. Each item has baseName, gistUrl, swaggerRawUrl, totalOperations, status, warnings, and optional error. Use Parse value node with sample JSON to convert to typed Table.",
+                  "x-ms-summary": "Results JSON"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/graph/session/context": {
+      "get": {
+        "operationId": "graph_getSessionContext",
+        "summary": "Get session context",
+        "description": "Returns the full session context including explored endpoints and design decisions captured via graph_setDesignContext. Flat response: all endpoint tracking fields plus all design context fields merged at top level.",
+        "x-ms-visibility": "important",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "endpoints": {
+                  "type": "array",
+                  "x-ms-summary": "Endpoints",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "endpointCount": {
+                  "type": "integer",
+                  "x-ms-summary": "Endpoint Count"
+                },
+                "latestEndpoint": {
+                  "type": "string",
+                  "x-ms-summary": "Latest Endpoint",
+                  "x-nullable": true
+                },
+                "endpointPath": {
+                  "type": "string",
+                  "x-ms-summary": "Endpoint Path",
+                  "x-nullable": true,
+                  "description": "Comma-separated endpoint paths from design context."
+                },
+                "hasDesignContext": {
+                  "type": "boolean",
+                  "x-ms-summary": "Has Design Context",
+                  "description": "True if graph_setDesignContext was called during this session."
+                },
+                "authType": {
+                  "type": "string",
+                  "x-ms-summary": "Auth Type",
+                  "x-nullable": true,
+                  "description": "Desired auth type: NoAuth, OAuthAAD, or FederatedIdentity."
+                },
+                "connectorCount": {
+                  "type": "integer",
+                  "x-ms-summary": "Connector Count",
+                  "x-nullable": true
+                },
+                "maxOperations": {
+                  "type": "integer",
+                  "x-ms-summary": "Max Operations Per Connector",
+                  "description": "Maximum operations allowed per connector (from server config)."
+                },
+                "appRegistrationStrategy": {
+                  "type": "string",
+                  "x-ms-summary": "App Registration Strategy",
+                  "x-nullable": true
+                },
+                "environmentId": {
+                  "type": "string",
+                  "x-ms-summary": "Environment ID",
+                  "x-nullable": true
+                },
+                "baseName": {
+                  "type": "string",
+                  "x-ms-summary": "Base Name",
+                  "x-nullable": true
+                },
+                "baseNameSource": {
+                  "type": "string",
+                  "x-ms-summary": "Base Name Source",
+                  "x-nullable": true,
+                  "enum": [
+                    "ai",
+                    "generated"
+                  ],
+                  "description": "\u0027ai\u0027 = name provided by the AI during research, \u0027generated\u0027 = auto-generated from endpoint paths."
+                },
+                "targetVersion": {
+                  "type": "string",
+                  "x-ms-summary": "Target Version",
+                  "x-nullable": true
+                },
+                "notes": {
+                  "type": "string",
+                  "x-ms-summary": "Notes",
+                  "x-nullable": true
+                },
+                "connectorGroupsJson": {
+                  "type": "string",
+                  "x-ms-summary": "Connector Groups JSON",
+                  "description": "Deprecated \u2014 kept for backward compatibility. Always empty string. Use group1Json, group2Json, group3Json instead."
+                },
+                "group1Json": {
+                  "type": "string",
+                  "x-ms-summary": "Group 1 JSON",
+                  "description": "JSON-serialized connector group 1 object with baseName and operations array. Empty string if fewer than 1 group."
+                },
+                "group2Json": {
+                  "type": "string",
+                  "x-ms-summary": "Group 2 JSON",
+                  "description": "JSON-serialized connector group 2 object. Empty string if fewer than 2 groups."
+                },
+                "group3Json": {
+                  "type": "string",
+                  "x-ms-summary": "Group 3 JSON",
+                  "description": "JSON-serialized connector group 3 object. Empty string if fewer than 3 groups."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/graph/deploy": {
+      "post": {
+        "operationId": "graph_deployPipeline",
+        "summary": "Deploy connector pipeline (async)",
+        "description": "Start an asynchronous deploy of a Power Platform custom connector. Returns a jobId immediately. Poll graph_deployStatus with the jobId to track progress and get results.",
+        "x-ms-visibility": "important",
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "type": "object",
+              "required": [
+                "baseName",
+                "swaggerUrl",
+                "environmentId",
+                "authType"
+              ],
+              "properties": {
+                "baseName": {
+                  "type": "string",
+                  "description": "Validated connector display name. Used as-is for the connector and app registration.",
+                  "x-ms-summary": "Base Name"
+                },
+                "environmentId": {
+                  "type": "string",
+                  "description": "Target Power Platform environment ID (GUID).",
+                  "x-ms-summary": "Environment ID"
+                },
+                "authType": {
+                  "type": "string",
+                  "description": "Auth type for the deployed connector: NoAuth, OAuthAAD, or FederatedIdentity.",
+                  "x-ms-summary": "Auth Type"
+                },
+                "swaggerUrl": {
+                  "type": "string",
+                  "description": "URL to the generated Swagger definition (from graph_generateConnector Gist URL).",
+                  "x-ms-summary": "Swagger URL"
+                },
+                "apiDefinition": {
+                  "type": "string",
+                  "description": "Inline Swagger JSON string. Use this OR swaggerUrl, not both.",
+                  "x-ms-summary": "API Definition",
+                  "x-ms-visibility": "advanced"
+                }
+              }
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "Job accepted \u2014 poll graph_deployStatus for result",
+            "schema": {
+              "$ref": "#/definitions/DeployJobResponse"
+            }
+          }
+        }
+      }
+    },
+    "/api/graph/deploy/status": {
+      "get": {
+        "operationId": "graph_deployStatus",
+        "summary": "Poll deploy job status",
+        "description": "Long-polls a deploy or batch-deploy job. Returns the current status and, when complete, the full result. If the job is still running, holds the request up to 25 seconds before returning the latest progress. Topic should loop on this until status is success, partial, or failed.",
+        "x-ms-visibility": "important",
+        "x-ms-api-timeout": 30,
+        "parameters": [
+          {
+            "name": "jobId",
+            "in": "query",
+            "required": true,
+            "type": "string",
+            "description": "The deploy job ID returned by graph_deployPipeline or graph_batchDeploy.",
+            "x-ms-summary": "Job ID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Job status and result (when complete)",
+            "schema": {
+              "$ref": "#/definitions/DeployJobResponse"
+            }
+          }
+        }
+      }
+    },
+    "/api/graph/environments": {
+      "get": {
+        "operationId": "graph_getEnvironments",
+        "summary": "List Power Platform environments",
+        "description": "Returns available Power Platform environments for the deployment picker.",
+        "x-ms-visibility": "important",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "environments": {
+                  "type": "array",
+                  "x-ms-summary": "Environments",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "description": "Environment ID (GUID)."
+                      },
+                      "displayName": {
+                        "type": "string",
+                        "description": "Human-readable environment name."
+                      },
+                      "type": {
+                        "type": "string",
+                        "description": "Environment type (e.g. Production, Sandbox, Developer)."
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/testing/generate-plan": {
+      "post": {
+        "operationId": "testing_generateMultiPlan",
+        "summary": "Generate CUA test plan",
+        "description": "Generate a structured test plan for one or more deployed connectors. Accepts a JSON string of connector specs (each with displayName, scope, and baseName) and returns a test plan for Computer Use Agent execution.",
+        "x-ms-visibility": "important",
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "type": "object",
+              "required": [
+                "environmentId",
+                "connectorsJson"
+              ],
+              "properties": {
+                "environmentId": {
+                  "type": "string",
+                  "description": "Target Power Platform environment ID (GUID).",
+                  "x-ms-summary": "Environment ID"
+                },
+                "environmentName": {
+                  "type": "string",
+                  "description": "Display name of the target Power Platform environment. Included in the test plan so the CUA can verify it is in the correct environment.",
+                  "x-ms-summary": "Environment Name"
+                },
+                "connectorsJson": {
+                  "type": "string",
+                  "description": "JSON string array of connector specs. Each item: {\u0022displayName\u0022:\u0022...\u0022,\u0022scope\u0022:\u0022all|crud\u0022,\u0022baseName\u0022:\u0022...\u0022}. For selected ops use {\u0022scope\u0022:[\u0022op1\u0022,\u0022op2\u0022]}.",
+                  "x-ms-summary": "Connectors JSON"
+                },
+                "variables": {
+                  "type": "string",
+                  "description": "Optional JSON string of key-value variables for test data (e.g. {\u0022tenantDomain\u0022:\u0022contoso.com\u0022}).",
+                  "x-ms-summary": "Variables JSON",
+                  "x-ms-visibility": "advanced"
+                }
+              }
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Test plan generated successfully",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "totalConnectors": {
+                  "type": "integer",
+                  "description": "Number of connectors in the test plan.",
+                  "x-ms-summary": "Total Connectors"
+                },
+                "totalOperations": {
+                  "type": "integer",
+                  "description": "Total operations to test.",
+                  "x-ms-summary": "Total Operations"
+                },
+                "testPlanMarkdown": {
+                  "type": "string",
+                  "description": "Human-readable test plan in markdown format. Pass directly to the CUA agent as instructions.",
+                  "x-ms-summary": "Test Plan (Markdown)"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/graph/namecheck": {
+      "get": {
+        "operationId": "graph_namecheck",
+        "summary": "Check connector and app registration names",
+        "description": "Pre-flight name conflict check. Verifies that proposed connector base names do not conflict with existing connectors or app registrations.",
+        "x-ms-visibility": "important",
+        "parameters": [
+          {
+            "name": "environmentId",
+            "in": "query",
+            "required": true,
+            "type": "string",
+            "description": "Target Power Platform environment ID (GUID).",
+            "x-ms-summary": "Environment ID"
+          },
+          {
+            "name": "names",
+            "in": "query",
+            "required": true,
+            "type": "string",
+            "description": "Comma-separated list of proposed connector base names to check.",
+            "x-ms-summary": "Names"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "resultsJson": {
+                  "type": "string",
+                  "x-ms-summary": "Results JSON",
+                  "description": "JSON-serialized array of per-name conflict check results."
+                },
+                "hasConflicts": {
+                  "type": "boolean",
+                  "x-ms-summary": "Has Conflicts"
+                },
+                "conflictCount": {
+                  "type": "integer",
+                  "x-ms-summary": "Conflict Count"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/agent/mcp-servers": {
+      "get": {
+        "operationId": "agent_listMcpServers",
+        "summary": "List available MCP servers",
+        "description": "Returns a curated catalog of Microsoft MCP servers that can be added as tools to a generated agent.",
+        "x-ms-visibility": "important",
+        "parameters": [
+          {
+            "name": "category",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "description": "Filter by category (graph, azure, data, devtools, m365, security).",
+            "x-ms-summary": "Category"
+          },
+          {
+            "name": "stableOnly",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "description": "If true, only return servers with known stable connector names.",
+            "x-ms-summary": "Stable Only"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of MCP servers",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "servers": {
+                  "type": "array",
+                  "x-ms-summary": "Servers",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "description": "Catalog ID."
+                      },
+                      "displayName": {
+                        "type": "string",
+                        "description": "Server name."
+                      },
+                      "description": {
+                        "type": "string",
+                        "description": "What this server does."
+                      },
+                      "category": {
+                        "type": "string",
+                        "description": "Category."
+                      },
+                      "stable": {
+                        "type": "boolean",
+                        "description": "Connector name is globally stable."
+                      }
+                    }
+                  }
+                },
+                "count": {
+                  "type": "integer",
+                  "x-ms-summary": "Count"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/agent/context": {
+      "get": {
+        "operationId": "agent_getContext",
+        "summary": "Get agent factory context",
+        "description": "Returns deployed connectors from this session, agent design decisions from research, and design context.",
+        "x-ms-visibility": "important",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Agent factory context",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "agentName": {
+                  "type": "string",
+                  "x-ms-summary": "Agent Name"
+                },
+                "agentPurpose": {
+                  "type": "string",
+                  "x-ms-summary": "Agent Purpose"
+                },
+                "deployedConnectorCount": {
+                  "type": "string",
+                  "x-ms-summary": "Deployed Connector Count"
+                },
+                "hasDeployedConnectors": {
+                  "type": "string",
+                  "x-ms-summary": "Has Deployed Connectors"
+                },
+                "deployedConnectorsJson": {
+                  "type": "string",
+                  "x-ms-summary": "Deployed Connectors JSON"
+                },
+                "connectorSummariesJson": {
+                  "type": "string",
+                  "x-ms-summary": "Connector Summaries JSON"
+                },
+                "recommendedMcpServers": {
+                  "type": "string",
+                  "x-ms-summary": "Recommended MCP Servers"
+                },
+                "recommendedKnowledgeSourcesJson": {
+                  "type": "string",
+                  "x-ms-summary": "Recommended Knowledge Sources JSON"
+                },
+                "recKsUrl1": {
+                  "type": "string",
+                  "x-ms-summary": "Recommended KS URL 1"
+                },
+                "recKsUrl2": {
+                  "type": "string",
+                  "x-ms-summary": "Recommended KS URL 2"
+                },
+                "recKsUrl3": {
+                  "type": "string",
+                  "x-ms-summary": "Recommended KS URL 3"
+                },
+                "recKsName1": {
+                  "type": "string",
+                  "x-ms-summary": "Recommended KS Name 1"
+                },
+                "recKsName2": {
+                  "type": "string",
+                  "x-ms-summary": "Recommended KS Name 2"
+                },
+                "recKsName3": {
+                  "type": "string",
+                  "x-ms-summary": "Recommended KS Name 3"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/agent/generate": {
+      "post": {
+        "operationId": "agent_generateAgent",
+        "summary": "Generate a Copilot Studio agent",
+        "description": "Generates and deploys a new Copilot Studio agent. Returns a job ID for async polling via agent_generateStatus.",
+        "x-ms-visibility": "important",
+        "x-ms-api-timeout": 120,
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "type": "object",
+              "required": [
+                "agentName",
+                "agentPurpose",
+                "environmentId"
+              ],
+              "properties": {
+                "agentName": {
+                  "type": "string",
+                  "description": "Display name for the new agent.",
+                  "x-ms-summary": "Agent Name"
+                },
+                "agentPurpose": {
+                  "type": "string",
+                  "description": "What the agent should do.",
+                  "x-ms-summary": "Agent Purpose"
+                },
+                "environmentId": {
+                  "type": "string",
+                  "description": "Power Platform environment ID.",
+                  "x-ms-summary": "Environment ID"
+                },
+                "solutionName": {
+                  "type": "string",
+                  "description": "Target solution (default: GCFApps).",
+                  "x-ms-summary": "Solution Name"
+                },
+                "mcpServerIds": {
+                  "type": "string",
+                  "description": "Comma-separated MCP server catalog IDs.",
+                  "x-ms-summary": "MCP Server IDs"
+                },
+                "knowledgeSourcesJson": {
+                  "type": "string",
+                  "description": "JSON array of knowledge sources.",
+                  "x-ms-summary": "Knowledge Sources JSON"
+                },
+                "instructionsOverride": {
+                  "type": "string",
+                  "description": "Custom instructions text.",
+                  "x-ms-summary": "Instructions Override"
+                }
+              }
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "Job accepted",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "jobId": {
+                  "type": "string",
+                  "description": "Job ID for polling.",
+                  "x-ms-summary": "Job ID"
+                },
+                "status": {
+                  "type": "string",
+                  "description": "Initial status.",
+                  "x-ms-summary": "Status"
+                },
+                "retryAfter": {
+                  "type": "integer",
+                  "description": "Seconds before first poll.",
+                  "x-ms-summary": "Retry After"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/agent/generate/status": {
+      "get": {
+        "operationId": "agent_generateStatus",
+        "summary": "Poll agent generation status",
+        "description": "Long-polls an agent generation job. Returns status and result when complete.",
+        "x-ms-visibility": "important",
+        "x-ms-api-timeout": 30,
+        "parameters": [
+          {
+            "name": "jobId",
+            "in": "query",
+            "required": true,
+            "type": "string",
+            "description": "Agent generation job ID.",
+            "x-ms-summary": "Job ID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Job status and result",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "jobId": {
+                  "type": "string",
+                  "x-ms-summary": "Job ID"
+                },
+                "status": {
+                  "type": "string",
+                  "x-ms-summary": "Status"
+                },
+                "result": {
+                  "type": "object",
+                  "x-ms-summary": "Result"
+                },
+                "error": {
+                  "type": "string",
+                  "x-ms-summary": "Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "definitions": {
+    "DeployJobResponse": {
+      "type": "object",
+      "properties": {
+        "jobId": {
+          "type": "string",
+          "description": "Unique identifier for the deploy job.",
+          "x-ms-summary": "Job ID"
+        },
+        "jobType": {
+          "type": "string",
+          "description": "Type of job: deploy or batchDeploy.",
+          "x-ms-summary": "Job Type"
+        },
+        "status": {
+          "type": "string",
+          "description": "Current job status: accepted, running, success, partial, failed, expired, or unauthorized.",
+          "x-ms-summary": "Status"
+        },
+        "retryAfter": {
+          "type": "integer",
+          "description": "Seconds to wait before polling again. Null when job is complete.",
+          "x-ms-summary": "Retry After",
+          "x-nullable": true
+        },
+        "summary": {
+          "type": "string",
+          "description": "Human-readable summary of the result.",
+          "x-ms-summary": "Summary",
+          "x-nullable": true
+        },
+        "connectorId": {
+          "type": "string",
+          "x-ms-summary": "Connector ID",
+          "x-nullable": true
+        },
+        "connectorDisplayName": {
+          "type": "string",
+          "x-ms-summary": "Connector Display Name",
+          "x-nullable": true
+        },
+        "connectorEnvironmentId": {
+          "type": "string",
+          "x-ms-summary": "Connector Environment ID",
+          "x-nullable": true
+        },
+        "connectorStatus": {
+          "type": "string",
+          "x-ms-summary": "Connector Status",
+          "x-nullable": true
+        },
+        "connectorAuthType": {
+          "type": "string",
+          "x-ms-summary": "Connector Auth Type",
+          "x-nullable": true
+        },
+        "connectorRedirectUri": {
+          "type": "string",
+          "x-ms-summary": "Connector Redirect URI",
+          "x-nullable": true
+        },
+        "appRegistrationConfigured": {
+          "type": "boolean",
+          "x-ms-summary": "App Registration Configured",
+          "x-nullable": true
+        },
+        "appRegistrationAppId": {
+          "type": "string",
+          "x-ms-summary": "App Registration App ID",
+          "x-nullable": true
+        },
+        "appRegistrationObjectId": {
+          "type": "string",
+          "x-ms-summary": "App Registration Object ID",
+          "x-nullable": true
+        },
+        "appRegistrationDisplayName": {
+          "type": "string",
+          "x-ms-summary": "App Registration Display Name",
+          "x-nullable": true
+        },
+        "appRegistrationSkipped": {
+          "type": "boolean",
+          "x-ms-summary": "App Registration Skipped",
+          "x-nullable": true
+        },
+        "appRegistrationSkipReason": {
+          "type": "string",
+          "x-ms-summary": "App Registration Skip Reason",
+          "x-nullable": true
+        },
+        "errors": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "x-ms-summary": "Errors"
+        },
+        "batchTotal": {
+          "type": "integer",
+          "description": "Total groups in batch deploy.",
+          "x-ms-summary": "Batch Total",
+          "x-nullable": true
+        },
+        "batchCompleted": {
+          "type": "integer",
+          "description": "Groups completed so far.",
+          "x-ms-summary": "Batch Completed",
+          "x-nullable": true
+        },
+        "batchSucceeded": {
+          "type": "integer",
+          "description": "Groups that succeeded.",
+          "x-ms-summary": "Batch Succeeded",
+          "x-nullable": true
+        },
+        "batchCurrentBaseName": {
+          "type": "string",
+          "description": "Name of the group currently being deployed.",
+          "x-ms-summary": "Batch Current",
+          "x-nullable": true
+        },
+        "batchResultsJson": {
+          "type": "string",
+          "description": "JSON string with per-group results (when batch completes).",
+          "x-ms-summary": "Batch Results JSON",
+          "x-nullable": true
+        },
+        "error": {
+          "type": "string",
+          "description": "Error message if job failed.",
+          "x-ms-summary": "Error",
+          "x-nullable": true
+        }
+      }
+    }
+  },
+  "securityDefinitions": {
+    "oauth2-auth": {
+      "type": "oauth2",
+      "flow": "accessCode",
+      "tokenUrl": "https://login.microsoftonline.com/common/oauth2/v2.0/token",
+      "authorizationUrl": "https://login.microsoftonline.com/common/oauth2/v2.0/authorize",
+      "scopes": {}
+    }
+  },
+  "security": [
+    {
+      "oauth2-auth": []
+    }
+  ]
+}

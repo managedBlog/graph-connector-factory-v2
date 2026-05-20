@@ -1,0 +1,37 @@
+kind: TaskDialog
+modelDisplayName: Poll deploy job status
+modelDescription: Long-polls a deploy or batch-deploy job. Returns the current status and, when complete, the full result.
+inputs:
+  - kind: AutomaticTaskInput
+    propertyName: jobId
+    name: Job ID
+    description: The deploy job ID returned by graph_deployPipeline
+
+outputs:
+  - propertyName: connectorDisplayName
+
+  - propertyName: error
+
+  - propertyName: jobId
+
+  - propertyName: status
+
+  - propertyName: summary
+
+action:
+  kind: InvokeConnectorTaskAction
+  connectionReference: copilots_header_91a5e.shared_new-5fgcf-20rest-20connector-5f251f982b189de9d2.3b64b1b7818145a59f83da81404dde8e
+  connectionProperties:
+    mode: Invoker
+
+  operationId: graph_deployStatus
+
+  inputType:
+    properties:
+      jobId:
+        displayName: Job ID
+        description: The deploy job ID returned by graph_deployPipeline
+        isRequired: true
+        type: String
+
+outputMode: All

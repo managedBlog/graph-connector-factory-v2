@@ -35,7 +35,8 @@ export function sanitizeSchemaName(displayName: string): string {
 }
 
 export function buildSchemaName(prefix: string, displayName: string): string {
-  return `${prefix}_${sanitizeSchemaName(displayName)}`;
+  const suffix = Math.random().toString(16).slice(2, 6);
+  return `${prefix}_${sanitizeSchemaName(displayName)}_${suffix}`;
 }
 
 // ——— Connection reference key ————————————————————————————————————————

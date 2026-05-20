@@ -1,8 +1,7 @@
 <botcomponent schemaname="copilots_header_91a5e.topic.OnError">
   <componenttype>9</componenttype>
-  <description>This system topic triggers when the agent encounters an error. When using the test chat pane, the full error description is displayed.</description>
   <iscustomizable>0</iscustomizable>
-  <name>On Error</name>
+  <name>OnError</name>
   <parentbotid>
     <schemaname>copilots_header_91a5e</schemaname>
   </parentbotid>
