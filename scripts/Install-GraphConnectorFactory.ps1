@@ -1536,6 +1536,10 @@ function Invoke-StageFIC {
 #
 # CRITICAL: Must run AFTER FIC (Stage 7). Connection references in
 # the agent solution need working connectors with valid FIC.
+#
+# The agent solution contains __REST_CONNECTOR_ID__, __MCP_CONNECTOR_ID__,
+# and __ENTERPRISE_CONNECTOR_ID__ tokens in customizations.xml that must
+# be replaced with actual Dataverse connector row IDs before import.
 # ─────────────────────────────────────────────────────────────────
 
 function Invoke-StageAgent {
@@ -1548,7 +1552,121 @@ function Invoke-StageAgent {
         throw "Agent solution zip not found: $agentZip. Run the Artifacts stage first."
     }
 
-    Write-Step "Importing agent solution: $agentZip"
+    # ── Phase 1: Discover connector IDs from Dataverse ───────────────
+    Write-Step 'Discovering connector IDs from target environment…'
+
+    # Get Dataverse org URL via pac
+    $pacWho = & pac env who --environment $EnvironmentId 2>&1
+    $orgUrl = ($pacWho | Select-String -Pattern 'https://\S+\.dynamics\.com' | ForEach-Object {
+        [regex]::Match($_.Line, '(https://\S+\.dynamics\.com)').Groups[1].Value
+    } | Select-Object -First 1)
+
+    if ([string]::IsNullOrWhiteSpace($orgUrl)) {
+        # Fallback: try pac org who (if already connected to the right env)
+        $pacOrgWho = & pac org who 2>&1
+        $orgUrl = ($pacOrgWho | Select-String -Pattern 'https://\S+\.dynamics\.com' | ForEach-Object {
+            [regex]::Match($_.Line, '(https://\S+\.dynamics\.com)').Groups[1].Value
+        } | Select-Object -First 1)
+    }
+
+    if ([string]::IsNullOrWhiteSpace($orgUrl)) {
+        throw "Could not determine Dataverse org URL. Ensure pac auth is configured for environment $EnvironmentId."
+    }
+    $orgUrl = $orgUrl.TrimEnd('/')
+    Write-Success "Dataverse org: $orgUrl"
+
+    # Query Dataverse for custom connectors
+    $connectorMap = @{
+        '__REST_CONNECTOR_ID__'       = @{ Name = 'new_gcf-20rest-20connector';               DisplayName = 'GCF REST Connector';       Id = $null }
+        '__MCP_CONNECTOR_ID__'        = @{ Name = 'new_gcf-20mcp-20agent';                    DisplayName = 'GCF MCP Agent';            Id = $null }
+        '__ENTERPRISE_CONNECTOR_ID__' = @{ Name = 'cr863_5Fmcp-2Dserver-2Dfor-2Denterprise';  DisplayName = 'MCP-Server-for-Enterprise'; Id = $null; IsEnterprise = $true }
+    }
+
+    $dvApiUrl = "$orgUrl/api/data/v9.2/connectors?`$select=connectorid,name,displayname&`$filter=connectortype eq 1"
+    try {
+        $dvResponse = Invoke-AzCli @('rest', '--method', 'GET', '--url', $dvApiUrl,
+            '--resource', $orgUrl, '--output', 'json')
+    } catch {
+        throw "Failed to query Dataverse connectors: $_"
+    }
+
+    $dvConnectors = @()
+    if ($dvResponse -and $dvResponse.value) {
+        $dvConnectors = @($dvResponse.value)
+    }
+    Write-Host "    Found $($dvConnectors.Count) custom connector(s) in Dataverse" -ForegroundColor DarkGray
+
+    foreach ($token in $connectorMap.Keys) {
+        $entry = $connectorMap[$token]
+        if ($entry.IsEnterprise -and $SkipEnterprise) {
+            Write-Host "    Skipping enterprise connector (SkipEnterprise)" -ForegroundColor DarkYellow
+            continue
+        }
+
+        $match = $dvConnectors | Where-Object {
+            $_.name -eq $entry.Name -or $_.displayname -eq $entry.DisplayName
+        }
+        if ($match -is [array]) { $match = $match[0] }
+
+        if ($match) {
+            $entry.Id = $match.connectorid
+            Write-Success "  $($entry.DisplayName): $($entry.Id)"
+        } else {
+            if ($entry.IsEnterprise) {
+                Write-Warning "Enterprise connector not found — token will be left as-is"
+            } else {
+                throw "Required connector '$($entry.DisplayName)' not found in Dataverse. Ensure connector solution was imported (Stage 6)."
+            }
+        }
+    }
+
+    # ── Phase 2: Patch agent solution ZIP ────────────────────────────
+    Write-Step 'Patching agent solution with target connector IDs…'
+
+    $stagingDir = Join-Path $solutionsOutputDir 'staging-agent'
+    if (Test-Path $stagingDir) {
+        Remove-Item $stagingDir -Recurse -Force
+    }
+
+    Expand-Archive -Path $agentZip -DestinationPath $stagingDir -Force
+
+    $custXmlPath = Join-Path $stagingDir 'customizations.xml'
+    if (-not (Test-Path $custXmlPath)) {
+        throw "customizations.xml not found in agent solution ZIP."
+    }
+
+    $content = Get-Content $custXmlPath -Raw
+    $replacedCount = 0
+    foreach ($token in $connectorMap.Keys) {
+        $entry = $connectorMap[$token]
+        if ($entry.Id) {
+            $content = $content.Replace($token, $entry.Id)
+            $replacedCount++
+            Write-Host "    ✓ $token → $($entry.Id)" -ForegroundColor Green
+        }
+    }
+
+    # Validate no unresolved required tokens remain
+    $unresolvedTokens = [regex]::Matches($content, '__(REST|MCP)_CONNECTOR_ID__') | ForEach-Object { $_.Value } | Sort-Object -Unique
+    if ($unresolvedTokens) {
+        throw "Unresolved required tokens in agent customizations.xml: $($unresolvedTokens -join ', ')"
+    }
+
+    Set-Content -Path $custXmlPath -Value $content -Encoding UTF8 -NoNewline
+    Write-Success "$replacedCount connector ID(s) patched in customizations.xml"
+
+    # Repack the agent ZIP
+    $patchedZip = Join-Path $solutionsOutputDir 'GCFApps_agent_patched.zip'
+    if (Test-Path $patchedZip) {
+        Remove-Item $patchedZip -Force
+    }
+    Compress-Archive -Path "$stagingDir\*" -DestinationPath $patchedZip -Force
+
+    # Clean up staging
+    Remove-Item $stagingDir -Recurse -Force
+
+    # ── Phase 3: Import patched agent solution ───────────────────────
+    Write-Step "Importing patched agent solution…"
     Write-Step "Target environment: $EnvironmentId"
 
     Write-Host "`n  NOTE: The agent solution contains connection references." -ForegroundColor Yellow
@@ -1556,7 +1674,7 @@ function Invoke-StageAgent {
     Write-Host "  after this import completes.`n" -ForegroundColor Yellow
 
     $pacArgs = @('solution', 'import',
-        '--path', $agentZip,
+        '--path', $patchedZip,
         '--force-overwrite',
         '--publish-changes',
         '--environment', $EnvironmentId)
@@ -1581,6 +1699,9 @@ function Invoke-StageAgent {
         Write-Host "    - Check if connections need manual creation in the portal" -ForegroundColor Yellow
         throw 'pac solution import failed for agent solution'
     }
+
+    # Clean up patched ZIP
+    Remove-Item $patchedZip -Force -ErrorAction SilentlyContinue
 
     Write-Host ($pacOutput -join "`n") -ForegroundColor DarkGray
     Write-Success 'Agent solution imported successfully'

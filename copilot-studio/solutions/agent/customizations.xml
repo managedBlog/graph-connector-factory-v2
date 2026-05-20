@@ -33,11 +33,22 @@
       <statecode>0</statecode>
       <statuscode>1</statuscode>
     </connectionreference>
+    <connectionreference connectionreferencelogicalname="copilots_header_91a5e.shared_cr863-5fmcp-2dserver-2dfor-2denterprise-5f251f982b189de9d2.ffeabf5ca65a428b9e191d85a199ab84">
+      <connectionreferencedisplayname>copilots_header_91a5e.shared_cr863-5fmcp-2dserver-2dfor-2denterprise-5f251f982b189de9d2.ffeabf5ca65a428b9e191d85a199ab84</connectionreferencedisplayname>
+      <connectorid>/providers/Microsoft.PowerApps/apis/shared_cr863-5fmcp-2dserver-2dfor-2denterprise-5f251f982b189de9d2</connectorid>
+      <customconnectorid>
+        <connectorid>__ENTERPRISE_CONNECTOR_ID__</connectorid>
+      </customconnectorid>
+      <iscustomizable>0</iscustomizable>
+      <promptingbehavior>0</promptingbehavior>
+      <statecode>0</statecode>
+      <statuscode>1</statuscode>
+    </connectionreference>
     <connectionreference connectionreferencelogicalname="copilots_header_91a5e.shared_new-5fgcf-20mcp-20agent-5f251f982b189de9d2.935136bad07b42348a21092a8caf5edc">
       <connectionreferencedisplayname>copilots_header_91a5e.shared_new-5fgcf-20mcp-20agent-5f251f982b189de9d2.935136bad07b42348a21092a8caf5edc</connectionreferencedisplayname>
       <connectorid>/providers/Microsoft.PowerApps/apis/shared_new-5fgcf-20mcp-20agent-5f251f982b189de9d2</connectorid>
       <customconnectorid>
-        <connectorid>f1d79e89-1a3f-f111-bec6-70a8a59a4056</connectorid>
+        <connectorid>__MCP_CONNECTOR_ID__</connectorid>
       </customconnectorid>
       <iscustomizable>0</iscustomizable>
       <promptingbehavior>0</promptingbehavior>
@@ -48,7 +59,7 @@
       <connectionreferencedisplayname>copilots_header_91a5e.shared_new-5fgcf-20rest-20connector-5f251f982b189de9d2.3b64b1b7818145a59f83da81404dde8e</connectionreferencedisplayname>
       <connectorid>/providers/Microsoft.PowerApps/apis/shared_new-5fgcf-20rest-20connector-5f251f982b189de9d2</connectorid>
       <customconnectorid>
-        <connectorid>dd539b71-323f-f111-bec6-70a8a59a4056</connectorid>
+        <connectorid>__REST_CONNECTOR_ID__</connectorid>
       </customconnectorid>
       <iscustomizable>0</iscustomizable>
       <promptingbehavior>0</promptingbehavior>
