@@ -70,7 +70,7 @@ param(
 
     # --- Behaviour ---
     [ValidateSet('ClientSecret', 'Certificate-OpenSSL', 'Certificate-SelfSigned')]
-    [string] $AuthMethod = 'ClientSecret',
+    [string] $AuthMethod = 'Certificate-SelfSigned',
     [switch] $NonInteractive
 )
 
