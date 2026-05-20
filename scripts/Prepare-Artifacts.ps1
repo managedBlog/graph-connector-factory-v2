@@ -242,25 +242,8 @@ if (Test-Path $agentZip) {
     Remove-Item $agentZip -Force
 }
 
-# Agent solution contains __*_CONNECTOR_ID__ tokens in customizations.xml
-# that are resolved at install time (Stage 8) after connector import.
-# Validate that only the expected connector ID tokens remain.
-$agentCustXml = Join-Path $agentSrcDir "customizations.xml"
-if (Test-Path $agentCustXml) {
-    $agentContent = Get-Content $agentCustXml -Raw
-    $expectedTokens = @('__REST_CONNECTOR_ID__', '__MCP_CONNECTOR_ID__', '__ENTERPRISE_CONNECTOR_ID__')
-    $allTokens = [regex]::Matches($agentContent, '__[A-Z_]+__') | ForEach-Object { $_.Value } | Sort-Object -Unique
-    $unexpectedTokens = $allTokens | Where-Object { $_ -notin $expectedTokens }
-    if ($unexpectedTokens) {
-        Write-Host "    ✗ Unexpected tokens in agent customizations.xml: $($unexpectedTokens -join ', ')" -ForegroundColor Red
-        throw "Unexpected tokens found in agent solution."
-    }
-    if ($allTokens.Count -gt 0) {
-        Write-Host "  Agent solution contains connector ID tokens (resolved at install time):" -ForegroundColor Yellow
-        foreach ($t in $allTokens) { Write-Host "    • $t" -ForegroundColor DarkYellow }
-    }
-}
-
+# Agent solution uses connectorid paths (not customconnectorid GUIDs)
+# for connection reference resolution — no token replacement needed.
 Compress-Archive -Path "$agentSrcDir\*" -DestinationPath $agentZip -Force
 Write-Host "  ✓ Agent solution: $agentZip" -ForegroundColor Green
 
