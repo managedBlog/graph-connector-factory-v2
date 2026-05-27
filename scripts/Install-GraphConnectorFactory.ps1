@@ -439,8 +439,6 @@ function Invoke-StageEntra {
     }
 
     # Add Graph API permissions (Application type)
-    # Note: DelegatedPermissionGrant.ReadWrite.All is NOT needed here — the Cloud
-    # Application Administrator role (assigned below) covers oauth2PermissionGrants.
     Write-Step 'Adding Graph API permissions…'
     Invoke-AzCli @('ad', 'app', 'permission', 'add', '--id', $apiAppId,
         '--api', $graphAppId,
@@ -1549,43 +1547,6 @@ function Invoke-StageAgent {
         throw "Agent solution zip not found: $agentZip. Run the Artifacts stage first."
     }
 
-    # ── Pre-flight: Verify connectors exist in target environment ────
-    Write-Step 'Verifying connectors are available in target environment…'
-
-    $ppApiBase    = 'https://api.powerapps.com/providers/Microsoft.PowerApps'
-    $ppApiVersion = '2016-11-01'
-
-    $listUrl = "${ppApiBase}/apis?api-version=${ppApiVersion}&`$filter=environment eq '${EnvironmentId}'"
-    try {
-        $listResponse = Invoke-AzCli @('rest', '--method', 'GET', '--url', $listUrl,
-            '--resource', 'https://service.powerapps.com/', '--output', 'json')
-    } catch {
-        Write-Warning "Could not verify connectors (API call failed): $_"
-        Write-Host "    Proceeding with import — connectors may need manual verification." -ForegroundColor Yellow
-        $listResponse = $null
-    }
-
-    if ($listResponse -and $listResponse.value) {
-        $allConnectors = @($listResponse.value)
-        foreach ($schema in $FIC_CONNECTOR_SCHEMAS) {
-            if ($schema.IsEnterprise -and $SkipEnterprise) { continue }
-
-            $schemaPatternEncoded = ($schema.SchemaName -replace '_', '-5f').ToLower()
-            $match = $allConnectors | Where-Object {
-                $_.name -ilike "*$($schema.SchemaName)*" -or
-                $_.name -ilike "*$schemaPatternEncoded*" -or
-                $_.properties.displayName -eq $schema.DisplayName
-            }
-
-            if ($match) {
-                Write-Success "  $($schema.DisplayName): found"
-            } else {
-                Write-Warning "  $($schema.DisplayName): NOT FOUND — agent actions for this connector may fail"
-            }
-        }
-    }
-
-    # ── Import agent solution ────────────────────────────────────────
     Write-Step "Importing agent solution: $agentZip"
     Write-Step "Target environment: $EnvironmentId"
 

@@ -1,12 +1,8 @@
 <ImportExportXml xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" OrganizationVersion="9.2.26051.134" OrganizationSchemaType="Standard" CRMServerServiceabilityVersion="9.2.26052.00133">
-  <Entities>
-  </Entities>
-  <Roles>
-  </Roles>
-  <Workflows>
-  </Workflows>
-  <FieldSecurityProfiles>
-  </FieldSecurityProfiles>
+  <Entities></Entities>
+  <Roles></Roles>
+  <Workflows></Workflows>
+  <FieldSecurityProfiles></FieldSecurityProfiles>
   <Templates />
   <EntityMaps />
   <EntityRelationships />
@@ -15,6 +11,30 @@
   <CustomControls />
   <EntityDataProviders />
   <Connectors>
+    <Connector>
+      <connectorid>f1d79e89-1a3f-f111-bec6-70a8a59a4056</connectorid>
+      <description>MCP agent connector for Graph Connector Factory v2. Enables AI-powered research of Microsoft Graph API endpoints and custom connector generation via MCP Streamable protocol.</description>
+      <displayname>GCF MCP Agent</displayname>
+      <iconbrandcolor>#007ee5</iconbrandcolor>
+      <name>new_gcf-20mcp-20agent</name>
+      <connectortype>1</connectortype>
+      <openapidefinition>/Connector/new_gcf-20mcp-20agent_openapidefinition.json</openapidefinition>
+      <connectionparameters>/Connector/new_gcf-20mcp-20agent_connectionparameters.json</connectionparameters>
+      <policytemplateinstances>/Connector/new_gcf-20mcp-20agent_policytemplateinstances.json</policytemplateinstances>
+      <iconblob>/Connector/new_gcf-20mcp-20agent_iconblob.Png</iconblob>
+    </Connector>
+    <Connector>
+      <connectorid>dd539b71-323f-f111-bec6-70a8a59a4056</connectorid>
+      <description>Unified custom connector for Graph Connector Factory. Exposes research operations (list Graph API operations, generate connectors, manage session context) and deployment operations (deploy connectors, check names, list environments). All operations require OAuth authentication.</description>
+      <displayname>GCF REST Connector</displayname>
+      <iconbrandcolor>#007ee5</iconbrandcolor>
+      <name>new_gcf-20rest-20connector</name>
+      <connectortype>1</connectortype>
+      <openapidefinition>/Connector/new_gcf-20rest-20connector_openapidefinition.json</openapidefinition>
+      <connectionparameters>/Connector/new_gcf-20rest-20connector_connectionparameters.json</connectionparameters>
+      <policytemplateinstances>/Connector/new_gcf-20rest-20connector_policytemplateinstances.json</policytemplateinstances>
+      <iconblob>/Connector/new_gcf-20rest-20connector_iconblob.Png</iconblob>
+    </Connector>
   </Connectors>
   <connectionreferences>
     <connectionreference connectionreferencelogicalname="copilots_header_91a5e.shared_computeroperator.9579692243cc41a08768466803f42469">
@@ -33,17 +53,12 @@
       <statecode>0</statecode>
       <statuscode>1</statuscode>
     </connectionreference>
-    <connectionreference connectionreferencelogicalname="copilots_header_91a5e.shared_cr863-5fmcp-2dserver-2dfor-2denterprise-5f251f982b189de9d2.ffeabf5ca65a428b9e191d85a199ab84">
-      <connectionreferencedisplayname>copilots_header_91a5e.shared_cr863-5fmcp-2dserver-2dfor-2denterprise-5f251f982b189de9d2.ffeabf5ca65a428b9e191d85a199ab84</connectionreferencedisplayname>
-      <connectorid>/providers/Microsoft.PowerApps/apis/shared_cr863-5fmcp-2dserver-2dfor-2denterprise-5f251f982b189de9d2</connectorid>
-      <iscustomizable>0</iscustomizable>
-      <promptingbehavior>0</promptingbehavior>
-      <statecode>0</statecode>
-      <statuscode>1</statuscode>
-    </connectionreference>
     <connectionreference connectionreferencelogicalname="copilots_header_91a5e.shared_new-5fgcf-20mcp-20agent-5f251f982b189de9d2.935136bad07b42348a21092a8caf5edc">
       <connectionreferencedisplayname>copilots_header_91a5e.shared_new-5fgcf-20mcp-20agent-5f251f982b189de9d2.935136bad07b42348a21092a8caf5edc</connectionreferencedisplayname>
       <connectorid>/providers/Microsoft.PowerApps/apis/shared_new-5fgcf-20mcp-20agent-5f251f982b189de9d2</connectorid>
+      <customconnectorid>
+        <connectorid>f1d79e89-1a3f-f111-bec6-70a8a59a4056</connectorid>
+      </customconnectorid>
       <iscustomizable>0</iscustomizable>
       <promptingbehavior>0</promptingbehavior>
       <statecode>0</statecode>
@@ -52,6 +67,9 @@
     <connectionreference connectionreferencelogicalname="copilots_header_91a5e.shared_new-5fgcf-20rest-20connector-5f251f982b189de9d2.3b64b1b7818145a59f83da81404dde8e">
       <connectionreferencedisplayname>copilots_header_91a5e.shared_new-5fgcf-20rest-20connector-5f251f982b189de9d2.3b64b1b7818145a59f83da81404dde8e</connectionreferencedisplayname>
       <connectorid>/providers/Microsoft.PowerApps/apis/shared_new-5fgcf-20rest-20connector-5f251f982b189de9d2</connectorid>
+      <customconnectorid>
+        <connectorid>dd539b71-323f-f111-bec6-70a8a59a4056</connectorid>
+      </customconnectorid>
       <iscustomizable>0</iscustomizable>
       <promptingbehavior>0</promptingbehavior>
       <statecode>0</statecode>

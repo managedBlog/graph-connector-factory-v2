@@ -38,9 +38,6 @@
   <botcomponent_connectionreference botcomponentid.schemaname="copilots_header_91a5e.action.GCFRESTConnector-Polldeployjobstatus" connectionreferenceid.connectionreferencelogicalname="copilots_header_91a5e.shared_new-5fgcf-20rest-20connector-5f251f982b189de9d2.3b64b1b7818145a59f83da81404dde8e">
     <iscustomizable>1</iscustomizable>
   </botcomponent_connectionreference>
-  <botcomponent_connectionreference botcomponentid.schemaname="copilots_header_91a5e.action.copilots_header_91a5e.topic.MCP-Server-for-Enterprise" connectionreferenceid.connectionreferencelogicalname="copilots_header_91a5e.shared_cr863-5fmcp-2dserver-2dfor-2denterprise-5f251f982b189de9d2.ffeabf5ca65a428b9e191d85a199ab84">
-    <iscustomizable>1</iscustomizable>
-  </botcomponent_connectionreference>
   <botcomponent_connectionreference botcomponentid.schemaname="copilots_header_91a5e.action.MicrosoftLearnDocsMCP-MicrosoftLearnDocsMCPServer" connectionreferenceid.connectionreferencelogicalname="copilots_header_91a5e.shared_microsoftlearndocsmcpserver.6a3f588225184c24a0a321041be01682">
     <iscustomizable>1</iscustomizable>
   </botcomponent_connectionreference>

@@ -242,8 +242,7 @@ if (Test-Path $agentZip) {
     Remove-Item $agentZip -Force
 }
 
-# Agent solution uses connectorid paths (not customconnectorid GUIDs)
-# for connection reference resolution — no token replacement needed.
+# Agent solution has no token replacement — zip directly
 Compress-Archive -Path "$agentSrcDir\*" -DestinationPath $agentZip -Force
 Write-Host "  ✓ Agent solution: $agentZip" -ForegroundColor Green
 
