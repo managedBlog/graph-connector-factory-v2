@@ -9,7 +9,7 @@
       "url": "https://github.com/managedBlog/graph-connector-factory-v2"
     }
   },
-  "host": "5qgmmvlb-3001.use.devtunnels.ms",
+  "host": "__SERVER_HOST__",
   "basePath": "/",
   "schemes": [
     "https"

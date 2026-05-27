@@ -92,6 +92,15 @@ $tokenizedFiles = @(
     'new_gcf-20mcp-20agent_connectionparameters.json'
 )
 
+# Required placeholder tokens per file. Fail fast if export drift replaced tokens
+# with environment-specific values before packaging.
+$requiredTokensByFile = @{
+    'new_gcf-20rest-20connector_openapidefinition.json' = @('__SERVER_HOST__')
+    'new_gcf-20mcp-20agent_openapidefinition.json'      = @('__SERVER_HOST__')
+    'new_gcf-20rest-20connector_connectionparameters.json' = @('__OAUTH_CLIENT_ID__', '__OAUTH_RESOURCE_URI__', '__TENANT_ID__')
+    'new_gcf-20mcp-20agent_connectionparameters.json'      = @('__OAUTH_CLIENT_ID__', '__OAUTH_RESOURCE_URI__', '__TENANT_ID__')
+}
+
 Write-Host "`n=== Preparing Solution Artifacts ===" -ForegroundColor Cyan
 Write-Host "Source:  $solutionsDir"
 Write-Host "Output:  $OutputDir"
@@ -118,6 +127,11 @@ foreach ($fileName in $tokenizedFiles) {
     }
 
     $content = Get-Content $filePath -Raw
+    foreach ($requiredToken in $requiredTokensByFile[$fileName]) {
+        if (-not $content.Contains($requiredToken)) {
+            throw "Missing expected token '$requiredToken' in $fileName. Re-export or re-tokenize connector source files before running Prepare-Artifacts."
+        }
+    }
     foreach ($key in $tokenMap.Keys) {
         $content = $content.Replace($key, $tokenMap[$key])
     }
