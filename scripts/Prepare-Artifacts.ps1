@@ -63,6 +63,33 @@ $solutionsDir = Join-Path $repoRoot "copilot-studio" "solutions"
 $connectorsSrcDir = Join-Path $solutionsDir "connectors"
 $agentSrcDir = Join-Path $solutionsDir "agent"
 
+function Resolve-FirstExistingPath {
+    param(
+        [Parameter(Mandatory)] [string[]] $Candidates,
+        [Parameter(Mandatory)] [string] $Description
+    )
+    $resolved = $Candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+    if (-not $resolved) {
+        throw "$Description not found. Checked: $($Candidates -join ', ')"
+    }
+    return $resolved
+}
+
+function Assert-ZipHasRootSolutionXml {
+    param([Parameter(Mandatory)] [string] $ZipPath)
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    $zip = [System.IO.Compression.ZipFile]::OpenRead($ZipPath)
+    try {
+        $hasRootSolution = $zip.Entries | Where-Object { $_.FullName -eq 'solution.xml' } | Select-Object -First 1
+        if (-not $hasRootSolution) {
+            throw "Packed zip is missing root solution.xml: $ZipPath"
+        }
+    }
+    finally {
+        $zip.Dispose()
+    }
+}
+
 if (-not $OutputDir) {
     $OutputDir = Join-Path $repoRoot "artifacts" "solutions"
 }
@@ -117,7 +144,21 @@ Write-Host "  Copied connector solution to staging" -ForegroundColor Green
 
 # ─── Step 2: Token-replace custom connector files ────────────────────────
 
-$connectorDir = Join-Path $stagingDir "Connector"
+$connectorDir = Resolve-FirstExistingPath -Description "Connector source folder in staging" -Candidates @(
+    (Join-Path $stagingDir "Connectors"), # modern PAC unpack layout
+    (Join-Path $stagingDir "Connector")   # legacy layout
+)
+
+$solutionXmlPath = Resolve-FirstExistingPath -Description "Solution manifest in staging" -Candidates @(
+    (Join-Path $stagingDir "Other" "Solution.xml"), # modern PAC unpack layout
+    (Join-Path $stagingDir "solution.xml")          # legacy layout
+)
+
+$custXmlPath = Resolve-FirstExistingPath -Description "Customizations manifest in staging" -Candidates @(
+    (Join-Path $stagingDir "Other" "Customizations.xml"), # modern PAC unpack layout
+    (Join-Path $stagingDir "customizations.xml")          # legacy layout
+)
+
 Write-Host "  Replacing tokens in custom connector files…" -ForegroundColor Yellow
 
 foreach ($fileName in $tokenizedFiles) {
@@ -152,29 +193,23 @@ if ($SkipEnterprise) {
     }
 
     # Strip enterprise RootComponent from solution.xml
-    $solutionXmlPath = Join-Path $stagingDir "solution.xml"
-    if (Test-Path $solutionXmlPath) {
-        [xml]$sol = Get-Content $solutionXmlPath -Raw
-        $entRoot = $sol.ImportExportXml.SolutionManifest.RootComponents.RootComponent |
-            Where-Object { $_.schemaName -like "*cr863_5Fmcp-2Dserver-2Dfor-2Denterprise*" }
-        if ($entRoot) {
-            $entRoot.ParentNode.RemoveChild($entRoot) | Out-Null
-            $sol.Save($solutionXmlPath)
-            Write-Host "    Stripped RootComponent from solution.xml" -ForegroundColor DarkGray
-        }
+    [xml]$sol = Get-Content $solutionXmlPath -Raw
+    $entRoot = $sol.ImportExportXml.SolutionManifest.RootComponents.RootComponent |
+        Where-Object { $_.schemaName -like "*cr863_5Fmcp-2Dserver-2Dfor-2Denterprise*" }
+    if ($entRoot) {
+        $entRoot.ParentNode.RemoveChild($entRoot) | Out-Null
+        $sol.Save($solutionXmlPath)
+        Write-Host "    Stripped RootComponent from solution.xml" -ForegroundColor DarkGray
     }
 
     # Strip enterprise Connector from customizations.xml
-    $custXmlPath = Join-Path $stagingDir "customizations.xml"
-    if (Test-Path $custXmlPath) {
-        [xml]$cust = Get-Content $custXmlPath -Raw
-        $entConn = $cust.ImportExportXml.Connectors.Connector |
-            Where-Object { $_.name -like "*cr863_5Fmcp-2Dserver-2Dfor-2Denterprise*" }
-        if ($entConn) {
-            $entConn.ParentNode.RemoveChild($entConn) | Out-Null
-            $cust.Save($custXmlPath)
-            Write-Host "    Stripped Connector from customizations.xml" -ForegroundColor DarkGray
-        }
+    [xml]$cust = Get-Content $custXmlPath -Raw
+    $entConn = $cust.ImportExportXml.Connectors.Connector |
+        Where-Object { $_.name -like "*cr863_5Fmcp-2Dserver-2Dfor-2Denterprise*" }
+    if ($entConn) {
+        $entConn.ParentNode.RemoveChild($entConn) | Out-Null
+        $cust.Save($custXmlPath)
+        Write-Host "    Stripped Connector from customizations.xml" -ForegroundColor DarkGray
     }
 
     Write-Host "    ✓ Enterprise connector stripped" -ForegroundColor Green
@@ -242,8 +277,12 @@ if (Test-Path $connectorZip) {
     Remove-Item $connectorZip -Force
 }
 
-# Zip CONTENTS of staging dir (solution.xml must be at zip root)
-Compress-Archive -Path "$stagingDir\*" -DestinationPath $connectorZip -Force
+# Package connector solution using SolutionPackager-aware layout handling
+pac solution pack --zipfile $connectorZip --folder $stagingDir --packagetype Unmanaged
+if ($LASTEXITCODE -ne 0) {
+    throw "pac solution pack failed for connector solution."
+}
+Assert-ZipHasRootSolutionXml -ZipPath $connectorZip
 Write-Host "  ✓ Connector solution: $connectorZip" -ForegroundColor Green
 
 # Clean up staging
@@ -256,8 +295,12 @@ if (Test-Path $agentZip) {
     Remove-Item $agentZip -Force
 }
 
-# Agent solution has no token replacement — zip directly
-Compress-Archive -Path "$agentSrcDir\*" -DestinationPath $agentZip -Force
+# Agent solution has no token replacement — pack directly from source folder
+pac solution pack --zipfile $agentZip --folder $agentSrcDir --packagetype Unmanaged
+if ($LASTEXITCODE -ne 0) {
+    throw "pac solution pack failed for agent solution."
+}
+Assert-ZipHasRootSolutionXml -ZipPath $agentZip
 Write-Host "  ✓ Agent solution: $agentZip" -ForegroundColor Green
 
 # ─── Done ────────────────────────────────────────────────────────────────

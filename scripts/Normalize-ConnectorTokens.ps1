@@ -17,7 +17,14 @@ param()
 
 $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path -Parent $PSScriptRoot
-$connectorDir = Join-Path $repoRoot 'copilot-studio\solutions\connectors\Connector'
+$connectorDirCandidates = @(
+    (Join-Path $repoRoot 'copilot-studio\solutions\connectors\Connector'),
+    (Join-Path $repoRoot 'copilot-studio\solutions\connectors\Connectors')
+)
+$connectorDir = $connectorDirCandidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+if (-not $connectorDir) {
+    throw "Could not locate connector source directory. Checked: $($connectorDirCandidates -join ', ')"
+}
 
 $files = @{
     RestOpenApi = Join-Path $connectorDir 'new_gcf-20rest-20connector_openapidefinition.json'
