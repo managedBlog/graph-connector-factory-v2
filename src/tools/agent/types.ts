@@ -110,9 +110,15 @@ export interface AgentGenerationInput {
 
 export interface AgentGenerationResult {
   success: boolean;
+  finalStatus?: "success" | "partial" | "failed";
   agentId?: string | undefined;
   agentUrl?: string | undefined;
   displayName?: string | undefined;
+  agentCreationVerified?: boolean | undefined;
+  connectorReferencesLinked?: boolean | undefined;
+  resolvedSolutionName?: string | undefined;
+  solutionCreated?: boolean | undefined;
+  failureReason?: string | undefined;
   /** Template component count (base + actions). Does not include post-creation components like instructions or knowledge sources. */
   componentCount?: number | undefined;
   /** Connections that need manual configuration */

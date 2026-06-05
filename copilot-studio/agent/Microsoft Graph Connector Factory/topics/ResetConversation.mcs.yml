@@ -1,3 +1,5 @@
+mcs.metadata:
+  componentName: ResetConversation
 kind: AdaptiveDialog
 startBehavior: UseLatestPublishedContentAndCancelOtherTopics
 beginDialog:

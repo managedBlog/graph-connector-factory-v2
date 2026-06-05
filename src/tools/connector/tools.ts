@@ -712,7 +712,8 @@ const createTool: ToolDefinition = {
         type: "string",
         enum: ["NoAuth", "BasicAuth", "ApiKey", "OAuthAAD", "OAuthGeneric", "FederatedIdentity"],
         description: "Auth type to generate if apiPropertiesPath is not provided. Defaults to NoAuth. " +
-          "FederatedIdentity uses Managed Identity via Federated Identity Credentials (PREVIEW).",
+          "FederatedIdentity uses Managed Identity via Federated Identity Credentials (PREVIEW) " +
+          "with delegated OAuth flow only (not client_credentials/app-only).",
       },
       oauthClientId: {
         type: "string",
@@ -1235,7 +1236,8 @@ const deployTool: ToolDefinition = {
         type: "string",
         enum: ["NoAuth", "BasicAuth", "ApiKey", "OAuthAAD", "OAuthGeneric", "FederatedIdentity"],
         description: "Auth type for new connectors. Defaults to NoAuth. " +
-          "FederatedIdentity uses Managed Identity via Federated Identity Credentials (PREVIEW).",
+          "FederatedIdentity uses Managed Identity via Federated Identity Credentials (PREVIEW) " +
+          "with delegated OAuth flow only (not client_credentials/app-only).",
       },
       oauthClientId: { type: "string" },
       oauthResourceUri: { type: "string" },
@@ -1322,7 +1324,8 @@ const initPropertiesTool: ToolDefinition = {
         type: "string",
         enum: ["NoAuth", "BasicAuth", "ApiKey", "OAuthAAD", "OAuthGeneric", "FederatedIdentity"],
         description: "Authentication template to use. " +
-          "FederatedIdentity uses Managed Identity via Federated Identity Credentials (PREVIEW).",
+          "FederatedIdentity uses Managed Identity via Federated Identity Credentials (PREVIEW) " +
+          "with delegated OAuth flow only (not client_credentials/app-only).",
       },
       oauthClientId: {
         type: "string",

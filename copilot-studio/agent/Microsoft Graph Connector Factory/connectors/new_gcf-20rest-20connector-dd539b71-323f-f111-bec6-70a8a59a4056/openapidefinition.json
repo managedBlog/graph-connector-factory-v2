@@ -1,4 +1,4 @@
-{
+﻿{
   "swagger": "2.0",
   "info": {
     "title": "GCF REST Connector",
@@ -41,7 +41,7 @@
               "properties": {
                 "groupsJson": {
                   "type": "string",
-                  "description": "JSON string containing an array of connector groups. Each group has baseName (string) and ops (comma-separated operation IDs string). Example: [{\"baseName\":\"Users\",\"ops\":\"users.list,users.get\"},{\"baseName\":\"Groups\",\"ops\":\"groups.list\"}]",
+                  "description": "JSON string containing an array of connector groups. Each group has baseName (string) and ops (comma-separated operation IDs string). Example: [{\u0022baseName\u0022:\u0022Users\u0022,\u0022ops\u0022:\u0022users.list,users.get\u0022},{\u0022baseName\u0022:\u0022Groups\u0022,\u0022ops\u0022:\u0022groups.list\u0022}]",
                   "x-ms-summary": "Groups JSON"
                 },
                 "version": {
@@ -165,7 +165,7 @@
                     "ai",
                     "generated"
                   ],
-                  "description": "'ai' = name provided by the AI during research, 'generated' = auto-generated from endpoint paths."
+                  "description": "\u0027ai\u0027 = name provided by the AI during research, \u0027generated\u0027 = auto-generated from endpoint paths."
                 },
                 "targetVersion": {
                   "type": "string",
@@ -180,7 +180,7 @@
                 "connectorGroupsJson": {
                   "type": "string",
                   "x-ms-summary": "Connector Groups JSON",
-                  "description": "Deprecated — kept for backward compatibility. Always empty string. Use group1Json, group2Json, group3Json instead."
+                  "description": "Deprecated \u2014 kept for backward compatibility. Always empty string. Use group1Json, group2Json, group3Json instead."
                 },
                 "group1Json": {
                   "type": "string",
@@ -267,7 +267,7 @@
         ],
         "responses": {
           "202": {
-            "description": "Job accepted — poll graph_deployStatus for result",
+            "description": "Job accepted \u2014 poll graph_deployStatus for result",
             "schema": {
               "$ref": "#/definitions/DeployJobResponse"
             }
@@ -372,12 +372,12 @@
                 },
                 "connectorsJson": {
                   "type": "string",
-                  "description": "JSON string array of connector specs. Each item: {\"displayName\":\"...\",\"scope\":\"all|crud\",\"baseName\":\"...\"}. For selected ops use {\"scope\":[\"op1\",\"op2\"]}.",
+                  "description": "JSON string array of connector specs. Each item: {\u0022displayName\u0022:\u0022...\u0022,\u0022scope\u0022:\u0022all|crud\u0022,\u0022baseName\u0022:\u0022...\u0022}. For selected ops use {\u0022scope\u0022:[\u0022op1\u0022,\u0022op2\u0022]}.",
                   "x-ms-summary": "Connectors JSON"
                 },
                 "variables": {
                   "type": "string",
-                  "description": "Optional JSON string of key-value variables for test data (e.g. {\"tenantDomain\":\"contoso.com\"}).",
+                  "description": "Optional JSON string of key-value variables for test data (e.g. {\u0022tenantDomain\u0022:\u0022contoso.com\u0022}).",
                   "x-ms-summary": "Variables JSON",
                   "x-ms-visibility": "advanced"
                 }
@@ -853,21 +853,6 @@
                 "status": {
                   "type": "string",
                   "x-ms-summary": "Status"
-                },
-                "retryAfter": {
-                  "type": "integer",
-                  "x-ms-summary": "Retry After",
-                  "x-nullable": true
-                },
-                "stageCode": {
-                  "type": "string",
-                  "x-ms-summary": "Stage Code",
-                  "x-nullable": true
-                },
-                "stageMessage": {
-                  "type": "string",
-                  "x-ms-summary": "Stage Message",
-                  "x-nullable": true
                 },
                 "result": {
                   "type": "object",

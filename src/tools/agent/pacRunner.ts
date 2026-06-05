@@ -26,14 +26,16 @@ export async function runPac(
 ): Promise<PacResult> {
   const timeout = options?.timeout ?? DEFAULT_TIMEOUT_MS;
   const cwd = options?.cwd;
+  const useShell = process.platform === "win32";
+  const pacExecutable = process.env.PAC_CLI_PATH?.trim() || "pac";
 
-  log(`[PAC] Running: pac ${args.join(" ")}${cwd ? ` (cwd: ${cwd})` : ""}`);
+  log(`[PAC] Running: ${pacExecutable} ${args.join(" ")}${cwd ? ` (cwd: ${cwd})` : ""}`);
 
   return new Promise<PacResult>((resolve) => {
     execFile(
-      "pac",
+      pacExecutable,
       args,
-      { timeout, cwd, maxBuffer: 10 * 1024 * 1024 },
+      { timeout, cwd, maxBuffer: 10 * 1024 * 1024, shell: useShell },
       (error, stdout, stderr) => {
         const exitCode = error && "code" in error ? (error.code as number) ?? 1 : 0;
 
@@ -140,42 +142,178 @@ export async function pacCopilotCreate(params: {
   return { ...result, agentId: agentId ?? undefined, agentUrl: agentUrl ?? undefined };
 }
 
+export interface SolutionListEntry {
+  uniqueName: string;
+  friendlyName: string;
+  publisherPrefix: string;
+}
+
+export interface SolutionNamePreflight {
+  originalName: string;
+  normalizedName: string;
+  isValid: boolean;
+  exists: boolean;
+  message: string | undefined;
+}
+
+function sanitizeSolutionName(rawName: string): string {
+  const trimmed = rawName.trim();
+  const replaced = trimmed.replace(/[^A-Za-z0-9_]/g, "_");
+  const collapsed = replaced.replace(/_+/g, "_");
+  const stripped = collapsed.replace(/^_+|_+$/g, "");
+  const prefixed = /^[A-Za-z]/.test(stripped) ? stripped : `S_${stripped}`;
+  return prefixed.slice(0, 65);
+}
+
+function validateSolutionUniqueName(name: string): { valid: boolean; reason?: string } {
+  if (!name.trim()) {
+    return { valid: false, reason: "Solution name is required." };
+  }
+  if (name.length > 65) {
+    return { valid: false, reason: "Solution name must be 65 characters or fewer." };
+  }
+  if (!/^[A-Za-z][A-Za-z0-9_]*$/.test(name)) {
+    return {
+      valid: false,
+      reason: "Solution unique name must start with a letter and contain only letters, numbers, or underscores.",
+    };
+  }
+  return { valid: true };
+}
+
+async function querySolutionByUniqueName(
+  environmentId: string,
+  solutionName: string,
+): Promise<{ exists: boolean; publisherPrefix: string | undefined }> {
+  const { resolveOrgUrl, getDataverseToken } = await import("./dataverseClient");
+  const orgUrl = await resolveOrgUrl(environmentId);
+  const token = await getDataverseToken(orgUrl);
+  const escapedName = solutionName.replace(/'/g, "''");
+  const uri =
+    `${orgUrl}/api/data/v9.2/solutions?` +
+    `$filter=uniquename eq '${escapedName}'&` +
+    `$select=uniquename&` +
+    `$expand=publisherid($select=customizationprefix)&$top=1`;
+  const response = await fetch(uri, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "OData-MaxVersion": "4.0",
+      "OData-Version": "4.0",
+      Accept: "application/json",
+    },
+  });
+  if (!response.ok) {
+    const errText = await response.text();
+    throw new Error(`Failed to query solution "${solutionName}": ${response.status} ${errText}`);
+  }
+  const json = (await response.json()) as {
+    value?: Array<{ publisherid?: { customizationprefix?: string } }>;
+  };
+  const row = json.value?.[0];
+  if (!row) {
+    return { exists: false, publisherPrefix: undefined };
+  }
+  return { exists: true, publisherPrefix: row.publisherid?.customizationprefix };
+}
+
+export async function preflightSolutionName(
+  environmentId: string,
+  rawSolutionName: string,
+): Promise<SolutionNamePreflight> {
+  const originalName = rawSolutionName ?? "";
+  const normalizedName = sanitizeSolutionName(originalName);
+  const validation = validateSolutionUniqueName(originalName.trim());
+  const normalizedValidation = validateSolutionUniqueName(normalizedName);
+
+  if (!validation.valid) {
+    return {
+      originalName,
+      normalizedName,
+      isValid: false,
+      exists: false,
+      message: validation.reason,
+    };
+  }
+
+  if (!normalizedValidation.valid) {
+    return {
+      originalName,
+      normalizedName,
+      isValid: false,
+      exists: false,
+      message: normalizedValidation.reason,
+    };
+  }
+
+  const existing = await querySolutionByUniqueName(environmentId, normalizedName);
+  return {
+    originalName,
+    normalizedName,
+    isValid: true,
+    exists: existing.exists,
+    message: undefined,
+  };
+}
+
+export async function listSolutions(
+  environmentId: string,
+): Promise<SolutionListEntry[]> {
+  const { resolveOrgUrl, getDataverseToken } = await import("./dataverseClient");
+  const orgUrl = await resolveOrgUrl(environmentId);
+  const token = await getDataverseToken(orgUrl);
+  const uri =
+    `${orgUrl}/api/data/v9.2/solutions?` +
+    `$select=uniquename,friendlyname,ismanaged&` +
+    `$expand=publisherid($select=customizationprefix)&` +
+    `$filter=ismanaged eq false&$orderby=uniquename asc&$top=200`;
+
+  const response = await fetch(uri, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "OData-MaxVersion": "4.0",
+      "OData-Version": "4.0",
+      Accept: "application/json",
+    },
+  });
+  if (!response.ok) {
+    const errText = await response.text();
+    throw new Error(`Failed to list solutions: ${response.status} ${errText}`);
+  }
+  const data = (await response.json()) as {
+    value?: Array<{
+      uniquename?: string;
+      friendlyname?: string;
+      publisherid?: { customizationprefix?: string };
+    }>;
+  };
+  const seen = new Set<string>();
+  const items: SolutionListEntry[] = [];
+  for (const row of data.value ?? []) {
+    const uniqueName = row.uniquename?.trim();
+    if (!uniqueName || seen.has(uniqueName)) continue;
+    seen.add(uniqueName);
+    items.push({
+      uniqueName,
+      friendlyName: row.friendlyname?.trim() || uniqueName,
+      publisherPrefix: row.publisherid?.customizationprefix?.trim() || "mme",
+    });
+  }
+  return items;
+}
+
 /**
  * Get publisher prefix for a solution by querying Dataverse.
  * Falls back to "mme" if lookup fails (default for this environment).
- */
-/**
- * Get publisher prefix for a solution by querying the Dataverse publisher API.
- * Falls back to "mme" if lookup fails.
  */
 export async function getPublisherPrefix(
   environmentId: string,
   solutionName: string,
 ): Promise<string> {
   try {
-    const { resolveOrgUrl, getDataverseToken } = await import("./dataverseClient");
-    const orgUrl = await resolveOrgUrl(environmentId);
-    const token = await getDataverseToken(orgUrl);
-
-    // Query the solution's publisher prefix
-    const filter = encodeURIComponent(`uniquename eq '${solutionName}'`);
-    const uri = `${orgUrl}/api/data/v9.2/solutions?$filter=${filter}&$select=uniquename&$expand=publisherid($select=customizationprefix,uniquename)`;
-    const response = await fetch(uri, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "OData-MaxVersion": "4.0",
-        "OData-Version": "4.0",
-        Accept: "application/json",
-      },
-    });
-
-    if (response.ok) {
-      const data = (await response.json()) as { value: Array<{ publisherid?: { customizationprefix?: string; uniquename?: string } }> };
-      const prefix = data.value?.[0]?.publisherid?.customizationprefix;
-      if (prefix) {
-        log(`[PAC] Resolved publisher prefix "${prefix}" for solution "${solutionName}"`);
-        return prefix;
-      }
+    const existing = await querySolutionByUniqueName(environmentId, solutionName);
+    if (existing.publisherPrefix) {
+      log(`[PAC] Resolved publisher prefix "${existing.publisherPrefix}" for solution "${solutionName}"`);
+      return existing.publisherPrefix;
     }
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
@@ -184,6 +322,117 @@ export async function getPublisherPrefix(
 
   log(`[PAC] Using fallback publisher prefix "mme" for solution "${solutionName}"`);
   return "mme";
+}
+
+/**
+ * Ensure target solution exists; create it when missing using Dataverse Web API.
+ * Returns whether creation occurred and the publisher prefix for downstream schema naming.
+ */
+export async function ensureSolutionExists(
+  environmentId: string,
+  solutionName: string,
+): Promise<{ created: boolean; publisherPrefix: string }> {
+  const normalizedName = sanitizeSolutionName(solutionName);
+  const validation = validateSolutionUniqueName(normalizedName);
+  if (!validation.valid) {
+    throw new Error(validation.reason ?? "Invalid solution name.");
+  }
+  const existing = await querySolutionByUniqueName(environmentId, normalizedName);
+  if (existing.exists) {
+    return { created: false, publisherPrefix: existing.publisherPrefix || "mme" };
+  }
+
+  const { resolveOrgUrl, getDataverseToken } = await import("./dataverseClient");
+  const orgUrl = await resolveOrgUrl(environmentId);
+  const token = await getDataverseToken(orgUrl);
+
+  // Prefer the same publisher used by GCFApps when available.
+  const readGcfAppsPublisherUri =
+    `${orgUrl}/api/data/v9.2/solutions?` +
+    `$filter=uniquename eq 'GCFApps'&` +
+    `$select=solutionid&` +
+    `$expand=publisherid($select=publisherid,customizationprefix,uniquename)&$top=1`;
+  const gcfResp = await fetch(readGcfAppsPublisherUri, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "OData-MaxVersion": "4.0",
+      "OData-Version": "4.0",
+      Accept: "application/json",
+    },
+  });
+  if (!gcfResp.ok) {
+    const errText = await gcfResp.text();
+    throw new Error(`Failed to resolve publisher from GCFApps: ${gcfResp.status} ${errText}`);
+  }
+  const gcfJson = (await gcfResp.json()) as {
+    value?: Array<{
+      publisherid?: {
+        publisherid?: string;
+        customizationprefix?: string;
+      };
+    }>;
+  };
+  let publisherId = gcfJson.value?.[0]?.publisherid?.publisherid;
+  let publisherPrefix = gcfJson.value?.[0]?.publisherid?.customizationprefix;
+
+  // Fallback to default publisher if GCFApps is unavailable.
+  if (!publisherId) {
+    const fallbackPublisherUri =
+      `${orgUrl}/api/data/v9.2/publishers?` +
+      `$select=publisherid,customizationprefix,uniquename&` +
+      `$filter=uniquename eq 'DefaultPublisher'&$top=1`;
+    const publisherResp = await fetch(fallbackPublisherUri, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "OData-MaxVersion": "4.0",
+        "OData-Version": "4.0",
+        Accept: "application/json",
+      },
+    });
+    if (!publisherResp.ok) {
+      const errText = await publisherResp.text();
+      throw new Error(`Failed to query default publisher: ${publisherResp.status} ${errText}`);
+    }
+    const publisherJson = (await publisherResp.json()) as {
+      value?: Array<{
+        publisherid?: string;
+        customizationprefix?: string;
+      }>;
+    };
+    publisherId = publisherJson.value?.[0]?.publisherid;
+    publisherPrefix = publisherJson.value?.[0]?.customizationprefix;
+  }
+
+  if (!publisherId) {
+    throw new Error(`Could not resolve a publisher to create solution "${solutionName}".`);
+  }
+
+  const createResp = await fetch(`${orgUrl}/api/data/v9.2/solutions`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+      "OData-MaxVersion": "4.0",
+      "OData-Version": "4.0",
+      Accept: "application/json",
+    },
+    body: JSON.stringify({
+      uniquename: normalizedName,
+      friendlyname: normalizedName,
+      version: "1.0.0.0",
+      "publisherid@odata.bind": `/publishers(${publisherId})`,
+    }),
+  });
+  if (!createResp.ok) {
+    const errText = await createResp.text();
+    throw new Error(`Failed to create solution "${normalizedName}": ${createResp.status} ${errText}`);
+  }
+
+  log(`[PAC] Created missing solution "${normalizedName}"`);
+  return {
+    created: true,
+    publisherPrefix: publisherPrefix || "mme",
+  };
 }
 
 /**

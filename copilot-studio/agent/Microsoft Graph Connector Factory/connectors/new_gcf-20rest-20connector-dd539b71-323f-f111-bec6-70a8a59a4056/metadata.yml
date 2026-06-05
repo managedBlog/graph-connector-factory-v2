@@ -1,0 +1,21 @@
+﻿{
+  "connectorid": "dd539b71-323f-f111-bec6-70a8a59a4056",
+  "name": "new_gcf-20rest-20connector",
+  "displayname": "GCF REST Connector",
+  "description": "Unified custom connector for Graph Connector Factory. Exposes research operations (list Graph API operations, generate connectors, manage session context) and deployment operations (deploy connectors, check names, list environments). All operations require OAuth authentication.",
+  "connectorinternalid": "shared_new-5fgcf-20rest-20connector-5f251f982b189de9d2",
+  "openapidefinition": "connectors/new_gcf-20rest-20connector-dd539b71-323f-f111-bec6-70a8a59a4056/openapidefinition.json",
+  "connectionparameters": "connectors/new_gcf-20rest-20connector-dd539b71-323f-f111-bec6-70a8a59a4056/connectionparameters.json",
+  "connectionparametersets": null,
+  "policytemplateinstances": "connectors/new_gcf-20rest-20connector-dd539b71-323f-f111-bec6-70a8a59a4056/policytemplateinstances.json",
+  "iconbrandcolor": "#007ee5",
+  "iconblob": "connectors/new_gcf-20rest-20connector-dd539b71-323f-f111-bec6-70a8a59a4056/iconblob.png",
+  "connectortype": 1,
+  "statecode": 0,
+  "statuscode": 1,
+  "ismanaged": false,
+  "componentstate": 0,
+  "createdon": "2026-04-23T16:35:32Z",
+  "modifiedon": "2026-06-03T21:05:44Z",
+  "versionnumber": 4261078
+}

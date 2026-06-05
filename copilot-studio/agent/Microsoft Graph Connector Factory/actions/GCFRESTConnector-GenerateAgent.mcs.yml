@@ -20,7 +20,7 @@ inputs:
   - kind: AutomaticTaskInput
     propertyName: solutionName
     name: Solution Name
-    description: Target solution name (default GCFApps)
+    description: Target solution unique name
     isRequired: true
   - kind: AutomaticTaskInput
     propertyName: mcpServerIds
@@ -37,6 +37,11 @@ inputs:
     name: Instructions Override
     description: Custom instructions text or auto for auto-generated
     isRequired: true
+  - kind: AutomaticTaskInput
+    propertyName: runId
+    name: Run ID
+    description: Optional run ID used for strict isolation
+    isRequired: false
 modelDisplayName: Generate Agent
 modelDescription: Generates and deploys a new Copilot Studio agent with the specified connectors, MCP servers, and knowledge sources. Returns a job ID for async polling.
 outputs:
@@ -85,5 +90,10 @@ action:
         description: Custom instructions text or auto
         displayName: Instructions Override
         isRequired: true
+        type: String
+      runId:
+        description: Optional run ID used for strict isolation
+        displayName: Run ID
+        isRequired: false
         type: String
 outputMode: All

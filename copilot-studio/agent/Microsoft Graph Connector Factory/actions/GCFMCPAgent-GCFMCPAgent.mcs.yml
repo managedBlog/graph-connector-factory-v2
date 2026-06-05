@@ -1,3 +1,5 @@
+mcs.metadata:
+  componentName: GCFMCPAgent-GCFMCPAgent
 kind: TaskDialog
 modelDisplayName: GCF MCP Agent
 modelDescription: MCP agent connector for Graph Connector Factory v2. Enables AI-powered research of Microsoft Graph API endpoints and custom connector generation via MCP Streamable protocol.

@@ -1,3 +1,5 @@
+mcs.metadata:
+  componentName: OnError
 kind: AdaptiveDialog
 startBehavior: UseLatestPublishedContentAndCancelOtherTopics
 beginDialog:

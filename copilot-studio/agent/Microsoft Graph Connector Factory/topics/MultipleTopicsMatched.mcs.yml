@@ -1,3 +1,5 @@
+mcs.metadata:
+  componentName: MultipleTopicsMatched
 kind: AdaptiveDialog
 beginDialog:
   kind: OnSelectIntent

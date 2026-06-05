@@ -2,19 +2,7 @@ mcs.metadata:
   componentName: GCF REST Connector - List MCP Servers
 kind: TaskDialog
 modelDisplayName: List MCP Servers
-modelDescription: Lists available Microsoft MCP servers that can be added to a generated agent. Returns server names, descriptions, categories, and stability status.
-inputs:
-  - kind: AutomaticTaskInput
-    propertyName: category
-    name: Category
-    description: Optional filter by category (graph, azure, data, devtools, m365, security)
-    isRequired: false
-
-  - kind: AutomaticTaskInput
-    propertyName: stableOnly
-    name: Stable Only
-    description: If true, only return servers with known stable connector names
-    isRequired: false
+modelDescription: Lists available Microsoft MCP servers that can be added to a generated agent during Phase 6 (Agent Factory). Do NOT call during research or connector planning. Returns server names, descriptions, and categories.
 
 outputs:
   - propertyName: body
@@ -26,18 +14,5 @@ action:
     mode: Invoker
 
   operationId: agent_listMcpServers
-
-  inputType:
-    properties:
-      category:
-        displayName: Category
-        description: Optional filter by category
-        isRequired: false
-        type: String
-      stableOnly:
-        displayName: Stable Only
-        description: If true, only return stable servers
-        isRequired: false
-        type: String
 
 outputMode: All

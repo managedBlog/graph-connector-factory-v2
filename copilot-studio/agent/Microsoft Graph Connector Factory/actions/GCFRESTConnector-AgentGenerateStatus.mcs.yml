@@ -1,8 +1,6 @@
 mcs.metadata:
   componentName: GCF REST Connector - Agent Generate Status
 kind: TaskDialog
-modelDisplayName: Agent Generate Status
-modelDescription: Long-polls an agent generation job. Returns the current status and, when complete, the full result including the agent URL.
 inputs:
   - kind: AutomaticTaskInput
     propertyName: jobId
@@ -10,14 +8,24 @@ inputs:
     description: The agent generation job ID returned by agent_generateAgent
     isRequired: true
 
+modelDisplayName: Agent Generate Status
+modelDescription: Long-polls an agent generation job. Returns the current status and, when complete, the full result including the agent URL.
 outputs:
   - propertyName: error
 
   - propertyName: jobId
 
+  - propertyName: retryAfter
+
   - propertyName: result
 
+  - propertyName: stageCode
+
+  - propertyName: stageMessage
+
   - propertyName: status
+
+  - propertyName: runId
 
 action:
   kind: InvokeConnectorTaskAction
@@ -26,12 +34,11 @@ action:
     mode: Invoker
 
   operationId: agent_generateStatus
-
   inputType:
     properties:
       jobId:
-        displayName: Job ID
         description: The agent generation job ID
+        displayName: Job ID
         isRequired: true
         type: String
 

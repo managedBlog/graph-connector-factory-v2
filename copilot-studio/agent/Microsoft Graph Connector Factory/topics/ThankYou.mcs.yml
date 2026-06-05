@@ -1,3 +1,5 @@
+mcs.metadata:
+  componentName: ThankYou
 kind: AdaptiveDialog
 beginDialog:
   kind: OnRecognizedIntent

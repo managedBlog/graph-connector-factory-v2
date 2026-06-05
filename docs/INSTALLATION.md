@@ -223,6 +223,8 @@ The enterprise app registration requires two API permissions:
 # Using client secret
 $env:GCF_CLIENT_SECRET = "your-secret"
 $env:MCP_TRANSPORT = "http"
+# Optional: enable strict run isolation (requires runId on deploy/generate APIs)
+$env:GCF_STRICT_RUN_ISOLATION = "true"
 node dist/index.js
 
 # Or using certificate (configured in config.json during Stage 4)

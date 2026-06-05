@@ -23,12 +23,25 @@ import type {
   DeployedConnectorInfo,
   ConnectorOperationGroup,
   PendingConnection,
-} from "./types";import { resolveMcpServers } from "./mcpCatalog";
+} from "./types";
+import { resolveMcpServers } from "./mcpCatalog";
 import { generateInstructions, generateStarterPrompts } from "./instructionsGenerator";
 import { truncateInstructions } from "./instructionUtils";
 import { patchTemplate, cleanupTemplateDir, buildSchemaName } from "./templatePatcher";
-import { isPacAvailable, pacCopilotCreate, getPublisherPrefix, resolveEnvironmentId } from "./pacRunner";
-import { addKnowledgeSources, setAgentInstructions } from "./dataverseClient";
+import { isPacAvailable, pacCopilotCreate, ensureSolutionExists, resolveEnvironmentId } from "./pacRunner";
+import {
+  addKnowledgeSources,
+  hasAgentInstructions,
+  resolveBotIdForPostCreate,
+  setAgentInstructions,
+} from "./dataverseClient";
+
+export interface AgentGenerationProgress {
+  stageCode: string;
+  stageMessage: string;
+}
+
+export type AgentGenerationProgressReporter = (progress: AgentGenerationProgress) => void;
 
 
 /**
@@ -39,7 +52,12 @@ import { addKnowledgeSources, setAgentInstructions } from "./dataverseClient";
 export async function generateAgent(
   input: AgentGenerationInput,
   deployedConnectors: DeployedConnectorInfo[],
+  reportProgress?: AgentGenerationProgressReporter,
 ): Promise<AgentGenerationResult> {
+  const emitProgress = (stageCode: string, stageMessage: string): void => {
+    reportProgress?.({ stageCode, stageMessage });
+  };
+
   log(`[AgentGenerator] Starting agent creation: "${input.agentName}"`);
 
   // 1. Validate prerequisites
@@ -47,6 +65,7 @@ export async function generateAgent(
   if (!pacAvailable) {
     return {
       success: false,
+      finalStatus: "failed",
       pendingConnections: [],
       starterPrompts: [],
       warnings: [],
@@ -59,6 +78,7 @@ export async function generateAgent(
   if (deployedConnectors.length === 0) {
     return {
       success: false,
+      finalStatus: "failed",
       pendingConnections: [],
       starterPrompts: [],
       warnings: [],
@@ -110,8 +130,12 @@ export async function generateAgent(
   const resolvedEnvId = await resolveEnvironmentId(input.environmentId);
   log(`[AgentGenerator] Environment: ${input.environmentId} → ${resolvedEnvId}`);
 
-  // 6. Get publisher prefix for the target solution
-  const publisherPrefix = await getPublisherPrefix(resolvedEnvId, input.solutionName);
+  // 6. Ensure target solution exists and resolve publisher prefix for schema naming
+  const solutionStatus = await ensureSolutionExists(resolvedEnvId, input.solutionName);
+  const publisherPrefix = solutionStatus.publisherPrefix;
+  if (solutionStatus.created) {
+    log(`[AgentGenerator] Created target solution "${input.solutionName}"`);
+  }
   const agentSchemaName = buildSchemaName(publisherPrefix, input.agentName);
   log(`[AgentGenerator] Schema name: ${agentSchemaName}`);
 
@@ -131,6 +155,7 @@ export async function generateAgent(
     logError(`[AgentGenerator] Template patching failed: ${msg}`);
     return {
       success: false,
+      finalStatus: "failed",
       pendingConnections: [],
       starterPrompts,
       warnings: [],
@@ -148,6 +173,7 @@ export async function generateAgent(
       log(`[AgentGenerator] JSON template content:\n${jsonContent}`);
     }
 
+    emitProgress("pac_create", "Creating your Copilot Studio agent...");
     const result = await pacCopilotCreate({
       displayName: input.agentName,
       schemaName: agentSchemaName,
@@ -172,6 +198,7 @@ export async function generateAgent(
       const isSchemaConflict = errorMsg.includes("ExportKeyInvalidCreate") || errorMsg.includes("violates a database constraint");
       return {
         success: false,
+        finalStatus: "failed",
         pendingConnections: [],
         starterPrompts,
         warnings: [],
@@ -196,26 +223,59 @@ export async function generateAgent(
     // Connection binding removed — Copilot Studio handles connections via its own UI
     const warnings: string[] = [];
 
+    // Resolve bot ID robustly for post-create operations.
+    emitProgress("resolve_bot", "Finalizing agent registration...");
+    const resolvedBotId = await resolveBotIdForPostCreate({
+      environmentId: resolvedEnvId,
+      pacAgentId: result.agentId,
+      botSchemaName: agentSchemaName,
+      agentName: input.agentName,
+    });
+    let verificationFailureReason: string | undefined;
+    if (!resolvedBotId) {
+      const msg = `Agent creation could not be verified in Dataverse (schema: ${agentSchemaName}).`;
+      logError(`[AgentGenerator] ${msg}`);
+      warnings.push(msg);
+      verificationFailureReason = msg;
+    }
+
     // 9. Post-creation: set agent instructions via Dataverse API
-    if (result.agentId && instructions) {
+    if (resolvedBotId && instructions) {
+      emitProgress("set_instructions", "Applying agent instructions...");
       log(`[AgentGenerator] Setting agent instructions...`);
       try {
-        await setAgentInstructions(resolvedEnvId, result.agentId, input.agentName, instructions, agentSchemaName);
+        await setAgentInstructions(resolvedEnvId, resolvedBotId, input.agentName, instructions, agentSchemaName);
         log(`[AgentGenerator] Instructions set successfully`);
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
-        logError(`[AgentGenerator] Failed to set instructions (non-fatal): ${msg}`);
-        warnings.push(`Failed to set agent instructions: ${msg}. You can add them manually in Copilot Studio.`);
+        if (msg.toLowerCase().includes("not a member of the organization")) {
+          log(`[AgentGenerator] Skipping instruction update due to org membership: ${msg}`);
+          warnings.push("Automatic instruction update was skipped because the server identity is not a member of the target organization. Add instructions manually in Copilot Studio.");
+        } else {
+          let existingInstructionsPresent = false;
+          try {
+            existingInstructionsPresent = await hasAgentInstructions(resolvedEnvId, resolvedBotId, agentSchemaName);
+          } catch (verifyErr) {
+            logError(`[AgentGenerator] Failed to verify instruction component: ${verifyErr instanceof Error ? verifyErr.message : String(verifyErr)}`);
+          }
+          if (existingInstructionsPresent) {
+            log(`[AgentGenerator] Instruction update failed but an instruction component already exists; suppressing warning.`);
+          } else {
+            logError(`[AgentGenerator] Failed to set instructions: ${msg}`);
+            warnings.push(`Failed to set agent instructions: ${msg}. You can add them manually in Copilot Studio.`);
+          }
+        }
       }
     }
 
     // 10. Post-creation: add knowledge sources via Dataverse API
     const knowledgeSources = input.knowledgeSources ?? [];
-    if (knowledgeSources.length > 0 && result.agentId) {
+    if (knowledgeSources.length > 0 && resolvedBotId) {
+      emitProgress("add_knowledge_sources", "Adding knowledge sources...");
       log(`[AgentGenerator] Adding ${knowledgeSources.length} knowledge source(s) post-creation...`);
       const ksWarnings = await addKnowledgeSources(
         resolvedEnvId,
-        result.agentId,
+        resolvedBotId,
         knowledgeSources,
         publisherPrefix,
         agentSchemaName,
@@ -223,11 +283,18 @@ export async function generateAgent(
       warnings.push(...ksWarnings);
     }
 
+    emitProgress("finalizing", "Wrapping up and verifying...");
     return {
       success: true,
+      finalStatus: resolvedBotId ? "success" : "partial",
       agentId: result.agentId,
       agentUrl,
       displayName: input.agentName,
+      agentCreationVerified: Boolean(resolvedBotId),
+      connectorReferencesLinked: false,
+      resolvedSolutionName: input.solutionName,
+      solutionCreated: solutionStatus.created,
+      failureReason: verificationFailureReason,
       componentCount: patchedTemplate.componentCount,
       pendingConnections,
       starterPrompts,
@@ -240,6 +307,7 @@ export async function generateAgent(
     cleanupTemplateDir(patchedTemplate.yamlPath);
     return {
       success: false,
+      finalStatus: "failed",
       pendingConnections: [],
       starterPrompts,
       warnings: [],

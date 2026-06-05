@@ -1,3 +1,5 @@
+mcs.metadata:
+  componentName: EndofConversation
 kind: AdaptiveDialog
 startBehavior: CancelOtherTopics
 beginDialog:
