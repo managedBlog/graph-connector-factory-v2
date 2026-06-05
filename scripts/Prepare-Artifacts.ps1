@@ -10,11 +10,12 @@
     __TENANT_ID__) are replaced in the 4 tokenized files.
 
     Enterprise connector (MCP Server for Enterprise / cr863) handling:
-      - If -EnterpriseAppId is provided: replaces the source clientId, flips
-        IsFirstParty to False, and replaces the source tenant ID.
+      - If -EnterpriseAppId is provided: replaces __ENTERPRISE_APP_ID__, flips
+        IsFirstParty to False, and replaces __TENANT_ID__.
       - If -SkipEnterprise: strips the enterprise connector files from the solution
         and removes its entries from solution.xml and customizations.xml.
-      - If neither: enterprise files are left as-is (may not work in target tenant).
+      - If neither: tokenized enterprise files fail fast so tenant-specific IDs
+        are not silently packaged.
 
 .PARAMETER ServerHost
     Server hostname (e.g. abc123-3001.usw3.devtunnels.ms)
@@ -99,7 +100,7 @@ if (-not (Test-Path $OutputDir)) {
     New-Item -ItemType Directory -Path $OutputDir -Force | Out-Null
 }
 
-# Source-tenant constants (baked into the exported solution files)
+# Source-tenant constants (fallback for legacy non-tokenized exports)
 $SOURCE_TENANT_ID             = '1ccffdab-21fe-40b2-9b3d-c3a7222a330e'
 $SOURCE_ENTERPRISE_CLIENT_ID  = '1b29ab3c-915f-4521-8860-a1fbd8399ed7'
 
@@ -117,6 +118,12 @@ $tokenizedFiles = @(
     'new_gcf-20rest-20connector_connectionparameters.json',
     'new_gcf-20mcp-20agent_openapidefinition.json',
     'new_gcf-20mcp-20agent_connectionparameters.json'
+)
+
+# Enterprise connector files that may contain tokenized auth settings
+$enterpriseJsonFiles = @(
+    'cr863_5Fmcp-2Dserver-2Dfor-2Denterprise_connectionparameters.json',
+    'cr863_5Fmcp-2Dserver-2Dfor-2Denterprise_connectionparametersets.json'
 )
 
 # Required placeholder tokens per file. Fail fast if export drift replaced tokens
@@ -222,6 +229,12 @@ elseif (-not [string]::IsNullOrWhiteSpace($EnterpriseAppId)) {
         $content = Get-Content -LiteralPath $f.FullName -Raw
         $changed = $false
 
+        # Replace tokenized enterprise clientId with target
+        if ($content.Contains('__ENTERPRISE_APP_ID__')) {
+            $content = $content.Replace('__ENTERPRISE_APP_ID__', $EnterpriseAppId)
+            $changed = $true
+        }
+
         # Replace source enterprise clientId with target
         if ($content.Contains($SOURCE_ENTERPRISE_CLIENT_ID)) {
             $content = $content.Replace($SOURCE_ENTERPRISE_CLIENT_ID, $EnterpriseAppId)
@@ -240,6 +253,12 @@ elseif (-not [string]::IsNullOrWhiteSpace($EnterpriseAppId)) {
             $changed = $true
         }
 
+        # Replace shared tenant token with target
+        if ($content.Contains('__TENANT_ID__')) {
+            $content = $content.Replace('__TENANT_ID__', $TenantId)
+            $changed = $true
+        }
+
         if ($changed) {
             Set-Content -LiteralPath $f.FullName -Value $content -Encoding UTF8 -NoNewline
             Write-Host "    ✓ $($f.Name)" -ForegroundColor Green
@@ -248,7 +267,7 @@ elseif (-not [string]::IsNullOrWhiteSpace($EnterpriseAppId)) {
 }
 else {
     Write-Host "  Enterprise connector: no -EnterpriseAppId or -SkipEnterprise provided" -ForegroundColor DarkYellow
-    Write-Host "    Files left as-is with source-tenant values — connector may not work" -ForegroundColor DarkYellow
+    Write-Host "    Files left as-is — connector may not work" -ForegroundColor DarkYellow
 }
 
 # ─── Step 4: Validate no unresolved tokens remain ────────────────────────
@@ -265,8 +284,27 @@ foreach ($fileName in $tokenizedFiles) {
         }
     }
 }
+
+# Validate enterprise tokens only when enterprise connector is retained
+if (-not $SkipEnterprise) {
+    foreach ($fileName in $enterpriseJsonFiles) {
+        $filePath = Join-Path $connectorDir $fileName
+        if (Test-Path $filePath) {
+            $content = Get-Content $filePath -Raw
+            if ($content.Contains('__ENTERPRISE_APP_ID__')) {
+                Write-Host "    ✗ Unresolved token in ${fileName}: __ENTERPRISE_APP_ID__" -ForegroundColor Red
+                $unresolvedFound = $true
+            }
+            if ($content.Contains('__TENANT_ID__')) {
+                Write-Host "    ✗ Unresolved token in ${fileName}: __TENANT_ID__" -ForegroundColor Red
+                $unresolvedFound = $true
+            }
+        }
+    }
+}
+
 if ($unresolvedFound) {
-    throw "Unresolved placeholder tokens found in connector files. Check parameter values."
+    throw "Unresolved placeholder tokens found in connector files. Check parameter values or pass -EnterpriseAppId / -SkipEnterprise."
 }
 Write-Host "    ✓ All tokens resolved" -ForegroundColor Green
 

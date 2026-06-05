@@ -160,8 +160,11 @@ Generates `config/config.json` from the template with your values.
 
 Runs `Prepare-Artifacts.ps1` to:
 - Token-replace connector swagger and apiProperties files (`__SERVER_HOST__`, `__OAUTH_CLIENT_ID__`, `__OAUTH_RESOURCE_URI__`, `__TENANT_ID__`)
+- Token-replace Enterprise MCP connector auth values (`__ENTERPRISE_APP_ID__`, `__TENANT_ID__`)
 - Retarget the enterprise connector to your tenant (if `-EnterpriseAppId` provided)
 - Pack both solution ZIPs (`artifacts/solutions/GCFApps_connectors.zip` + `GCFApps_agent.zip`)
+
+If you are **not** using `-SkipEnterprise`, pass `-EnterpriseAppId` in this stage. Artifact prep now fails fast if enterprise auth tokens are unresolved.
 
 ### Stage 6: Connectors
 

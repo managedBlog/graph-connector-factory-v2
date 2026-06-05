@@ -9,6 +9,7 @@
       - __OAUTH_CLIENT_ID__
       - __OAUTH_RESOURCE_URI__
       - __TENANT_ID__
+      - __ENTERPRISE_APP_ID__ (enterprise connector clientId)
 
     Run this on the source/export machine before committing connector source files.
 #>
@@ -31,6 +32,8 @@ $files = @{
     RestConn    = Join-Path $connectorDir 'new_gcf-20rest-20connector_connectionparameters.json'
     McpOpenApi  = Join-Path $connectorDir 'new_gcf-20mcp-20agent_openapidefinition.json'
     McpConn     = Join-Path $connectorDir 'new_gcf-20mcp-20agent_connectionparameters.json'
+    EntConn     = Join-Path $connectorDir 'cr863_5Fmcp-2Dserver-2Dfor-2Denterprise_connectionparameters.json'
+    EntConnSets = Join-Path $connectorDir 'cr863_5Fmcp-2Dserver-2Dfor-2Denterprise_connectionparametersets.json'
 }
 
 foreach ($f in $files.GetEnumerator()) {
@@ -70,6 +73,32 @@ $mcpConnObj     = Get-Content $files.McpConn -Raw | ConvertFrom-Json
 
 $restOAuth = $restConnObj.token.oAuthSettings
 $mcpOAuth  = $mcpConnObj.token.oAuthSettings
+$entConnObj = Get-Content $files.EntConn -Raw | ConvertFrom-Json
+$entSetObj  = Get-Content $files.EntConnSets -Raw | ConvertFrom-Json
+
+$entClientCandidates = @(
+    $entConnObj.token.oAuthSettings.clientId
+)
+if ($entSetObj.values) {
+    foreach ($v in $entSetObj.values) {
+        if ($v.parameters -and $v.parameters.token -and $v.parameters.token.oAuthSettings) {
+            $entClientCandidates += $v.parameters.token.oAuthSettings.clientId
+        }
+    }
+}
+$entClientCandidates = $entClientCandidates | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Select-Object -Unique
+
+$entTenantCandidates = @(
+    $entConnObj.token.oAuthSettings.customParameters.TenantId.value
+)
+if ($entSetObj.values) {
+    foreach ($v in $entSetObj.values) {
+        if ($v.parameters -and $v.parameters.token -and $v.parameters.token.oAuthSettings) {
+            $entTenantCandidates += $v.parameters.token.oAuthSettings.customParameters.TenantId.value
+        }
+    }
+}
+$entTenantCandidates = $entTenantCandidates | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Select-Object -Unique
 
 $tenantCandidates = @(
     $restOAuth.customParameters.TenantId.value,
@@ -98,6 +127,8 @@ foreach ($v in $tenantCandidates) { $replacements[$v] = '__TENANT_ID__' }
 foreach ($v in $clientIdCandidates) { $replacements[$v] = '__OAUTH_CLIENT_ID__' }
 foreach ($v in $resourceCandidates) { $replacements[$v] = '__OAUTH_RESOURCE_URI__' }
 foreach ($v in $hostCandidates) { $replacements[$v] = '__SERVER_HOST__' }
+foreach ($v in $entClientCandidates) { $replacements[$v] = '__ENTERPRISE_APP_ID__' }
+foreach ($v in $entTenantCandidates) { $replacements[$v] = '__TENANT_ID__' }
 
 $changed = @()
 foreach ($path in $files.Values) {
@@ -112,6 +143,8 @@ $requiredTokensByPath = @{
     $files.McpOpenApi  = @('__SERVER_HOST__')
     $files.RestConn    = @('__OAUTH_CLIENT_ID__', '__OAUTH_RESOURCE_URI__', '__TENANT_ID__')
     $files.McpConn     = @('__OAUTH_CLIENT_ID__', '__OAUTH_RESOURCE_URI__', '__TENANT_ID__')
+    $files.EntConn     = @('__ENTERPRISE_APP_ID__', '__TENANT_ID__')
+    $files.EntConnSets = @('__ENTERPRISE_APP_ID__', '__TENANT_ID__')
 }
 
 foreach ($entry in $requiredTokensByPath.GetEnumerator()) {
