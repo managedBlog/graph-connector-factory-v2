@@ -1,0 +1,101 @@
+<botcomponent_connectionreferenceset>
+  <botcomponent_connectionreference botcomponentid.schemaname="mme_EntraUserAuthMethodsAgent_4c45.action.05.28SolutionTestUserRegistrationDetailsGet" connectionreferenceid.connectionreferencelogicalname="mme_EntraUserAuthMethodsAgent_4c45.connectionreference.052e28202d20solution.shared_052e28202d20solut">
+    <iscustomizable>1</iscustomizable>
+  </botcomponent_connectionreference>
+  <botcomponent_connectionreference botcomponentid.schemaname="mme_EntraUserAuthMethodsAgent_4c45.action.05.28SolutionTestUserRegistrationDetailsList" connectionreferenceid.connectionreferencelogicalname="mme_EntraUserAuthMethodsAgent_4c45.connectionreference.052e28202d20solution.shared_052e28202d20solut">
+    <iscustomizable>1</iscustomizable>
+  </botcomponent_connectionreference>
+  <botcomponent_connectionreference botcomponentid.schemaname="mme_EntraUserAuthMethodsAgent_4c45.action.05.28SolutionTestUsersAssignLicense" connectionreferenceid.connectionreferencelogicalname="mme_EntraUserAuthMethodsAgent_4c45.connectionreference.052e28202d20solution.shared_052e28202d20solut">
+    <iscustomizable>1</iscustomizable>
+  </botcomponent_connectionreference>
+  <botcomponent_connectionreference botcomponentid.schemaname="mme_EntraUserAuthMethodsAgent_4c45.action.05.28SolutionTestUsersChangePassword" connectionreferenceid.connectionreferencelogicalname="mme_EntraUserAuthMethodsAgent_4c45.connectionreference.052e28202d20solution.shared_052e28202d20solut">
+    <iscustomizable>1</iscustomizable>
+  </botcomponent_connectionreference>
+  <botcomponent_connectionreference botcomponentid.schemaname="mme_EntraUserAuthMethodsAgent_4c45.action.05.28SolutionTestUsersCreate" connectionreferenceid.connectionreferencelogicalname="mme_EntraUserAuthMethodsAgent_4c45.connectionreference.052e28202d20solution.shared_052e28202d20solut">
+    <iscustomizable>1</iscustomizable>
+  </botcomponent_connectionreference>
+  <botcomponent_connectionreference botcomponentid.schemaname="mme_EntraUserAuthMethodsAgent_4c45.action.05.28SolutionTestUsersDelete" connectionreferenceid.connectionreferencelogicalname="mme_EntraUserAuthMethodsAgent_4c45.connectionreference.052e28202d20solution.shared_052e28202d20solut">
+    <iscustomizable>1</iscustomizable>
+  </botcomponent_connectionreference>
+  <botcomponent_connectionreference botcomponentid.schemaname="mme_EntraUserAuthMethodsAgent_4c45.action.05.28SolutionTestUsersExportPersonalData" connectionreferenceid.connectionreferencelogicalname="mme_EntraUserAuthMethodsAgent_4c45.connectionreference.052e28202d20solution.shared_052e28202d20solut">
+    <iscustomizable>1</iscustomizable>
+  </botcomponent_connectionreference>
+  <botcomponent_connectionreference botcomponentid.schemaname="mme_EntraUserAuthMethodsAgent_4c45.action.05.28SolutionTestUsersGet" connectionreferenceid.connectionreferencelogicalname="mme_EntraUserAuthMethodsAgent_4c45.connectionreference.052e28202d20solution.shared_052e28202d20solut">
+    <iscustomizable>1</iscustomizable>
+  </botcomponent_connectionreference>
+  <botcomponent_connectionreference botcomponentid.schemaname="mme_EntraUserAuthMethodsAgent_4c45.action.05.28SolutionTestUsersList" connectionreferenceid.connectionreferencelogicalname="mme_EntraUserAuthMethodsAgent_4c45.connectionreference.052e28202d20solution.shared_052e28202d20solut">
+    <iscustomizable>1</iscustomizable>
+  </botcomponent_connectionreference>
+  <botcomponent_connectionreference botcomponentid.schemaname="mme_EntraUserAuthMethodsAgent_4c45.action.05.28SolutionTestUsersReprocessLicenseAssignment" connectionreferenceid.connectionreferencelogicalname="mme_EntraUserAuthMethodsAgent_4c45.connectionreference.052e28202d20solution.shared_052e28202d20solut">
+    <iscustomizable>1</iscustomizable>
+  </botcomponent_connectionreference>
+  <botcomponent_connectionreference botcomponentid.schemaname="mme_EntraUserAuthMethodsAgent_4c45.action.05.28SolutionTestUsersRetryServiceProvisioning" connectionreferenceid.connectionreferencelogicalname="mme_EntraUserAuthMethodsAgent_4c45.connectionreference.052e28202d20solution.shared_052e28202d20solut">
+    <iscustomizable>1</iscustomizable>
+  </botcomponent_connectionreference>
+  <botcomponent_connectionreference botcomponentid.schemaname="mme_EntraUserAuthMethodsAgent_4c45.action.05.28SolutionTestUsersRevokeSignInSessions" connectionreferenceid.connectionreferencelogicalname="mme_EntraUserAuthMethodsAgent_4c45.connectionreference.052e28202d20solution.shared_052e28202d20solut">
+    <iscustomizable>1</iscustomizable>
+  </botcomponent_connectionreference>
+  <botcomponent_connectionreference botcomponentid.schemaname="mme_EntraUserAuthMethodsAgent_4c45.action.05.28SolutionTestUsersUpdate" connectionreferenceid.connectionreferencelogicalname="mme_EntraUserAuthMethodsAgent_4c45.connectionreference.052e28202d20solution.shared_052e28202d20solut">
+    <iscustomizable>1</iscustomizable>
+  </botcomponent_connectionreference>
+  <botcomponent_connectionreference botcomponentid.schemaname="mme_EntraUserAuthMethodsAgent_4c45.action.MicrosoftLearnDocsMCP" connectionreferenceid.connectionreferencelogicalname="mme_EntraUserAuthMethodsAgent_4c45.connectionreference.microsoftlearndocsmc.shared_microsoftlearndoc">
+    <iscustomizable>1</iscustomizable>
+  </botcomponent_connectionreference>
+  <botcomponent_connectionreference botcomponentid.schemaname="mme_RepairTest_aa5f.action.05.27RepairTestManagedDevicesCreateDeviceLogCollectionRequest" connectionreferenceid.connectionreferencelogicalname="mme_RepairTest_aa5f.connectionreference.052e27202d20repair20.shared_052e27202d20repair20test5f251f98">
+    <iscustomizable>1</iscustomizable>
+  </botcomponent_connectionreference>
+  <botcomponent_connectionreference botcomponentid.schemaname="mme_RepairTest_aa5f.action.05.27RepairTestManagedDevicesDisableLostMode" connectionreferenceid.connectionreferencelogicalname="mme_RepairTest_aa5f.connectionreference.052e27202d20repair20.shared_052e27202d20repair20test5f251f98">
+    <iscustomizable>1</iscustomizable>
+  </botcomponent_connectionreference>
+  <botcomponent_connectionreference botcomponentid.schemaname="mme_RepairTest_aa5f.action.05.27RepairTestManagedDevicesEnableLostMode" connectionreferenceid.connectionreferencelogicalname="mme_RepairTest_aa5f.connectionreference.052e27202d20repair20.shared_052e27202d20repair20test5f251f98">
+    <iscustomizable>1</iscustomizable>
+  </botcomponent_connectionreference>
+  <botcomponent_connectionreference botcomponentid.schemaname="mme_RepairTest_aa5f.action.05.27RepairTestManagedDevicesGet" connectionreferenceid.connectionreferencelogicalname="mme_RepairTest_aa5f.connectionreference.052e27202d20repair20.shared_052e27202d20repair20test5f251f98">
+    <iscustomizable>1</iscustomizable>
+  </botcomponent_connectionreference>
+  <botcomponent_connectionreference botcomponentid.schemaname="mme_RepairTest_aa5f.action.05.27RepairTestManagedDevicesList" connectionreferenceid.connectionreferencelogicalname="mme_RepairTest_aa5f.connectionreference.052e27202d20repair20.shared_052e27202d20repair20test5f251f98">
+    <iscustomizable>1</iscustomizable>
+  </botcomponent_connectionreference>
+  <botcomponent_connectionreference botcomponentid.schemaname="mme_RepairTest_aa5f.action.05.27RepairTestManagedDevicesLocateDevice" connectionreferenceid.connectionreferencelogicalname="mme_RepairTest_aa5f.connectionreference.052e27202d20repair20.shared_052e27202d20repair20test5f251f98">
+    <iscustomizable>1</iscustomizable>
+  </botcomponent_connectionreference>
+  <botcomponent_connectionreference botcomponentid.schemaname="mme_RepairTest_aa5f.action.05.27RepairTestManagedDevicesPlayLostModeSound" connectionreferenceid.connectionreferencelogicalname="mme_RepairTest_aa5f.connectionreference.052e27202d20repair20.shared_052e27202d20repair20test5f251f98">
+    <iscustomizable>1</iscustomizable>
+  </botcomponent_connectionreference>
+  <botcomponent_connectionreference botcomponentid.schemaname="mme_RepairTest_aa5f.action.05.27RepairTestManagedDevicesRebootNow" connectionreferenceid.connectionreferencelogicalname="mme_RepairTest_aa5f.connectionreference.052e27202d20repair20.shared_052e27202d20repair20test5f251f98">
+    <iscustomizable>1</iscustomizable>
+  </botcomponent_connectionreference>
+  <botcomponent_connectionreference botcomponentid.schemaname="mme_RepairTest_aa5f.action.05.27RepairTestManagedDevicesRecoverPasscode" connectionreferenceid.connectionreferencelogicalname="mme_RepairTest_aa5f.connectionreference.052e27202d20repair20.shared_052e27202d20repair20test5f251f98">
+    <iscustomizable>1</iscustomizable>
+  </botcomponent_connectionreference>
+  <botcomponent_connectionreference botcomponentid.schemaname="mme_RepairTest_aa5f.action.05.27RepairTestManagedDevicesRemoteLock" connectionreferenceid.connectionreferencelogicalname="mme_RepairTest_aa5f.connectionreference.052e27202d20repair20.shared_052e27202d20repair20test5f251f98">
+    <iscustomizable>1</iscustomizable>
+  </botcomponent_connectionreference>
+  <botcomponent_connectionreference botcomponentid.schemaname="mme_RepairTest_aa5f.action.05.27RepairTestManagedDevicesResetPasscode" connectionreferenceid.connectionreferencelogicalname="mme_RepairTest_aa5f.connectionreference.052e27202d20repair20.shared_052e27202d20repair20test5f251f98">
+    <iscustomizable>1</iscustomizable>
+  </botcomponent_connectionreference>
+  <botcomponent_connectionreference botcomponentid.schemaname="mme_RepairTest_aa5f.action.05.27RepairTestManagedDevicesRetire" connectionreferenceid.connectionreferencelogicalname="mme_RepairTest_aa5f.connectionreference.052e27202d20repair20.shared_052e27202d20repair20test5f251f98">
+    <iscustomizable>1</iscustomizable>
+  </botcomponent_connectionreference>
+  <botcomponent_connectionreference botcomponentid.schemaname="mme_RepairTest_aa5f.action.05.27RepairTestManagedDevicesRotateBitLockerKeys" connectionreferenceid.connectionreferencelogicalname="mme_RepairTest_aa5f.connectionreference.052e27202d20repair20.shared_052e27202d20repair20test5f251f98">
+    <iscustomizable>1</iscustomizable>
+  </botcomponent_connectionreference>
+  <botcomponent_connectionreference botcomponentid.schemaname="mme_RepairTest_aa5f.action.05.27RepairTestManagedDevicesSendCustomNotificationToCompanyPortal" connectionreferenceid.connectionreferencelogicalname="mme_RepairTest_aa5f.connectionreference.052e27202d20repair20.shared_052e27202d20repair20test5f251f98">
+    <iscustomizable>1</iscustomizable>
+  </botcomponent_connectionreference>
+  <botcomponent_connectionreference botcomponentid.schemaname="mme_RepairTest_aa5f.action.05.27RepairTestManagedDevicesSyncDevice" connectionreferenceid.connectionreferencelogicalname="mme_RepairTest_aa5f.connectionreference.052e27202d20repair20.shared_052e27202d20repair20test5f251f98">
+    <iscustomizable>1</iscustomizable>
+  </botcomponent_connectionreference>
+  <botcomponent_connectionreference botcomponentid.schemaname="mme_RepairTest_aa5f.action.05.27RepairTestManagedDevicesWindowsDefenderScan" connectionreferenceid.connectionreferencelogicalname="mme_RepairTest_aa5f.connectionreference.052e27202d20repair20.shared_052e27202d20repair20test5f251f98">
+    <iscustomizable>1</iscustomizable>
+  </botcomponent_connectionreference>
+  <botcomponent_connectionreference botcomponentid.schemaname="mme_RepairTest_aa5f.action.05.27RepairTestManagedDevicesWindowsDefenderUpdateSignatures" connectionreferenceid.connectionreferencelogicalname="mme_RepairTest_aa5f.connectionreference.052e27202d20repair20.shared_052e27202d20repair20test5f251f98">
+    <iscustomizable>1</iscustomizable>
+  </botcomponent_connectionreference>
+  <botcomponent_connectionreference botcomponentid.schemaname="mme_RepairTest_aa5f.action.05.27RepairTestManagedDevicesWipe" connectionreferenceid.connectionreferencelogicalname="mme_RepairTest_aa5f.connectionreference.052e27202d20repair20.shared_052e27202d20repair20test5f251f98">
+    <iscustomizable>1</iscustomizable>
+  </botcomponent_connectionreference>
+  <botcomponent_connectionreference botcomponentid.schemaname="mme_RepairTest_aa5f.action.MicrosoftLearnDocsMCP" connectionreferenceid.connectionreferencelogicalname="mme_RepairTest_aa5f.connectionreference.microsoftlearndocsmc.shared_microsoftlearndocsmcpserver.3739">
+    <iscustomizable>1</iscustomizable>
+  </botcomponent_connectionreference>
+</botcomponent_connectionreferenceset>

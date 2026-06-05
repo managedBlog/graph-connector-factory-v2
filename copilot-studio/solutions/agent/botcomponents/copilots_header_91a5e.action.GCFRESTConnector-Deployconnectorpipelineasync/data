@@ -18,6 +18,11 @@ inputs:
     propertyName: swaggerUrl
     name: Swagger URL
     description: URL to the generated Swagger definition
+  - kind: AutomaticTaskInput
+    propertyName: runId
+    name: Run ID
+    description: Optional run ID used for strict isolation
+    isRequired: false
 
 outputs:
   - propertyName: jobId
@@ -54,5 +59,9 @@ action:
         description: URL to the generated Swagger definition
         isRequired: true
         type: String
-
+      runId:
+        displayName: Run ID
+        description: Optional run ID used for strict isolation
+        isRequired: false
+        type: String
 outputMode: All

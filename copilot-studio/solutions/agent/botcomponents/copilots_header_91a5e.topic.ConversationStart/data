@@ -7,9 +7,9 @@ beginDialog:
       id: sendMessage_M0LuhV
       activity:
         text:
-          - Welcome to the Graph Connector Factory. Tell me what you need, or use the buttons below to get started.
+          - Welcome to Graph Connector Factory. Tell me what connector scenario you want to build, or say "start agent factory" to open the guided flow.
         speak:
-          - Welcome to the Graph Connector Factory. I can help you discover Graph API endpoints, build custom connectors, deploy them, and configure authentication. Tell me what you need to get started.
+          - Welcome to Graph Connector Factory. Ask to discover Graph APIs, design a connector, deploy a connector, or start agent factory.
         attachments:
           - kind: AdaptiveCardTemplate
             cardContent: |-
@@ -39,23 +39,6 @@ beginDialog:
                       { "title": "Deploy", "value": "Deploy connectors to Power Platform" },
                       { "title": "Configure", "value": "Set up authentication and app registrations" }
                     ]
-                  }
-                ],
-                "actions": [
-                  {
-                    "type": "Action.Submit",
-                    "title": "Build a Connector",
-                    "data": { "action": "quickStart", "choice": "build" }
-                  },
-                  {
-                    "type": "Action.Submit",
-                    "title": "Explore Graph APIs",
-                    "data": { "action": "quickStart", "choice": "explore" }
-                  },
-                  {
-                    "type": "Action.Submit",
-                    "title": "Deploy Existing Connector",
-                    "data": { "action": "quickStart", "choice": "deploy" }
                   }
                 ]
               }

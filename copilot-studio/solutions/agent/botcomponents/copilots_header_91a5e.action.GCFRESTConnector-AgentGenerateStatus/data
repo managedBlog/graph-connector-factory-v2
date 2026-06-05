@@ -13,9 +13,17 @@ outputs:
 
   - propertyName: jobId
 
+  - propertyName: retryAfter
+
   - propertyName: result
 
+  - propertyName: stageCode
+
+  - propertyName: stageMessage
+
   - propertyName: status
+
+  - propertyName: runId
 
 action:
   kind: InvokeConnectorTaskAction

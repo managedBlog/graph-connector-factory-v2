@@ -72,6 +72,31 @@ beginDialog:
       variable: Topic.recKsUrl3
       value: =""
 
+    - kind: SetVariable
+      id: setVar_initRunId
+      variable: Topic.runId
+      value: =""
+
+    - kind: SetVariable
+      id: setVar_initPreflightRetryCount
+      variable: Topic.preflightRetryCount
+      value: =0
+
+    - kind: SetVariable
+      id: setVar_initSolutionPreflightWarning
+      variable: Topic.solutionPreflightWarning
+      value: =""
+
+    - kind: SetVariable
+      id: setVar_initSolutionCorrectionChoice
+      variable: Topic.solutionCorrectionChoice
+      value: =""
+
+    - kind: SetVariable
+      id: setVar_initCorrectedSolutionName
+      variable: Topic.correctedSolutionName
+      value: =""
+
     # ── Step 2: Get session context ──
 
     - kind: BeginDialog
@@ -82,6 +107,7 @@ beginDialog:
           environmentId: Topic.environmentId
           hasDesignContext: Topic.hasDesignContext
           baseName: Topic.baseName
+          runId: Topic.runId
 
     # ── Step 1b: Get agent factory context (research-phase recommendations) ──
 
@@ -103,6 +129,10 @@ beginDialog:
           recKsName1: Topic.recKsName1
           recKsName2: Topic.recKsName2
           recKsName3: Topic.recKsName3
+          solutionChoicesJson: Topic.solutionChoicesJson
+          defaultSolutionName: Topic.defaultSolutionName
+          solutionListError: Topic.solutionListError
+          runId: Topic.runId
 
     # ── Step 2: Guard — require deployed connectors ──
 
@@ -133,6 +163,21 @@ beginDialog:
       id: setVar_afAgentPurpose
       variable: Topic.afAgentPurpose
       value: =Coalesce(Topic.recAgentPurpose, "")
+
+    - kind: SetVariable
+      id: setVar_afSolutionChoice
+      variable: Topic.afSolutionChoice
+      value: =If(!IsBlank(Topic.newSolutionName), "__new__", Coalesce(Topic.solutionChoice, Topic.defaultSolutionName, "__new__"))
+
+    - kind: SetVariable
+      id: setVar_afSolutionChoicesJson
+      variable: Topic.afSolutionChoicesJson
+      value: =If(Or(IsBlank(Topic.solutionChoicesJson), Trim(Topic.solutionChoicesJson) = "[]"), "[{""title"":""Create new solution"",""value"":""__new__""}]", Topic.solutionChoicesJson)
+
+    - kind: SetVariable
+      id: setVar_afNewSolutionName
+      variable: Topic.afNewSolutionName
+      value: =Coalesce(Topic.newSolutionName, "")
 
     - kind: SetVariable
       id: setVar_afConnectorCount
@@ -225,7 +270,32 @@ beginDialog:
               isMultiline: true,
               value: Topic.afAgentPurpose
             },
-
+            {
+              type: "TextBlock",
+              text: "Target Solution",
+              weight: "Bolder"
+            },
+            {
+              type: "Input.ChoiceSet",
+              id: "solutionChoice",
+              style: "compact",
+              value: Topic.afSolutionChoice,
+              choices: ForAll(
+                Table(ParseJSON(Topic.afSolutionChoicesJson)),
+                {
+                  title: Text(Value.title),
+                  value: Text(Value.value)
+                }
+              )
+            },
+            {
+              type: "TextBlock",
+              text: "If you select Create new solution, you will enter the solution unique name in the next step.",
+              wrap: true,
+              size: "Small",
+              isSubtle: true,
+              spacing: "Small"
+            },
             {
               type: "ColumnSet",
               spacing: "Large",
@@ -535,7 +605,7 @@ beginDialog:
           actions: [
             {
               type: "Action.Submit",
-              title: "🚀 Create Agent"
+              title: "Submit"
             }
           ]
         }
@@ -544,6 +614,7 @@ beginDialog:
           actionSubmitId: Topic.cardActionId
           agentName: Topic.agentName
           agentPurpose: Topic.agentPurpose
+          solutionChoice: Topic.solutionChoice
           sharepointName1: Topic.sharepointName1
           sharepointName2: Topic.sharepointName2
           sharepointName3: Topic.sharepointName3
@@ -568,6 +639,7 @@ beginDialog:
           actionSubmitId: String
           agentName: String
           agentPurpose: String
+          solutionChoice: String
           sharepointName1: String
           sharepointName2: String
           sharepointName3: String
@@ -612,6 +684,285 @@ beginDialog:
               activity: "⚠️ Agent purpose is required. Please try again."
             - kind: EndDialog
               id: endDialog_missingPurpose
+
+    - kind: SetVariable
+      id: setVar_resolvedSolutionFromSelection
+      variable: Topic.afResolvedSolutionName
+      value: =Trim(Topic.solutionChoice)
+
+    - kind: ConditionGroup
+      id: condGroup_collectNewSolutionName
+      conditions:
+        - id: cond_selectedCreateNewSolution
+          condition: =Topic.solutionChoice = "__new__"
+          actions:
+            - kind: SetVariable
+              id: setVar_newSolutionEntryHint
+              variable: Topic.solutionPreflightWarning
+              value: =If(IsBlank(Topic.solutionPreflightWarning), "Enter a Dataverse solution unique name. We'll create the solution in the next step.", Topic.solutionPreflightWarning)
+
+            - kind: AdaptiveCardPrompt
+              id: adaptiveCard_solutionNameEntry
+              card: |-
+                ={
+                  type: "AdaptiveCard",
+                  '$schema': "https://adaptivecards.io/schemas/adaptive-card.json",
+                  version: "1.5",
+                  body: [
+                    {
+                      type: "TextBlock",
+                      text: "Create New Solution",
+                      weight: "Bolder",
+                      size: "Medium",
+                      wrap: true
+                    },
+                    {
+                      type: "TextBlock",
+                      text: If(IsBlank(Topic.solutionPreflightWarning), "Enter a Dataverse solution unique name.", Topic.solutionPreflightWarning),
+                      wrap: true,
+                      color: "Attention"
+                    },
+                    {
+                      type: "TextBlock",
+                      text: "Use a Dataverse solution unique name that follows these rules:",
+                      wrap: true,
+                      size: "Small",
+                      isSubtle: true
+                    },
+                    {
+                      type: "TextBlock",
+                      text: "• Start with a letter",
+                      wrap: true,
+                      size: "Small",
+                      isSubtle: true
+                    },
+                    {
+                      type: "TextBlock",
+                      text: "• Use only letters, numbers, and underscores",
+                      wrap: true,
+                      size: "Small",
+                      isSubtle: true
+                    },
+                    {
+                      type: "TextBlock",
+                      text: "• Keep it concise and descriptive",
+                      wrap: true,
+                      size: "Small",
+                      isSubtle: true
+                    },
+                    {
+                      type: "Input.Text",
+                      id: "newSolutionName",
+                      label: "Solution unique name",
+                      placeholder: "ContosoAgentApps",
+                      value: Topic.afNewSolutionName,
+                      regex: "^[A-Za-z][A-Za-z0-9_]*$",
+                      errorMessage: "Start with a letter and use only letters, numbers, or underscores."
+                    }
+                  ],
+                  actions: [
+                    {
+                      type: "Action.Submit",
+                      title: "Continue"
+                    }
+                  ]
+                }
+              output:
+                binding:
+                  newSolutionName: Topic.newSolutionName
+
+              outputType:
+                properties:
+                  newSolutionName: String
+
+            - kind: SetVariable
+              id: setVar_newSolutionFromEntry
+              variable: Topic.newSolutionName
+              value: =Trim(Topic.newSolutionName)
+
+            - kind: SetVariable
+              id: setVar_afNewSolutionNameFromEntry
+              variable: Topic.afNewSolutionName
+              value: =Topic.newSolutionName
+
+            - kind: SetVariable
+              id: setVar_resolvedSolutionFromEntry
+              variable: Topic.afResolvedSolutionName
+              value: =Topic.newSolutionName
+
+    - kind: SetVariable
+      id: setVar_solutionChoiceEcho
+      variable: Topic.afSolutionChoice
+      value: =Topic.solutionChoice
+
+    - kind: SetVariable
+      id: setVar_clearSolutionWarningBeforePreflight
+      variable: Topic.solutionPreflightWarning
+      value: =If(Topic.solutionChoice = "__new__", Topic.solutionPreflightWarning, "")
+
+    - kind: ConditionGroup
+      id: condGroup_validateNewSolutionName
+      conditions:
+        - id: cond_missingNewSolutionName
+          condition: =Topic.solutionChoice = "__new__" And Trim(Topic.newSolutionName) = ""
+          actions:
+            - kind: SetVariable
+              id: setVar_warnMissingNewSolutionName
+              variable: Topic.solutionPreflightWarning
+              value: ="⚠️ Please enter a solution unique name."
+
+            - kind: SetVariable
+              id: setVar_incPreflightRetriesMissing
+              variable: Topic.preflightRetryCount
+              value: =Topic.preflightRetryCount + 1
+
+            - kind: ConditionGroup
+              id: condGroup_preflightRetryCapMissing
+              conditions:
+                - id: cond_preflightRetriesExceededMissing
+                  condition: =Topic.preflightRetryCount >= 3
+                  actions:
+                    - kind: SendActivity
+                      id: sendActivity_preflightRetryCapMissing
+                      activity: "⚠️ I couldn't validate the solution name after multiple attempts. Let's start over."
+                    - kind: BeginDialog
+                      id: beginDialog_resetAfterPreflightRetryCapMissing
+                      dialog: copilots_header_91a5e.topic.ResetConversation
+                    - kind: EndDialog
+                      id: endDialog_preflightRetryCapMissing
+              elseActions:
+                - kind: GotoAction
+                  id: goto_solutionNameEntryFromMissing
+                  actionId: adaptiveCard_solutionNameEntry
+
+    - kind: BeginDialog
+      id: beginDialog_preflightSolution
+      input:
+        binding:
+          environmentId: =Topic.environmentId
+          solutionName: =Topic.afResolvedSolutionName
+      dialog: copilots_header_91a5e.action.GCFRESTConnector-PreflightSolutionName
+      output:
+        binding:
+          normalizedName: Topic.solutionNormalizedName
+          isValid: Topic.solutionIsValid
+          exists: Topic.solutionExists
+          message: Topic.solutionPreflightMessage
+
+    - kind: ConditionGroup
+      id: condGroup_solutionPreflightValidation
+      conditions:
+        - id: cond_solutionNameInvalid
+          condition: =Text(Topic.solutionIsValid) <> "true"
+          actions:
+            - kind: SetVariable
+              id: setVar_warnInvalidSolutionName
+              variable: Topic.solutionPreflightWarning
+              value: =Concatenate("⚠️ ", Topic.solutionPreflightMessage)
+
+            - kind: SetVariable
+              id: setVar_incPreflightRetriesInvalid
+              variable: Topic.preflightRetryCount
+              value: =Topic.preflightRetryCount + 1
+
+            - kind: ConditionGroup
+              id: condGroup_preflightRetryCapInvalid
+              conditions:
+                - id: cond_preflightRetriesExceededInvalid
+                  condition: =Topic.preflightRetryCount >= 3
+                  actions:
+                    - kind: SendActivity
+                      id: sendActivity_preflightRetryCapInvalid
+                      activity: "⚠️ I couldn't validate the solution name after multiple attempts. Let's start over."
+                    - kind: BeginDialog
+                      id: beginDialog_resetAfterPreflightRetryCapInvalid
+                      dialog: copilots_header_91a5e.topic.ResetConversation
+                    - kind: EndDialog
+                      id: endDialog_preflightRetryCapInvalid
+              elseActions:
+                - kind: SetVariable
+                  id: setVar_warnInvalidNameForEntry
+                  variable: Topic.solutionPreflightWarning
+                  value: =Concatenate("Name failed validation: ", Topic.solutionPreflightMessage, " Please enter a unique name that meets the requirements.")
+                - kind: GotoAction
+                  id: goto_solutionNameEntryFromInvalid
+                  actionId: adaptiveCard_solutionNameEntry
+      elseActions:
+        - kind: SetVariable
+          id: setVar_resetPreflightRetryCountAfterSuccess
+          variable: Topic.preflightRetryCount
+          value: =0
+        - kind: SetVariable
+          id: setVar_clearSolutionPreflightWarningAfterSuccess
+          variable: Topic.solutionPreflightWarning
+          value: =""
+
+    - kind: ConditionGroup
+      id: condGroup_ensureNewSolution
+      conditions:
+        - id: cond_selectedNewSolution
+          condition: =Topic.solutionChoice = "__new__"
+          actions:
+            - kind: SendActivity
+              id: sendActivity_ensuringSolution
+              activity: "⏳ Creating or validating solution **{Topic.solutionNormalizedName}**..."
+            - kind: BeginDialog
+              id: beginDialog_ensureSolution
+              input:
+                binding:
+                  environmentId: =Topic.environmentId
+                  solutionName: =Topic.solutionNormalizedName
+              dialog: copilots_header_91a5e.action.GCFRESTConnector-EnsureSolution
+              output:
+                binding:
+                  solutionName: Topic.afResolvedSolutionName
+                  created: Topic.solutionCreated
+        - id: cond_existingSolutionMissing
+          condition: =Topic.solutionChoice <> "__new__" And Text(Topic.solutionExists) <> "true"
+          actions:
+            - kind: SetVariable
+              id: setVar_warnExistingSolutionMissing
+              variable: Topic.solutionPreflightWarning
+              value: =Concatenate("⚠️ The selected solution was not found: ", Topic.solutionNormalizedName, ". Please provide a new solution name.")
+            - kind: SetVariable
+              id: setVar_solutionChoiceToNewWhenMissing
+              variable: Topic.solutionChoice
+              value: ="__new__"
+            - kind: SetVariable
+              id: setVar_afSolutionChoiceToNewWhenMissing
+              variable: Topic.afSolutionChoice
+              value: ="__new__"
+            - kind: SetVariable
+              id: setVar_incPreflightRetriesExistingMissing
+              variable: Topic.preflightRetryCount
+              value: =Topic.preflightRetryCount + 1
+            - kind: ConditionGroup
+              id: condGroup_preflightRetryCapExistingMissing
+              conditions:
+                - id: cond_preflightRetriesExceededExistingMissing
+                  condition: =Topic.preflightRetryCount >= 3
+                  actions:
+                    - kind: SendActivity
+                      id: sendActivity_preflightRetryCapExistingMissing
+                      activity: "⚠️ I couldn't validate the solution name after multiple attempts. Let's start over."
+                    - kind: BeginDialog
+                      id: beginDialog_resetAfterPreflightRetryCapExistingMissing
+                      dialog: copilots_header_91a5e.topic.ResetConversation
+                    - kind: EndDialog
+                      id: endDialog_preflightRetryCapExistingMissing
+              elseActions:
+                - kind: SetVariable
+                  id: setVar_warnExistingSolutionMissingForEntry
+                  variable: Topic.solutionPreflightWarning
+                  value: =Concatenate("Selected solution not found: ", Topic.solutionNormalizedName, ". Enter a new solution name to create it.")
+                - kind: GotoAction
+                  id: goto_solutionNameEntryFromExistingMissing
+                  actionId: adaptiveCard_solutionNameEntry
+      elseActions:
+        - kind: SetVariable
+          id: setVar_useNormalizedSolutionName
+          variable: Topic.afResolvedSolutionName
+          value: =Topic.solutionNormalizedName
 
     # ── Step 5: Build MCP server IDs string ──
 
@@ -666,6 +1017,97 @@ beginDialog:
 
     # ── Step 7: Confirmation card ──
 
+    - kind: AdaptiveCardPrompt
+      id: adaptiveCard_solutionConfirmation
+      card: |-
+        ={
+          type: "AdaptiveCard",
+          '$schema': "https://adaptivecards.io/schemas/adaptive-card.json",
+          version: "1.5",
+          body: [
+            {
+              type: "TextBlock",
+              text: "Confirm Agent Setup",
+              weight: "Bolder",
+              size: "Large",
+              wrap: true
+            },
+            {
+              type: "TextBlock",
+              text: "Review the full configuration before creating the agent.",
+              wrap: true,
+              isSubtle: true
+            },
+            {
+              type: "FactSet",
+              spacing: "Medium",
+              facts: [
+                { title: "Agent Name", value: Topic.agentName },
+                { title: "Agent Purpose", value: Topic.agentPurpose },
+                { title: "Connectors", value: Concatenate(Topic.afConnectorCount, " deployed connector(s)") },
+                { title: "Knowledge Sources", value: If(Or(IsBlank(Topic.knowledgeSourcesJson), Topic.knowledgeSourcesJson = "[]"), "None", Concatenate(Text(CountRows(Filter(Table({u: Topic.sharepointUrl1}, {u: Topic.sharepointUrl2}, {u: Topic.sharepointUrl3}), !IsBlank(u)))), " SharePoint site(s)")) },
+                { title: "MCP Servers", value: If(IsBlank(Topic.mcpServerIds), "None", Topic.mcpServerIds) }
+              ]
+            },
+            {
+              type: "FactSet",
+              spacing: "Medium",
+              facts: [
+                { title: "Target Solution", value: Topic.afResolvedSolutionName },
+                { title: "Solution Action", value: If(Text(Topic.solutionCreated) = "true", "Created on submit", "Using existing solution") }
+              ]
+            }
+          ],
+          actions: [
+            {
+              type: "Action.Submit",
+              title: "Create",
+              data: { cfmAction: "create" }
+            },
+            {
+              type: "Action.Submit",
+              title: "Start over",
+              data: { cfmAction: "startOver" }
+            }
+          ]
+        }
+      output:
+        binding:
+          cfmAction: Topic.cfmAction
+
+      outputType:
+        properties:
+          cfmAction: String
+
+    - kind: ConditionGroup
+      id: condGroup_solutionConfirmationActions
+      conditions:
+        - id: cond_startOverFromConfirmation
+          condition: =Topic.cfmAction = "startOver"
+          actions:
+            - kind: BeginDialog
+              id: beginDialog_resetFromConfirmation
+              dialog: copilots_header_91a5e.topic.ResetConversation
+            - kind: EndDialog
+              id: endDialog_resetFromConfirmation
+
+    - kind: SetVariable
+      id: setVar_finalSolutionName
+      variable: Topic.finalSolutionName
+      value: =Topic.afResolvedSolutionName
+
+    - kind: ConditionGroup
+      id: condGroup_validateFinalSolutionName
+      conditions:
+        - id: cond_missingFinalSolutionName
+          condition: =IsBlank(Topic.finalSolutionName)
+          actions:
+            - kind: SendActivity
+              id: sendActivity_missingFinalSolutionName
+              activity: "⚠️ A target solution is required. Please choose an existing solution or enter a new solution name."
+            - kind: EndDialog
+              id: endDialog_missingFinalSolutionName
+
     - kind: SendActivity
       id: sendActivity_generating
       activity:
@@ -688,6 +1130,7 @@ beginDialog:
                     facts: [
                       { title: "Name", value: Topic.agentName },
                       { title: "Purpose", value: Topic.agentPurpose },
+                      { title: "Solution", value: Topic.finalSolutionName },
                       { title: "Connectors", value: Concatenate(Topic.afConnectorCount, " deployed connector(s)") },
                       { title: "Knowledge Sources", value: If(Or(IsBlank(Topic.knowledgeSourcesJson), Topic.knowledgeSourcesJson = "[]"), "None", Concatenate(Text(CountRows(Filter(Table({u: Topic.sharepointUrl1}, {u: Topic.sharepointUrl2}, {u: Topic.sharepointUrl3}), !IsBlank(u)))), " SharePoint site(s)")) },
                       { title: "MCP Servers", value: If(IsBlank(Topic.mcpServerIds), "None", Topic.mcpServerIds) }
@@ -711,10 +1154,11 @@ beginDialog:
           agentName: =Topic.agentName
           agentPurpose: =Topic.agentPurpose
           environmentId: =Topic.environmentId
-          solutionName: ="GCFApps"
+          solutionName: =Topic.finalSolutionName
           mcpServerIds: =If(IsBlank(Topic.mcpServerIds), "none", Topic.mcpServerIds)
           knowledgeSourcesJson: =If(Or(IsBlank(Topic.knowledgeSourcesJson), Topic.knowledgeSourcesJson = "[]"), "[]", Topic.knowledgeSourcesJson)
           instructionsOverride: ="auto"
+          runId: =Topic.runId
       dialog: copilots_header_91a5e.action.GCFRESTConnector-GenerateAgent
       output:
         binding:
@@ -738,6 +1182,7 @@ beginDialog:
           status: Topic.pollStatus
           result: Topic.pollResult
           error: Topic.pollError
+          runId: Topic.runId
 
     # ── Step 10: Show result ──
 
@@ -759,6 +1204,17 @@ beginDialog:
                 2. Configure any connections that need authentication
                 3. Publish the agent
                 4. Test with sample prompts
+        - id: cond_partial
+          condition: =Topic.pollStatus = "partial"
+          actions:
+            - kind: SendActivity
+              id: sendActivity_partial
+              activity: |
+                ⚠️ **Agent generation completed with partial verification.**
+
+                {Topic.pollResult}
+
+                Validate the agent and solution contents in Copilot Studio before proceeding.
 
         - id: cond_failed
           condition: =Topic.pollStatus = "failed"
@@ -775,4 +1231,4 @@ beginDialog:
       elseActions:
         - kind: SendActivity
           id: sendActivity_stillRunning
-          activity: ⏳ Agent is still generating. Please check back shortly or ask "Check agent generation status".
+          activity: "⏳ Agent is still generating. Please check back shortly."

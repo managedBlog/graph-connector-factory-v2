@@ -35,6 +35,11 @@ beginDialog:
       variable: Topic.userObjectId
       value: =System.User.Id
 
+    - kind: SetVariable
+      id: setVar_runId
+      variable: Topic.runId
+      value: =""
+
     - kind: BeginDialog
       id: beginDialog_sessionContext
       dialog: copilots_header_91a5e.action.GCFRESTConnector-Getsessioncontext
@@ -58,6 +63,7 @@ beginDialog:
           maxOperations: Topic.maxOperations
           notes: Topic.notes
           targetVersion: Topic.targetVersion
+          runId: Topic.runId
 
     - kind: ConditionGroup
       id: check_hasContext
@@ -896,6 +902,7 @@ beginDialog:
                   environmentId: =Topic.cfmEnvId
                   authType: =If(IsBlank(Topic.cfmAuthType), Blank(), Topic.cfmAuthType)
                   swaggerUrl: =Topic.gen1SwaggerUrl
+                  runId: =Topic.runId
               dialog: copilots_header_91a5e.action.GCFRESTConnector-Deployconnectorpipelineasync
               output:
                 binding:
@@ -987,6 +994,7 @@ beginDialog:
                           environmentId: =Topic.cfmEnvId
                           authType: =If(IsBlank(Topic.cfmAuthType), Blank(), Topic.cfmAuthType)
                           swaggerUrl: =Topic.gen2SwaggerUrl
+                          runId: =Topic.runId
                       dialog: copilots_header_91a5e.action.GCFRESTConnector-Deployconnectorpipelineasync
                       output:
                         binding:
@@ -1077,6 +1085,7 @@ beginDialog:
                           environmentId: =Topic.cfmEnvId
                           authType: =If(IsBlank(Topic.cfmAuthType), Blank(), Topic.cfmAuthType)
                           swaggerUrl: =Topic.gen3SwaggerUrl
+                          runId: =Topic.runId
                       dialog: copilots_header_91a5e.action.GCFRESTConnector-Deployconnectorpipelineasync
                       output:
                         binding:

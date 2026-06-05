@@ -1,0 +1,352 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<ImportExportXml version="9.2.26053.126" SolutionPackageVersion="9.2" languagecode="1033" generatedBy="CrmLive" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" OrganizationVersion="9.2.26053.126" OrganizationSchemaType="Standard" CRMServerServiceabilityVersion="9.2.26054.00132">
+  <SolutionManifest>
+    <UniqueName>GCFApps</UniqueName>
+    <LocalizedNames>
+      <LocalizedName description="GCF - Apps" languagecode="1033" />
+    </LocalizedNames>
+    <Descriptions />
+    <Version>1.0.0.1</Version>
+    <Managed>0</Managed>
+    <Publisher>
+      <UniqueName>ManagedModernEndpoint_demo</UniqueName>
+      <LocalizedNames>
+        <LocalizedName description="MME Demo Tenant" languagecode="1033" />
+      </LocalizedNames>
+      <Descriptions />
+      <EMailAddress xsi:nil="true"></EMailAddress>
+      <SupportingWebsiteUrl xsi:nil="true"></SupportingWebsiteUrl>
+      <CustomizationPrefix>mme</CustomizationPrefix>
+      <CustomizationOptionValuePrefix>86453</CustomizationOptionValuePrefix>
+      <Addresses>
+        <Address>
+          <AddressNumber>1</AddressNumber>
+          <AddressTypeCode>1</AddressTypeCode>
+          <City xsi:nil="true"></City>
+          <County xsi:nil="true"></County>
+          <Country xsi:nil="true"></Country>
+          <Fax xsi:nil="true"></Fax>
+          <FreightTermsCode xsi:nil="true"></FreightTermsCode>
+          <ImportSequenceNumber xsi:nil="true"></ImportSequenceNumber>
+          <Latitude xsi:nil="true"></Latitude>
+          <Line1 xsi:nil="true"></Line1>
+          <Line2 xsi:nil="true"></Line2>
+          <Line3 xsi:nil="true"></Line3>
+          <Longitude xsi:nil="true"></Longitude>
+          <Name xsi:nil="true"></Name>
+          <PostalCode xsi:nil="true"></PostalCode>
+          <PostOfficeBox xsi:nil="true"></PostOfficeBox>
+          <PrimaryContactName xsi:nil="true"></PrimaryContactName>
+          <ShippingMethodCode>1</ShippingMethodCode>
+          <StateOrProvince xsi:nil="true"></StateOrProvince>
+          <Telephone1 xsi:nil="true"></Telephone1>
+          <Telephone2 xsi:nil="true"></Telephone2>
+          <Telephone3 xsi:nil="true"></Telephone3>
+          <TimeZoneRuleVersionNumber xsi:nil="true"></TimeZoneRuleVersionNumber>
+          <UPSZone xsi:nil="true"></UPSZone>
+          <UTCOffset xsi:nil="true"></UTCOffset>
+          <UTCConversionTimeZoneCode xsi:nil="true"></UTCConversionTimeZoneCode>
+        </Address>
+        <Address>
+          <AddressNumber>2</AddressNumber>
+          <AddressTypeCode>1</AddressTypeCode>
+          <City xsi:nil="true"></City>
+          <County xsi:nil="true"></County>
+          <Country xsi:nil="true"></Country>
+          <Fax xsi:nil="true"></Fax>
+          <FreightTermsCode xsi:nil="true"></FreightTermsCode>
+          <ImportSequenceNumber xsi:nil="true"></ImportSequenceNumber>
+          <Latitude xsi:nil="true"></Latitude>
+          <Line1 xsi:nil="true"></Line1>
+          <Line2 xsi:nil="true"></Line2>
+          <Line3 xsi:nil="true"></Line3>
+          <Longitude xsi:nil="true"></Longitude>
+          <Name xsi:nil="true"></Name>
+          <PostalCode xsi:nil="true"></PostalCode>
+          <PostOfficeBox xsi:nil="true"></PostOfficeBox>
+          <PrimaryContactName xsi:nil="true"></PrimaryContactName>
+          <ShippingMethodCode>1</ShippingMethodCode>
+          <StateOrProvince xsi:nil="true"></StateOrProvince>
+          <Telephone1 xsi:nil="true"></Telephone1>
+          <Telephone2 xsi:nil="true"></Telephone2>
+          <Telephone3 xsi:nil="true"></Telephone3>
+          <TimeZoneRuleVersionNumber xsi:nil="true"></TimeZoneRuleVersionNumber>
+          <UPSZone xsi:nil="true"></UPSZone>
+          <UTCOffset xsi:nil="true"></UTCOffset>
+          <UTCConversionTimeZoneCode xsi:nil="true"></UTCConversionTimeZoneCode>
+        </Address>
+      </Addresses>
+    </Publisher>
+    <RootComponents>
+      <RootComponent type="372" id="{123f2cae-04c0-4c5b-a0f5-9e04677a140e}" schemaName="cr863_5Fmcp-2Dserver-2Dfor-2Denterprise" behavior="0" />
+      <RootComponent type="372" id="{f1d79e89-1a3f-f111-bec6-70a8a59a4056}" schemaName="new_gcf-20mcp-20agent" behavior="0" />
+      <RootComponent type="372" id="{dd539b71-323f-f111-bec6-70a8a59a4056}" schemaName="new_gcf-20rest-20connector" behavior="0" />
+    </RootComponents>
+    <MissingDependencies>
+      <MissingDependency>
+        <Required type="botcomponent" displayName="mme_EntraUserAuthMethodsAgent_4c45.action.05.28SolutionTestUserRegistrationDetailsGet" solution="Active" id.schemaname="mme_EntraUserAuthMethodsAgent_4c45.action.05.28SolutionTestUserRegistrationDetailsGet" />
+        <Dependent type="botcomponent_connectionreference" displayName="botcomponentid.schemaname=mme_EntraUserAuthMethodsAgent_4c45.action.05.28SolutionTestUserRegistrationDetailsGet,connectionreferenceid.connectionreferencelogicalname=mme_EntraUserAuthMethodsAgent_4c45.connectionreference.052e28202d20solution.shared_052e28202d20solut" id.botcomponentid.schemaname="mme_EntraUserAuthMethodsAgent_4c45.action.05.28SolutionTestUserRegistrationDetailsGet" id.connectionreferenceid.connectionreferencelogicalname="mme_EntraUserAuthMethodsAgent_4c45.connectionreference.052e28202d20solution.shared_052e28202d20solut" />
+      </MissingDependency>
+      <MissingDependency>
+        <Required type="botcomponent" displayName="mme_EntraUserAuthMethodsAgent_4c45.action.05.28SolutionTestUserRegistrationDetailsList" solution="Active" id.schemaname="mme_EntraUserAuthMethodsAgent_4c45.action.05.28SolutionTestUserRegistrationDetailsList" />
+        <Dependent type="botcomponent_connectionreference" displayName="botcomponentid.schemaname=mme_EntraUserAuthMethodsAgent_4c45.action.05.28SolutionTestUserRegistrationDetailsList,connectionreferenceid.connectionreferencelogicalname=mme_EntraUserAuthMethodsAgent_4c45.connectionreference.052e28202d20solution.shared_052e28202d20solut" id.botcomponentid.schemaname="mme_EntraUserAuthMethodsAgent_4c45.action.05.28SolutionTestUserRegistrationDetailsList" id.connectionreferenceid.connectionreferencelogicalname="mme_EntraUserAuthMethodsAgent_4c45.connectionreference.052e28202d20solution.shared_052e28202d20solut" />
+      </MissingDependency>
+      <MissingDependency>
+        <Required type="botcomponent" displayName="mme_EntraUserAuthMethodsAgent_4c45.action.05.28SolutionTestUsersAssignLicense" solution="Active" id.schemaname="mme_EntraUserAuthMethodsAgent_4c45.action.05.28SolutionTestUsersAssignLicense" />
+        <Dependent type="botcomponent_connectionreference" displayName="botcomponentid.schemaname=mme_EntraUserAuthMethodsAgent_4c45.action.05.28SolutionTestUsersAssignLicense,connectionreferenceid.connectionreferencelogicalname=mme_EntraUserAuthMethodsAgent_4c45.connectionreference.052e28202d20solution.shared_052e28202d20solut" id.botcomponentid.schemaname="mme_EntraUserAuthMethodsAgent_4c45.action.05.28SolutionTestUsersAssignLicense" id.connectionreferenceid.connectionreferencelogicalname="mme_EntraUserAuthMethodsAgent_4c45.connectionreference.052e28202d20solution.shared_052e28202d20solut" />
+      </MissingDependency>
+      <MissingDependency>
+        <Required type="botcomponent" displayName="mme_EntraUserAuthMethodsAgent_4c45.action.05.28SolutionTestUsersChangePassword" solution="Active" id.schemaname="mme_EntraUserAuthMethodsAgent_4c45.action.05.28SolutionTestUsersChangePassword" />
+        <Dependent type="botcomponent_connectionreference" displayName="botcomponentid.schemaname=mme_EntraUserAuthMethodsAgent_4c45.action.05.28SolutionTestUsersChangePassword,connectionreferenceid.connectionreferencelogicalname=mme_EntraUserAuthMethodsAgent_4c45.connectionreference.052e28202d20solution.shared_052e28202d20solut" id.botcomponentid.schemaname="mme_EntraUserAuthMethodsAgent_4c45.action.05.28SolutionTestUsersChangePassword" id.connectionreferenceid.connectionreferencelogicalname="mme_EntraUserAuthMethodsAgent_4c45.connectionreference.052e28202d20solution.shared_052e28202d20solut" />
+      </MissingDependency>
+      <MissingDependency>
+        <Required type="botcomponent" displayName="mme_EntraUserAuthMethodsAgent_4c45.action.05.28SolutionTestUsersCreate" solution="Active" id.schemaname="mme_EntraUserAuthMethodsAgent_4c45.action.05.28SolutionTestUsersCreate" />
+        <Dependent type="botcomponent_connectionreference" displayName="botcomponentid.schemaname=mme_EntraUserAuthMethodsAgent_4c45.action.05.28SolutionTestUsersCreate,connectionreferenceid.connectionreferencelogicalname=mme_EntraUserAuthMethodsAgent_4c45.connectionreference.052e28202d20solution.shared_052e28202d20solut" id.botcomponentid.schemaname="mme_EntraUserAuthMethodsAgent_4c45.action.05.28SolutionTestUsersCreate" id.connectionreferenceid.connectionreferencelogicalname="mme_EntraUserAuthMethodsAgent_4c45.connectionreference.052e28202d20solution.shared_052e28202d20solut" />
+      </MissingDependency>
+      <MissingDependency>
+        <Required type="botcomponent" displayName="mme_EntraUserAuthMethodsAgent_4c45.action.05.28SolutionTestUsersDelete" solution="Active" id.schemaname="mme_EntraUserAuthMethodsAgent_4c45.action.05.28SolutionTestUsersDelete" />
+        <Dependent type="botcomponent_connectionreference" displayName="botcomponentid.schemaname=mme_EntraUserAuthMethodsAgent_4c45.action.05.28SolutionTestUsersDelete,connectionreferenceid.connectionreferencelogicalname=mme_EntraUserAuthMethodsAgent_4c45.connectionreference.052e28202d20solution.shared_052e28202d20solut" id.botcomponentid.schemaname="mme_EntraUserAuthMethodsAgent_4c45.action.05.28SolutionTestUsersDelete" id.connectionreferenceid.connectionreferencelogicalname="mme_EntraUserAuthMethodsAgent_4c45.connectionreference.052e28202d20solution.shared_052e28202d20solut" />
+      </MissingDependency>
+      <MissingDependency>
+        <Required type="botcomponent" displayName="mme_EntraUserAuthMethodsAgent_4c45.action.05.28SolutionTestUsersExportPersonalData" solution="Active" id.schemaname="mme_EntraUserAuthMethodsAgent_4c45.action.05.28SolutionTestUsersExportPersonalData" />
+        <Dependent type="botcomponent_connectionreference" displayName="botcomponentid.schemaname=mme_EntraUserAuthMethodsAgent_4c45.action.05.28SolutionTestUsersExportPersonalData,connectionreferenceid.connectionreferencelogicalname=mme_EntraUserAuthMethodsAgent_4c45.connectionreference.052e28202d20solution.shared_052e28202d20solut" id.botcomponentid.schemaname="mme_EntraUserAuthMethodsAgent_4c45.action.05.28SolutionTestUsersExportPersonalData" id.connectionreferenceid.connectionreferencelogicalname="mme_EntraUserAuthMethodsAgent_4c45.connectionreference.052e28202d20solution.shared_052e28202d20solut" />
+      </MissingDependency>
+      <MissingDependency>
+        <Required type="botcomponent" displayName="mme_EntraUserAuthMethodsAgent_4c45.action.05.28SolutionTestUsersGet" solution="Active" id.schemaname="mme_EntraUserAuthMethodsAgent_4c45.action.05.28SolutionTestUsersGet" />
+        <Dependent type="botcomponent_connectionreference" displayName="botcomponentid.schemaname=mme_EntraUserAuthMethodsAgent_4c45.action.05.28SolutionTestUsersGet,connectionreferenceid.connectionreferencelogicalname=mme_EntraUserAuthMethodsAgent_4c45.connectionreference.052e28202d20solution.shared_052e28202d20solut" id.botcomponentid.schemaname="mme_EntraUserAuthMethodsAgent_4c45.action.05.28SolutionTestUsersGet" id.connectionreferenceid.connectionreferencelogicalname="mme_EntraUserAuthMethodsAgent_4c45.connectionreference.052e28202d20solution.shared_052e28202d20solut" />
+      </MissingDependency>
+      <MissingDependency>
+        <Required type="botcomponent" displayName="mme_EntraUserAuthMethodsAgent_4c45.action.05.28SolutionTestUsersList" solution="Active" id.schemaname="mme_EntraUserAuthMethodsAgent_4c45.action.05.28SolutionTestUsersList" />
+        <Dependent type="botcomponent_connectionreference" displayName="botcomponentid.schemaname=mme_EntraUserAuthMethodsAgent_4c45.action.05.28SolutionTestUsersList,connectionreferenceid.connectionreferencelogicalname=mme_EntraUserAuthMethodsAgent_4c45.connectionreference.052e28202d20solution.shared_052e28202d20solut" id.botcomponentid.schemaname="mme_EntraUserAuthMethodsAgent_4c45.action.05.28SolutionTestUsersList" id.connectionreferenceid.connectionreferencelogicalname="mme_EntraUserAuthMethodsAgent_4c45.connectionreference.052e28202d20solution.shared_052e28202d20solut" />
+      </MissingDependency>
+      <MissingDependency>
+        <Required type="botcomponent" displayName="mme_EntraUserAuthMethodsAgent_4c45.action.05.28SolutionTestUsersReprocessLicenseAssignment" solution="Active" id.schemaname="mme_EntraUserAuthMethodsAgent_4c45.action.05.28SolutionTestUsersReprocessLicenseAssignment" />
+        <Dependent type="botcomponent_connectionreference" displayName="botcomponentid.schemaname=mme_EntraUserAuthMethodsAgent_4c45.action.05.28SolutionTestUsersReprocessLicenseAssignment,connectionreferenceid.connectionreferencelogicalname=mme_EntraUserAuthMethodsAgent_4c45.connectionreference.052e28202d20solution.shared_052e28202d20solut" id.botcomponentid.schemaname="mme_EntraUserAuthMethodsAgent_4c45.action.05.28SolutionTestUsersReprocessLicenseAssignment" id.connectionreferenceid.connectionreferencelogicalname="mme_EntraUserAuthMethodsAgent_4c45.connectionreference.052e28202d20solution.shared_052e28202d20solut" />
+      </MissingDependency>
+      <MissingDependency>
+        <Required type="botcomponent" displayName="mme_EntraUserAuthMethodsAgent_4c45.action.05.28SolutionTestUsersRetryServiceProvisioning" solution="Active" id.schemaname="mme_EntraUserAuthMethodsAgent_4c45.action.05.28SolutionTestUsersRetryServiceProvisioning" />
+        <Dependent type="botcomponent_connectionreference" displayName="botcomponentid.schemaname=mme_EntraUserAuthMethodsAgent_4c45.action.05.28SolutionTestUsersRetryServiceProvisioning,connectionreferenceid.connectionreferencelogicalname=mme_EntraUserAuthMethodsAgent_4c45.connectionreference.052e28202d20solution.shared_052e28202d20solut" id.botcomponentid.schemaname="mme_EntraUserAuthMethodsAgent_4c45.action.05.28SolutionTestUsersRetryServiceProvisioning" id.connectionreferenceid.connectionreferencelogicalname="mme_EntraUserAuthMethodsAgent_4c45.connectionreference.052e28202d20solution.shared_052e28202d20solut" />
+      </MissingDependency>
+      <MissingDependency>
+        <Required type="botcomponent" displayName="mme_EntraUserAuthMethodsAgent_4c45.action.05.28SolutionTestUsersRevokeSignInSessions" solution="Active" id.schemaname="mme_EntraUserAuthMethodsAgent_4c45.action.05.28SolutionTestUsersRevokeSignInSessions" />
+        <Dependent type="botcomponent_connectionreference" displayName="botcomponentid.schemaname=mme_EntraUserAuthMethodsAgent_4c45.action.05.28SolutionTestUsersRevokeSignInSessions,connectionreferenceid.connectionreferencelogicalname=mme_EntraUserAuthMethodsAgent_4c45.connectionreference.052e28202d20solution.shared_052e28202d20solut" id.botcomponentid.schemaname="mme_EntraUserAuthMethodsAgent_4c45.action.05.28SolutionTestUsersRevokeSignInSessions" id.connectionreferenceid.connectionreferencelogicalname="mme_EntraUserAuthMethodsAgent_4c45.connectionreference.052e28202d20solution.shared_052e28202d20solut" />
+      </MissingDependency>
+      <MissingDependency>
+        <Required type="botcomponent" displayName="mme_EntraUserAuthMethodsAgent_4c45.action.05.28SolutionTestUsersUpdate" solution="Active" id.schemaname="mme_EntraUserAuthMethodsAgent_4c45.action.05.28SolutionTestUsersUpdate" />
+        <Dependent type="botcomponent_connectionreference" displayName="botcomponentid.schemaname=mme_EntraUserAuthMethodsAgent_4c45.action.05.28SolutionTestUsersUpdate,connectionreferenceid.connectionreferencelogicalname=mme_EntraUserAuthMethodsAgent_4c45.connectionreference.052e28202d20solution.shared_052e28202d20solut" id.botcomponentid.schemaname="mme_EntraUserAuthMethodsAgent_4c45.action.05.28SolutionTestUsersUpdate" id.connectionreferenceid.connectionreferencelogicalname="mme_EntraUserAuthMethodsAgent_4c45.connectionreference.052e28202d20solution.shared_052e28202d20solut" />
+      </MissingDependency>
+      <MissingDependency>
+        <Required type="botcomponent" displayName="mme_EntraUserAuthMethodsAgent_4c45.action.MicrosoftLearnDocsMCP" solution="Active" id.schemaname="mme_EntraUserAuthMethodsAgent_4c45.action.MicrosoftLearnDocsMCP" />
+        <Dependent type="botcomponent_connectionreference" displayName="botcomponentid.schemaname=mme_EntraUserAuthMethodsAgent_4c45.action.MicrosoftLearnDocsMCP,connectionreferenceid.connectionreferencelogicalname=mme_EntraUserAuthMethodsAgent_4c45.connectionreference.microsoftlearndocsmc.shared_microsoftlearndoc" id.botcomponentid.schemaname="mme_EntraUserAuthMethodsAgent_4c45.action.MicrosoftLearnDocsMCP" id.connectionreferenceid.connectionreferencelogicalname="mme_EntraUserAuthMethodsAgent_4c45.connectionreference.microsoftlearndocsmc.shared_microsoftlearndoc" />
+      </MissingDependency>
+      <MissingDependency>
+        <Required type="botcomponent" displayName="mme_RepairTest_aa5f.action.05.27RepairTestManagedDevicesCreateDeviceLogCollectionRequest" solution="Active" id.schemaname="mme_RepairTest_aa5f.action.05.27RepairTestManagedDevicesCreateDeviceLogCollectionRequest" />
+        <Dependent type="botcomponent_connectionreference" displayName="botcomponentid.schemaname=mme_RepairTest_aa5f.action.05.27RepairTestManagedDevicesCreateDeviceLogCollectionRequest,connectionreferenceid.connectionreferencelogicalname=mme_RepairTest_aa5f.connectionreference.052e27202d20repair20.shared_052e27202d20repair20test5f251f98" id.botcomponentid.schemaname="mme_RepairTest_aa5f.action.05.27RepairTestManagedDevicesCreateDeviceLogCollectionRequest" id.connectionreferenceid.connectionreferencelogicalname="mme_RepairTest_aa5f.connectionreference.052e27202d20repair20.shared_052e27202d20repair20test5f251f98" />
+      </MissingDependency>
+      <MissingDependency>
+        <Required type="botcomponent" displayName="mme_RepairTest_aa5f.action.05.27RepairTestManagedDevicesDisableLostMode" solution="Active" id.schemaname="mme_RepairTest_aa5f.action.05.27RepairTestManagedDevicesDisableLostMode" />
+        <Dependent type="botcomponent_connectionreference" displayName="botcomponentid.schemaname=mme_RepairTest_aa5f.action.05.27RepairTestManagedDevicesDisableLostMode,connectionreferenceid.connectionreferencelogicalname=mme_RepairTest_aa5f.connectionreference.052e27202d20repair20.shared_052e27202d20repair20test5f251f98" id.botcomponentid.schemaname="mme_RepairTest_aa5f.action.05.27RepairTestManagedDevicesDisableLostMode" id.connectionreferenceid.connectionreferencelogicalname="mme_RepairTest_aa5f.connectionreference.052e27202d20repair20.shared_052e27202d20repair20test5f251f98" />
+      </MissingDependency>
+      <MissingDependency>
+        <Required type="botcomponent" displayName="mme_RepairTest_aa5f.action.05.27RepairTestManagedDevicesEnableLostMode" solution="Active" id.schemaname="mme_RepairTest_aa5f.action.05.27RepairTestManagedDevicesEnableLostMode" />
+        <Dependent type="botcomponent_connectionreference" displayName="botcomponentid.schemaname=mme_RepairTest_aa5f.action.05.27RepairTestManagedDevicesEnableLostMode,connectionreferenceid.connectionreferencelogicalname=mme_RepairTest_aa5f.connectionreference.052e27202d20repair20.shared_052e27202d20repair20test5f251f98" id.botcomponentid.schemaname="mme_RepairTest_aa5f.action.05.27RepairTestManagedDevicesEnableLostMode" id.connectionreferenceid.connectionreferencelogicalname="mme_RepairTest_aa5f.connectionreference.052e27202d20repair20.shared_052e27202d20repair20test5f251f98" />
+      </MissingDependency>
+      <MissingDependency>
+        <Required type="botcomponent" displayName="mme_RepairTest_aa5f.action.05.27RepairTestManagedDevicesGet" solution="Active" id.schemaname="mme_RepairTest_aa5f.action.05.27RepairTestManagedDevicesGet" />
+        <Dependent type="botcomponent_connectionreference" displayName="botcomponentid.schemaname=mme_RepairTest_aa5f.action.05.27RepairTestManagedDevicesGet,connectionreferenceid.connectionreferencelogicalname=mme_RepairTest_aa5f.connectionreference.052e27202d20repair20.shared_052e27202d20repair20test5f251f98" id.botcomponentid.schemaname="mme_RepairTest_aa5f.action.05.27RepairTestManagedDevicesGet" id.connectionreferenceid.connectionreferencelogicalname="mme_RepairTest_aa5f.connectionreference.052e27202d20repair20.shared_052e27202d20repair20test5f251f98" />
+      </MissingDependency>
+      <MissingDependency>
+        <Required type="botcomponent" displayName="mme_RepairTest_aa5f.action.05.27RepairTestManagedDevicesList" solution="Active" id.schemaname="mme_RepairTest_aa5f.action.05.27RepairTestManagedDevicesList" />
+        <Dependent type="botcomponent_connectionreference" displayName="botcomponentid.schemaname=mme_RepairTest_aa5f.action.05.27RepairTestManagedDevicesList,connectionreferenceid.connectionreferencelogicalname=mme_RepairTest_aa5f.connectionreference.052e27202d20repair20.shared_052e27202d20repair20test5f251f98" id.botcomponentid.schemaname="mme_RepairTest_aa5f.action.05.27RepairTestManagedDevicesList" id.connectionreferenceid.connectionreferencelogicalname="mme_RepairTest_aa5f.connectionreference.052e27202d20repair20.shared_052e27202d20repair20test5f251f98" />
+      </MissingDependency>
+      <MissingDependency>
+        <Required type="botcomponent" displayName="mme_RepairTest_aa5f.action.05.27RepairTestManagedDevicesLocateDevice" solution="Active" id.schemaname="mme_RepairTest_aa5f.action.05.27RepairTestManagedDevicesLocateDevice" />
+        <Dependent type="botcomponent_connectionreference" displayName="botcomponentid.schemaname=mme_RepairTest_aa5f.action.05.27RepairTestManagedDevicesLocateDevice,connectionreferenceid.connectionreferencelogicalname=mme_RepairTest_aa5f.connectionreference.052e27202d20repair20.shared_052e27202d20repair20test5f251f98" id.botcomponentid.schemaname="mme_RepairTest_aa5f.action.05.27RepairTestManagedDevicesLocateDevice" id.connectionreferenceid.connectionreferencelogicalname="mme_RepairTest_aa5f.connectionreference.052e27202d20repair20.shared_052e27202d20repair20test5f251f98" />
+      </MissingDependency>
+      <MissingDependency>
+        <Required type="botcomponent" displayName="mme_RepairTest_aa5f.action.05.27RepairTestManagedDevicesPlayLostModeSound" solution="Active" id.schemaname="mme_RepairTest_aa5f.action.05.27RepairTestManagedDevicesPlayLostModeSound" />
+        <Dependent type="botcomponent_connectionreference" displayName="botcomponentid.schemaname=mme_RepairTest_aa5f.action.05.27RepairTestManagedDevicesPlayLostModeSound,connectionreferenceid.connectionreferencelogicalname=mme_RepairTest_aa5f.connectionreference.052e27202d20repair20.shared_052e27202d20repair20test5f251f98" id.botcomponentid.schemaname="mme_RepairTest_aa5f.action.05.27RepairTestManagedDevicesPlayLostModeSound" id.connectionreferenceid.connectionreferencelogicalname="mme_RepairTest_aa5f.connectionreference.052e27202d20repair20.shared_052e27202d20repair20test5f251f98" />
+      </MissingDependency>
+      <MissingDependency>
+        <Required type="botcomponent" displayName="mme_RepairTest_aa5f.action.05.27RepairTestManagedDevicesRebootNow" solution="Active" id.schemaname="mme_RepairTest_aa5f.action.05.27RepairTestManagedDevicesRebootNow" />
+        <Dependent type="botcomponent_connectionreference" displayName="botcomponentid.schemaname=mme_RepairTest_aa5f.action.05.27RepairTestManagedDevicesRebootNow,connectionreferenceid.connectionreferencelogicalname=mme_RepairTest_aa5f.connectionreference.052e27202d20repair20.shared_052e27202d20repair20test5f251f98" id.botcomponentid.schemaname="mme_RepairTest_aa5f.action.05.27RepairTestManagedDevicesRebootNow" id.connectionreferenceid.connectionreferencelogicalname="mme_RepairTest_aa5f.connectionreference.052e27202d20repair20.shared_052e27202d20repair20test5f251f98" />
+      </MissingDependency>
+      <MissingDependency>
+        <Required type="botcomponent" displayName="mme_RepairTest_aa5f.action.05.27RepairTestManagedDevicesRecoverPasscode" solution="Active" id.schemaname="mme_RepairTest_aa5f.action.05.27RepairTestManagedDevicesRecoverPasscode" />
+        <Dependent type="botcomponent_connectionreference" displayName="botcomponentid.schemaname=mme_RepairTest_aa5f.action.05.27RepairTestManagedDevicesRecoverPasscode,connectionreferenceid.connectionreferencelogicalname=mme_RepairTest_aa5f.connectionreference.052e27202d20repair20.shared_052e27202d20repair20test5f251f98" id.botcomponentid.schemaname="mme_RepairTest_aa5f.action.05.27RepairTestManagedDevicesRecoverPasscode" id.connectionreferenceid.connectionreferencelogicalname="mme_RepairTest_aa5f.connectionreference.052e27202d20repair20.shared_052e27202d20repair20test5f251f98" />
+      </MissingDependency>
+      <MissingDependency>
+        <Required type="botcomponent" displayName="mme_RepairTest_aa5f.action.05.27RepairTestManagedDevicesRemoteLock" solution="Active" id.schemaname="mme_RepairTest_aa5f.action.05.27RepairTestManagedDevicesRemoteLock" />
+        <Dependent type="botcomponent_connectionreference" displayName="botcomponentid.schemaname=mme_RepairTest_aa5f.action.05.27RepairTestManagedDevicesRemoteLock,connectionreferenceid.connectionreferencelogicalname=mme_RepairTest_aa5f.connectionreference.052e27202d20repair20.shared_052e27202d20repair20test5f251f98" id.botcomponentid.schemaname="mme_RepairTest_aa5f.action.05.27RepairTestManagedDevicesRemoteLock" id.connectionreferenceid.connectionreferencelogicalname="mme_RepairTest_aa5f.connectionreference.052e27202d20repair20.shared_052e27202d20repair20test5f251f98" />
+      </MissingDependency>
+      <MissingDependency>
+        <Required type="botcomponent" displayName="mme_RepairTest_aa5f.action.05.27RepairTestManagedDevicesResetPasscode" solution="Active" id.schemaname="mme_RepairTest_aa5f.action.05.27RepairTestManagedDevicesResetPasscode" />
+        <Dependent type="botcomponent_connectionreference" displayName="botcomponentid.schemaname=mme_RepairTest_aa5f.action.05.27RepairTestManagedDevicesResetPasscode,connectionreferenceid.connectionreferencelogicalname=mme_RepairTest_aa5f.connectionreference.052e27202d20repair20.shared_052e27202d20repair20test5f251f98" id.botcomponentid.schemaname="mme_RepairTest_aa5f.action.05.27RepairTestManagedDevicesResetPasscode" id.connectionreferenceid.connectionreferencelogicalname="mme_RepairTest_aa5f.connectionreference.052e27202d20repair20.shared_052e27202d20repair20test5f251f98" />
+      </MissingDependency>
+      <MissingDependency>
+        <Required type="botcomponent" displayName="mme_RepairTest_aa5f.action.05.27RepairTestManagedDevicesRetire" solution="Active" id.schemaname="mme_RepairTest_aa5f.action.05.27RepairTestManagedDevicesRetire" />
+        <Dependent type="botcomponent_connectionreference" displayName="botcomponentid.schemaname=mme_RepairTest_aa5f.action.05.27RepairTestManagedDevicesRetire,connectionreferenceid.connectionreferencelogicalname=mme_RepairTest_aa5f.connectionreference.052e27202d20repair20.shared_052e27202d20repair20test5f251f98" id.botcomponentid.schemaname="mme_RepairTest_aa5f.action.05.27RepairTestManagedDevicesRetire" id.connectionreferenceid.connectionreferencelogicalname="mme_RepairTest_aa5f.connectionreference.052e27202d20repair20.shared_052e27202d20repair20test5f251f98" />
+      </MissingDependency>
+      <MissingDependency>
+        <Required type="botcomponent" displayName="mme_RepairTest_aa5f.action.05.27RepairTestManagedDevicesRotateBitLockerKeys" solution="Active" id.schemaname="mme_RepairTest_aa5f.action.05.27RepairTestManagedDevicesRotateBitLockerKeys" />
+        <Dependent type="botcomponent_connectionreference" displayName="botcomponentid.schemaname=mme_RepairTest_aa5f.action.05.27RepairTestManagedDevicesRotateBitLockerKeys,connectionreferenceid.connectionreferencelogicalname=mme_RepairTest_aa5f.connectionreference.052e27202d20repair20.shared_052e27202d20repair20test5f251f98" id.botcomponentid.schemaname="mme_RepairTest_aa5f.action.05.27RepairTestManagedDevicesRotateBitLockerKeys" id.connectionreferenceid.connectionreferencelogicalname="mme_RepairTest_aa5f.connectionreference.052e27202d20repair20.shared_052e27202d20repair20test5f251f98" />
+      </MissingDependency>
+      <MissingDependency>
+        <Required type="botcomponent" displayName="mme_RepairTest_aa5f.action.05.27RepairTestManagedDevicesSendCustomNotificationToCompanyPortal" solution="Active" id.schemaname="mme_RepairTest_aa5f.action.05.27RepairTestManagedDevicesSendCustomNotificationToCompanyPortal" />
+        <Dependent type="botcomponent_connectionreference" displayName="botcomponentid.schemaname=mme_RepairTest_aa5f.action.05.27RepairTestManagedDevicesSendCustomNotificationToCompanyPortal,connectionreferenceid.connectionreferencelogicalname=mme_RepairTest_aa5f.connectionreference.052e27202d20repair20.shared_052e27202d20repair20test5f251f98" id.botcomponentid.schemaname="mme_RepairTest_aa5f.action.05.27RepairTestManagedDevicesSendCustomNotificationToCompanyPortal" id.connectionreferenceid.connectionreferencelogicalname="mme_RepairTest_aa5f.connectionreference.052e27202d20repair20.shared_052e27202d20repair20test5f251f98" />
+      </MissingDependency>
+      <MissingDependency>
+        <Required type="botcomponent" displayName="mme_RepairTest_aa5f.action.05.27RepairTestManagedDevicesSyncDevice" solution="Active" id.schemaname="mme_RepairTest_aa5f.action.05.27RepairTestManagedDevicesSyncDevice" />
+        <Dependent type="botcomponent_connectionreference" displayName="botcomponentid.schemaname=mme_RepairTest_aa5f.action.05.27RepairTestManagedDevicesSyncDevice,connectionreferenceid.connectionreferencelogicalname=mme_RepairTest_aa5f.connectionreference.052e27202d20repair20.shared_052e27202d20repair20test5f251f98" id.botcomponentid.schemaname="mme_RepairTest_aa5f.action.05.27RepairTestManagedDevicesSyncDevice" id.connectionreferenceid.connectionreferencelogicalname="mme_RepairTest_aa5f.connectionreference.052e27202d20repair20.shared_052e27202d20repair20test5f251f98" />
+      </MissingDependency>
+      <MissingDependency>
+        <Required type="botcomponent" displayName="mme_RepairTest_aa5f.action.05.27RepairTestManagedDevicesWindowsDefenderScan" solution="Active" id.schemaname="mme_RepairTest_aa5f.action.05.27RepairTestManagedDevicesWindowsDefenderScan" />
+        <Dependent type="botcomponent_connectionreference" displayName="botcomponentid.schemaname=mme_RepairTest_aa5f.action.05.27RepairTestManagedDevicesWindowsDefenderScan,connectionreferenceid.connectionreferencelogicalname=mme_RepairTest_aa5f.connectionreference.052e27202d20repair20.shared_052e27202d20repair20test5f251f98" id.botcomponentid.schemaname="mme_RepairTest_aa5f.action.05.27RepairTestManagedDevicesWindowsDefenderScan" id.connectionreferenceid.connectionreferencelogicalname="mme_RepairTest_aa5f.connectionreference.052e27202d20repair20.shared_052e27202d20repair20test5f251f98" />
+      </MissingDependency>
+      <MissingDependency>
+        <Required type="botcomponent" displayName="mme_RepairTest_aa5f.action.05.27RepairTestManagedDevicesWindowsDefenderUpdateSignatures" solution="Active" id.schemaname="mme_RepairTest_aa5f.action.05.27RepairTestManagedDevicesWindowsDefenderUpdateSignatures" />
+        <Dependent type="botcomponent_connectionreference" displayName="botcomponentid.schemaname=mme_RepairTest_aa5f.action.05.27RepairTestManagedDevicesWindowsDefenderUpdateSignatures,connectionreferenceid.connectionreferencelogicalname=mme_RepairTest_aa5f.connectionreference.052e27202d20repair20.shared_052e27202d20repair20test5f251f98" id.botcomponentid.schemaname="mme_RepairTest_aa5f.action.05.27RepairTestManagedDevicesWindowsDefenderUpdateSignatures" id.connectionreferenceid.connectionreferencelogicalname="mme_RepairTest_aa5f.connectionreference.052e27202d20repair20.shared_052e27202d20repair20test5f251f98" />
+      </MissingDependency>
+      <MissingDependency>
+        <Required type="botcomponent" displayName="mme_RepairTest_aa5f.action.05.27RepairTestManagedDevicesWipe" solution="Active" id.schemaname="mme_RepairTest_aa5f.action.05.27RepairTestManagedDevicesWipe" />
+        <Dependent type="botcomponent_connectionreference" displayName="botcomponentid.schemaname=mme_RepairTest_aa5f.action.05.27RepairTestManagedDevicesWipe,connectionreferenceid.connectionreferencelogicalname=mme_RepairTest_aa5f.connectionreference.052e27202d20repair20.shared_052e27202d20repair20test5f251f98" id.botcomponentid.schemaname="mme_RepairTest_aa5f.action.05.27RepairTestManagedDevicesWipe" id.connectionreferenceid.connectionreferencelogicalname="mme_RepairTest_aa5f.connectionreference.052e27202d20repair20.shared_052e27202d20repair20test5f251f98" />
+      </MissingDependency>
+      <MissingDependency>
+        <Required type="botcomponent" displayName="mme_RepairTest_aa5f.action.MicrosoftLearnDocsMCP" solution="Active" id.schemaname="mme_RepairTest_aa5f.action.MicrosoftLearnDocsMCP" />
+        <Dependent type="botcomponent_connectionreference" displayName="botcomponentid.schemaname=mme_RepairTest_aa5f.action.MicrosoftLearnDocsMCP,connectionreferenceid.connectionreferencelogicalname=mme_RepairTest_aa5f.connectionreference.microsoftlearndocsmc.shared_microsoftlearndocsmcpserver.3739" id.botcomponentid.schemaname="mme_RepairTest_aa5f.action.MicrosoftLearnDocsMCP" id.connectionreferenceid.connectionreferencelogicalname="mme_RepairTest_aa5f.connectionreference.microsoftlearndocsmc.shared_microsoftlearndocsmcpserver.3739" />
+      </MissingDependency>
+      <MissingDependency>
+        <Required type="connectionreference" displayName="mme_EntraUserAuthMethodsAgent_4c45.connectionreference.052e28202d20solution.shared_052e28202d20solut" solution="Active" id.connectionreferencelogicalname="mme_EntraUserAuthMethodsAgent_4c45.connectionreference.052e28202d20solution.shared_052e28202d20solut" />
+        <Dependent type="botcomponent_connectionreference" displayName="botcomponentid.schemaname=mme_EntraUserAuthMethodsAgent_4c45.action.05.28SolutionTestUserRegistrationDetailsGet,connectionreferenceid.connectionreferencelogicalname=mme_EntraUserAuthMethodsAgent_4c45.connectionreference.052e28202d20solution.shared_052e28202d20solut" id.botcomponentid.schemaname="mme_EntraUserAuthMethodsAgent_4c45.action.05.28SolutionTestUserRegistrationDetailsGet" id.connectionreferenceid.connectionreferencelogicalname="mme_EntraUserAuthMethodsAgent_4c45.connectionreference.052e28202d20solution.shared_052e28202d20solut" />
+      </MissingDependency>
+      <MissingDependency>
+        <Required type="connectionreference" displayName="mme_EntraUserAuthMethodsAgent_4c45.connectionreference.052e28202d20solution.shared_052e28202d20solut" solution="Active" id.connectionreferencelogicalname="mme_EntraUserAuthMethodsAgent_4c45.connectionreference.052e28202d20solution.shared_052e28202d20solut" />
+        <Dependent type="botcomponent_connectionreference" displayName="botcomponentid.schemaname=mme_EntraUserAuthMethodsAgent_4c45.action.05.28SolutionTestUserRegistrationDetailsList,connectionreferenceid.connectionreferencelogicalname=mme_EntraUserAuthMethodsAgent_4c45.connectionreference.052e28202d20solution.shared_052e28202d20solut" id.botcomponentid.schemaname="mme_EntraUserAuthMethodsAgent_4c45.action.05.28SolutionTestUserRegistrationDetailsList" id.connectionreferenceid.connectionreferencelogicalname="mme_EntraUserAuthMethodsAgent_4c45.connectionreference.052e28202d20solution.shared_052e28202d20solut" />
+      </MissingDependency>
+      <MissingDependency>
+        <Required type="connectionreference" displayName="mme_EntraUserAuthMethodsAgent_4c45.connectionreference.052e28202d20solution.shared_052e28202d20solut" solution="Active" id.connectionreferencelogicalname="mme_EntraUserAuthMethodsAgent_4c45.connectionreference.052e28202d20solution.shared_052e28202d20solut" />
+        <Dependent type="botcomponent_connectionreference" displayName="botcomponentid.schemaname=mme_EntraUserAuthMethodsAgent_4c45.action.05.28SolutionTestUsersAssignLicense,connectionreferenceid.connectionreferencelogicalname=mme_EntraUserAuthMethodsAgent_4c45.connectionreference.052e28202d20solution.shared_052e28202d20solut" id.botcomponentid.schemaname="mme_EntraUserAuthMethodsAgent_4c45.action.05.28SolutionTestUsersAssignLicense" id.connectionreferenceid.connectionreferencelogicalname="mme_EntraUserAuthMethodsAgent_4c45.connectionreference.052e28202d20solution.shared_052e28202d20solut" />
+      </MissingDependency>
+      <MissingDependency>
+        <Required type="connectionreference" displayName="mme_EntraUserAuthMethodsAgent_4c45.connectionreference.052e28202d20solution.shared_052e28202d20solut" solution="Active" id.connectionreferencelogicalname="mme_EntraUserAuthMethodsAgent_4c45.connectionreference.052e28202d20solution.shared_052e28202d20solut" />
+        <Dependent type="botcomponent_connectionreference" displayName="botcomponentid.schemaname=mme_EntraUserAuthMethodsAgent_4c45.action.05.28SolutionTestUsersChangePassword,connectionreferenceid.connectionreferencelogicalname=mme_EntraUserAuthMethodsAgent_4c45.connectionreference.052e28202d20solution.shared_052e28202d20solut" id.botcomponentid.schemaname="mme_EntraUserAuthMethodsAgent_4c45.action.05.28SolutionTestUsersChangePassword" id.connectionreferenceid.connectionreferencelogicalname="mme_EntraUserAuthMethodsAgent_4c45.connectionreference.052e28202d20solution.shared_052e28202d20solut" />
+      </MissingDependency>
+      <MissingDependency>
+        <Required type="connectionreference" displayName="mme_EntraUserAuthMethodsAgent_4c45.connectionreference.052e28202d20solution.shared_052e28202d20solut" solution="Active" id.connectionreferencelogicalname="mme_EntraUserAuthMethodsAgent_4c45.connectionreference.052e28202d20solution.shared_052e28202d20solut" />
+        <Dependent type="botcomponent_connectionreference" displayName="botcomponentid.schemaname=mme_EntraUserAuthMethodsAgent_4c45.action.05.28SolutionTestUsersCreate,connectionreferenceid.connectionreferencelogicalname=mme_EntraUserAuthMethodsAgent_4c45.connectionreference.052e28202d20solution.shared_052e28202d20solut" id.botcomponentid.schemaname="mme_EntraUserAuthMethodsAgent_4c45.action.05.28SolutionTestUsersCreate" id.connectionreferenceid.connectionreferencelogicalname="mme_EntraUserAuthMethodsAgent_4c45.connectionreference.052e28202d20solution.shared_052e28202d20solut" />
+      </MissingDependency>
+      <MissingDependency>
+        <Required type="connectionreference" displayName="mme_EntraUserAuthMethodsAgent_4c45.connectionreference.052e28202d20solution.shared_052e28202d20solut" solution="Active" id.connectionreferencelogicalname="mme_EntraUserAuthMethodsAgent_4c45.connectionreference.052e28202d20solution.shared_052e28202d20solut" />
+        <Dependent type="botcomponent_connectionreference" displayName="botcomponentid.schemaname=mme_EntraUserAuthMethodsAgent_4c45.action.05.28SolutionTestUsersDelete,connectionreferenceid.connectionreferencelogicalname=mme_EntraUserAuthMethodsAgent_4c45.connectionreference.052e28202d20solution.shared_052e28202d20solut" id.botcomponentid.schemaname="mme_EntraUserAuthMethodsAgent_4c45.action.05.28SolutionTestUsersDelete" id.connectionreferenceid.connectionreferencelogicalname="mme_EntraUserAuthMethodsAgent_4c45.connectionreference.052e28202d20solution.shared_052e28202d20solut" />
+      </MissingDependency>
+      <MissingDependency>
+        <Required type="connectionreference" displayName="mme_EntraUserAuthMethodsAgent_4c45.connectionreference.052e28202d20solution.shared_052e28202d20solut" solution="Active" id.connectionreferencelogicalname="mme_EntraUserAuthMethodsAgent_4c45.connectionreference.052e28202d20solution.shared_052e28202d20solut" />
+        <Dependent type="botcomponent_connectionreference" displayName="botcomponentid.schemaname=mme_EntraUserAuthMethodsAgent_4c45.action.05.28SolutionTestUsersExportPersonalData,connectionreferenceid.connectionreferencelogicalname=mme_EntraUserAuthMethodsAgent_4c45.connectionreference.052e28202d20solution.shared_052e28202d20solut" id.botcomponentid.schemaname="mme_EntraUserAuthMethodsAgent_4c45.action.05.28SolutionTestUsersExportPersonalData" id.connectionreferenceid.connectionreferencelogicalname="mme_EntraUserAuthMethodsAgent_4c45.connectionreference.052e28202d20solution.shared_052e28202d20solut" />
+      </MissingDependency>
+      <MissingDependency>
+        <Required type="connectionreference" displayName="mme_EntraUserAuthMethodsAgent_4c45.connectionreference.052e28202d20solution.shared_052e28202d20solut" solution="Active" id.connectionreferencelogicalname="mme_EntraUserAuthMethodsAgent_4c45.connectionreference.052e28202d20solution.shared_052e28202d20solut" />
+        <Dependent type="botcomponent_connectionreference" displayName="botcomponentid.schemaname=mme_EntraUserAuthMethodsAgent_4c45.action.05.28SolutionTestUsersGet,connectionreferenceid.connectionreferencelogicalname=mme_EntraUserAuthMethodsAgent_4c45.connectionreference.052e28202d20solution.shared_052e28202d20solut" id.botcomponentid.schemaname="mme_EntraUserAuthMethodsAgent_4c45.action.05.28SolutionTestUsersGet" id.connectionreferenceid.connectionreferencelogicalname="mme_EntraUserAuthMethodsAgent_4c45.connectionreference.052e28202d20solution.shared_052e28202d20solut" />
+      </MissingDependency>
+      <MissingDependency>
+        <Required type="connectionreference" displayName="mme_EntraUserAuthMethodsAgent_4c45.connectionreference.052e28202d20solution.shared_052e28202d20solut" solution="Active" id.connectionreferencelogicalname="mme_EntraUserAuthMethodsAgent_4c45.connectionreference.052e28202d20solution.shared_052e28202d20solut" />
+        <Dependent type="botcomponent_connectionreference" displayName="botcomponentid.schemaname=mme_EntraUserAuthMethodsAgent_4c45.action.05.28SolutionTestUsersList,connectionreferenceid.connectionreferencelogicalname=mme_EntraUserAuthMethodsAgent_4c45.connectionreference.052e28202d20solution.shared_052e28202d20solut" id.botcomponentid.schemaname="mme_EntraUserAuthMethodsAgent_4c45.action.05.28SolutionTestUsersList" id.connectionreferenceid.connectionreferencelogicalname="mme_EntraUserAuthMethodsAgent_4c45.connectionreference.052e28202d20solution.shared_052e28202d20solut" />
+      </MissingDependency>
+      <MissingDependency>
+        <Required type="connectionreference" displayName="mme_EntraUserAuthMethodsAgent_4c45.connectionreference.052e28202d20solution.shared_052e28202d20solut" solution="Active" id.connectionreferencelogicalname="mme_EntraUserAuthMethodsAgent_4c45.connectionreference.052e28202d20solution.shared_052e28202d20solut" />
+        <Dependent type="botcomponent_connectionreference" displayName="botcomponentid.schemaname=mme_EntraUserAuthMethodsAgent_4c45.action.05.28SolutionTestUsersReprocessLicenseAssignment,connectionreferenceid.connectionreferencelogicalname=mme_EntraUserAuthMethodsAgent_4c45.connectionreference.052e28202d20solution.shared_052e28202d20solut" id.botcomponentid.schemaname="mme_EntraUserAuthMethodsAgent_4c45.action.05.28SolutionTestUsersReprocessLicenseAssignment" id.connectionreferenceid.connectionreferencelogicalname="mme_EntraUserAuthMethodsAgent_4c45.connectionreference.052e28202d20solution.shared_052e28202d20solut" />
+      </MissingDependency>
+      <MissingDependency>
+        <Required type="connectionreference" displayName="mme_EntraUserAuthMethodsAgent_4c45.connectionreference.052e28202d20solution.shared_052e28202d20solut" solution="Active" id.connectionreferencelogicalname="mme_EntraUserAuthMethodsAgent_4c45.connectionreference.052e28202d20solution.shared_052e28202d20solut" />
+        <Dependent type="botcomponent_connectionreference" displayName="botcomponentid.schemaname=mme_EntraUserAuthMethodsAgent_4c45.action.05.28SolutionTestUsersRetryServiceProvisioning,connectionreferenceid.connectionreferencelogicalname=mme_EntraUserAuthMethodsAgent_4c45.connectionreference.052e28202d20solution.shared_052e28202d20solut" id.botcomponentid.schemaname="mme_EntraUserAuthMethodsAgent_4c45.action.05.28SolutionTestUsersRetryServiceProvisioning" id.connectionreferenceid.connectionreferencelogicalname="mme_EntraUserAuthMethodsAgent_4c45.connectionreference.052e28202d20solution.shared_052e28202d20solut" />
+      </MissingDependency>
+      <MissingDependency>
+        <Required type="connectionreference" displayName="mme_EntraUserAuthMethodsAgent_4c45.connectionreference.052e28202d20solution.shared_052e28202d20solut" solution="Active" id.connectionreferencelogicalname="mme_EntraUserAuthMethodsAgent_4c45.connectionreference.052e28202d20solution.shared_052e28202d20solut" />
+        <Dependent type="botcomponent_connectionreference" displayName="botcomponentid.schemaname=mme_EntraUserAuthMethodsAgent_4c45.action.05.28SolutionTestUsersRevokeSignInSessions,connectionreferenceid.connectionreferencelogicalname=mme_EntraUserAuthMethodsAgent_4c45.connectionreference.052e28202d20solution.shared_052e28202d20solut" id.botcomponentid.schemaname="mme_EntraUserAuthMethodsAgent_4c45.action.05.28SolutionTestUsersRevokeSignInSessions" id.connectionreferenceid.connectionreferencelogicalname="mme_EntraUserAuthMethodsAgent_4c45.connectionreference.052e28202d20solution.shared_052e28202d20solut" />
+      </MissingDependency>
+      <MissingDependency>
+        <Required type="connectionreference" displayName="mme_EntraUserAuthMethodsAgent_4c45.connectionreference.052e28202d20solution.shared_052e28202d20solut" solution="Active" id.connectionreferencelogicalname="mme_EntraUserAuthMethodsAgent_4c45.connectionreference.052e28202d20solution.shared_052e28202d20solut" />
+        <Dependent type="botcomponent_connectionreference" displayName="botcomponentid.schemaname=mme_EntraUserAuthMethodsAgent_4c45.action.05.28SolutionTestUsersUpdate,connectionreferenceid.connectionreferencelogicalname=mme_EntraUserAuthMethodsAgent_4c45.connectionreference.052e28202d20solution.shared_052e28202d20solut" id.botcomponentid.schemaname="mme_EntraUserAuthMethodsAgent_4c45.action.05.28SolutionTestUsersUpdate" id.connectionreferenceid.connectionreferencelogicalname="mme_EntraUserAuthMethodsAgent_4c45.connectionreference.052e28202d20solution.shared_052e28202d20solut" />
+      </MissingDependency>
+      <MissingDependency>
+        <Required type="connectionreference" displayName="mme_EntraUserAuthMethodsAgent_4c45.connectionreference.microsoftlearndocsmc.shared_microsoftlearndoc" solution="Active" id.connectionreferencelogicalname="mme_EntraUserAuthMethodsAgent_4c45.connectionreference.microsoftlearndocsmc.shared_microsoftlearndoc" />
+        <Dependent type="botcomponent_connectionreference" displayName="botcomponentid.schemaname=mme_EntraUserAuthMethodsAgent_4c45.action.MicrosoftLearnDocsMCP,connectionreferenceid.connectionreferencelogicalname=mme_EntraUserAuthMethodsAgent_4c45.connectionreference.microsoftlearndocsmc.shared_microsoftlearndoc" id.botcomponentid.schemaname="mme_EntraUserAuthMethodsAgent_4c45.action.MicrosoftLearnDocsMCP" id.connectionreferenceid.connectionreferencelogicalname="mme_EntraUserAuthMethodsAgent_4c45.connectionreference.microsoftlearndocsmc.shared_microsoftlearndoc" />
+      </MissingDependency>
+      <MissingDependency>
+        <Required type="connectionreference" displayName="mme_RepairTest_aa5f.connectionreference.052e27202d20repair20.shared_052e27202d20repair20test5f251f98" solution="Active" id.connectionreferencelogicalname="mme_RepairTest_aa5f.connectionreference.052e27202d20repair20.shared_052e27202d20repair20test5f251f98" />
+        <Dependent type="botcomponent_connectionreference" displayName="botcomponentid.schemaname=mme_RepairTest_aa5f.action.05.27RepairTestManagedDevicesCreateDeviceLogCollectionRequest,connectionreferenceid.connectionreferencelogicalname=mme_RepairTest_aa5f.connectionreference.052e27202d20repair20.shared_052e27202d20repair20test5f251f98" id.botcomponentid.schemaname="mme_RepairTest_aa5f.action.05.27RepairTestManagedDevicesCreateDeviceLogCollectionRequest" id.connectionreferenceid.connectionreferencelogicalname="mme_RepairTest_aa5f.connectionreference.052e27202d20repair20.shared_052e27202d20repair20test5f251f98" />
+      </MissingDependency>
+      <MissingDependency>
+        <Required type="connectionreference" displayName="mme_RepairTest_aa5f.connectionreference.052e27202d20repair20.shared_052e27202d20repair20test5f251f98" solution="Active" id.connectionreferencelogicalname="mme_RepairTest_aa5f.connectionreference.052e27202d20repair20.shared_052e27202d20repair20test5f251f98" />
+        <Dependent type="botcomponent_connectionreference" displayName="botcomponentid.schemaname=mme_RepairTest_aa5f.action.05.27RepairTestManagedDevicesDisableLostMode,connectionreferenceid.connectionreferencelogicalname=mme_RepairTest_aa5f.connectionreference.052e27202d20repair20.shared_052e27202d20repair20test5f251f98" id.botcomponentid.schemaname="mme_RepairTest_aa5f.action.05.27RepairTestManagedDevicesDisableLostMode" id.connectionreferenceid.connectionreferencelogicalname="mme_RepairTest_aa5f.connectionreference.052e27202d20repair20.shared_052e27202d20repair20test5f251f98" />
+      </MissingDependency>
+      <MissingDependency>
+        <Required type="connectionreference" displayName="mme_RepairTest_aa5f.connectionreference.052e27202d20repair20.shared_052e27202d20repair20test5f251f98" solution="Active" id.connectionreferencelogicalname="mme_RepairTest_aa5f.connectionreference.052e27202d20repair20.shared_052e27202d20repair20test5f251f98" />
+        <Dependent type="botcomponent_connectionreference" displayName="botcomponentid.schemaname=mme_RepairTest_aa5f.action.05.27RepairTestManagedDevicesEnableLostMode,connectionreferenceid.connectionreferencelogicalname=mme_RepairTest_aa5f.connectionreference.052e27202d20repair20.shared_052e27202d20repair20test5f251f98" id.botcomponentid.schemaname="mme_RepairTest_aa5f.action.05.27RepairTestManagedDevicesEnableLostMode" id.connectionreferenceid.connectionreferencelogicalname="mme_RepairTest_aa5f.connectionreference.052e27202d20repair20.shared_052e27202d20repair20test5f251f98" />
+      </MissingDependency>
+      <MissingDependency>
+        <Required type="connectionreference" displayName="mme_RepairTest_aa5f.connectionreference.052e27202d20repair20.shared_052e27202d20repair20test5f251f98" solution="Active" id.connectionreferencelogicalname="mme_RepairTest_aa5f.connectionreference.052e27202d20repair20.shared_052e27202d20repair20test5f251f98" />
+        <Dependent type="botcomponent_connectionreference" displayName="botcomponentid.schemaname=mme_RepairTest_aa5f.action.05.27RepairTestManagedDevicesGet,connectionreferenceid.connectionreferencelogicalname=mme_RepairTest_aa5f.connectionreference.052e27202d20repair20.shared_052e27202d20repair20test5f251f98" id.botcomponentid.schemaname="mme_RepairTest_aa5f.action.05.27RepairTestManagedDevicesGet" id.connectionreferenceid.connectionreferencelogicalname="mme_RepairTest_aa5f.connectionreference.052e27202d20repair20.shared_052e27202d20repair20test5f251f98" />
+      </MissingDependency>
+      <MissingDependency>
+        <Required type="connectionreference" displayName="mme_RepairTest_aa5f.connectionreference.052e27202d20repair20.shared_052e27202d20repair20test5f251f98" solution="Active" id.connectionreferencelogicalname="mme_RepairTest_aa5f.connectionreference.052e27202d20repair20.shared_052e27202d20repair20test5f251f98" />
+        <Dependent type="botcomponent_connectionreference" displayName="botcomponentid.schemaname=mme_RepairTest_aa5f.action.05.27RepairTestManagedDevicesList,connectionreferenceid.connectionreferencelogicalname=mme_RepairTest_aa5f.connectionreference.052e27202d20repair20.shared_052e27202d20repair20test5f251f98" id.botcomponentid.schemaname="mme_RepairTest_aa5f.action.05.27RepairTestManagedDevicesList" id.connectionreferenceid.connectionreferencelogicalname="mme_RepairTest_aa5f.connectionreference.052e27202d20repair20.shared_052e27202d20repair20test5f251f98" />
+      </MissingDependency>
+      <MissingDependency>
+        <Required type="connectionreference" displayName="mme_RepairTest_aa5f.connectionreference.052e27202d20repair20.shared_052e27202d20repair20test5f251f98" solution="Active" id.connectionreferencelogicalname="mme_RepairTest_aa5f.connectionreference.052e27202d20repair20.shared_052e27202d20repair20test5f251f98" />
+        <Dependent type="botcomponent_connectionreference" displayName="botcomponentid.schemaname=mme_RepairTest_aa5f.action.05.27RepairTestManagedDevicesLocateDevice,connectionreferenceid.connectionreferencelogicalname=mme_RepairTest_aa5f.connectionreference.052e27202d20repair20.shared_052e27202d20repair20test5f251f98" id.botcomponentid.schemaname="mme_RepairTest_aa5f.action.05.27RepairTestManagedDevicesLocateDevice" id.connectionreferenceid.connectionreferencelogicalname="mme_RepairTest_aa5f.connectionreference.052e27202d20repair20.shared_052e27202d20repair20test5f251f98" />
+      </MissingDependency>
+      <MissingDependency>
+        <Required type="connectionreference" displayName="mme_RepairTest_aa5f.connectionreference.052e27202d20repair20.shared_052e27202d20repair20test5f251f98" solution="Active" id.connectionreferencelogicalname="mme_RepairTest_aa5f.connectionreference.052e27202d20repair20.shared_052e27202d20repair20test5f251f98" />
+        <Dependent type="botcomponent_connectionreference" displayName="botcomponentid.schemaname=mme_RepairTest_aa5f.action.05.27RepairTestManagedDevicesPlayLostModeSound,connectionreferenceid.connectionreferencelogicalname=mme_RepairTest_aa5f.connectionreference.052e27202d20repair20.shared_052e27202d20repair20test5f251f98" id.botcomponentid.schemaname="mme_RepairTest_aa5f.action.05.27RepairTestManagedDevicesPlayLostModeSound" id.connectionreferenceid.connectionreferencelogicalname="mme_RepairTest_aa5f.connectionreference.052e27202d20repair20.shared_052e27202d20repair20test5f251f98" />
+      </MissingDependency>
+      <MissingDependency>
+        <Required type="connectionreference" displayName="mme_RepairTest_aa5f.connectionreference.052e27202d20repair20.shared_052e27202d20repair20test5f251f98" solution="Active" id.connectionreferencelogicalname="mme_RepairTest_aa5f.connectionreference.052e27202d20repair20.shared_052e27202d20repair20test5f251f98" />
+        <Dependent type="botcomponent_connectionreference" displayName="botcomponentid.schemaname=mme_RepairTest_aa5f.action.05.27RepairTestManagedDevicesRebootNow,connectionreferenceid.connectionreferencelogicalname=mme_RepairTest_aa5f.connectionreference.052e27202d20repair20.shared_052e27202d20repair20test5f251f98" id.botcomponentid.schemaname="mme_RepairTest_aa5f.action.05.27RepairTestManagedDevicesRebootNow" id.connectionreferenceid.connectionreferencelogicalname="mme_RepairTest_aa5f.connectionreference.052e27202d20repair20.shared_052e27202d20repair20test5f251f98" />
+      </MissingDependency>
+      <MissingDependency>
+        <Required type="connectionreference" displayName="mme_RepairTest_aa5f.connectionreference.052e27202d20repair20.shared_052e27202d20repair20test5f251f98" solution="Active" id.connectionreferencelogicalname="mme_RepairTest_aa5f.connectionreference.052e27202d20repair20.shared_052e27202d20repair20test5f251f98" />
+        <Dependent type="botcomponent_connectionreference" displayName="botcomponentid.schemaname=mme_RepairTest_aa5f.action.05.27RepairTestManagedDevicesRecoverPasscode,connectionreferenceid.connectionreferencelogicalname=mme_RepairTest_aa5f.connectionreference.052e27202d20repair20.shared_052e27202d20repair20test5f251f98" id.botcomponentid.schemaname="mme_RepairTest_aa5f.action.05.27RepairTestManagedDevicesRecoverPasscode" id.connectionreferenceid.connectionreferencelogicalname="mme_RepairTest_aa5f.connectionreference.052e27202d20repair20.shared_052e27202d20repair20test5f251f98" />
+      </MissingDependency>
+      <MissingDependency>
+        <Required type="connectionreference" displayName="mme_RepairTest_aa5f.connectionreference.052e27202d20repair20.shared_052e27202d20repair20test5f251f98" solution="Active" id.connectionreferencelogicalname="mme_RepairTest_aa5f.connectionreference.052e27202d20repair20.shared_052e27202d20repair20test5f251f98" />
+        <Dependent type="botcomponent_connectionreference" displayName="botcomponentid.schemaname=mme_RepairTest_aa5f.action.05.27RepairTestManagedDevicesRemoteLock,connectionreferenceid.connectionreferencelogicalname=mme_RepairTest_aa5f.connectionreference.052e27202d20repair20.shared_052e27202d20repair20test5f251f98" id.botcomponentid.schemaname="mme_RepairTest_aa5f.action.05.27RepairTestManagedDevicesRemoteLock" id.connectionreferenceid.connectionreferencelogicalname="mme_RepairTest_aa5f.connectionreference.052e27202d20repair20.shared_052e27202d20repair20test5f251f98" />
+      </MissingDependency>
+      <MissingDependency>
+        <Required type="connectionreference" displayName="mme_RepairTest_aa5f.connectionreference.052e27202d20repair20.shared_052e27202d20repair20test5f251f98" solution="Active" id.connectionreferencelogicalname="mme_RepairTest_aa5f.connectionreference.052e27202d20repair20.shared_052e27202d20repair20test5f251f98" />
+        <Dependent type="botcomponent_connectionreference" displayName="botcomponentid.schemaname=mme_RepairTest_aa5f.action.05.27RepairTestManagedDevicesResetPasscode,connectionreferenceid.connectionreferencelogicalname=mme_RepairTest_aa5f.connectionreference.052e27202d20repair20.shared_052e27202d20repair20test5f251f98" id.botcomponentid.schemaname="mme_RepairTest_aa5f.action.05.27RepairTestManagedDevicesResetPasscode" id.connectionreferenceid.connectionreferencelogicalname="mme_RepairTest_aa5f.connectionreference.052e27202d20repair20.shared_052e27202d20repair20test5f251f98" />
+      </MissingDependency>
+      <MissingDependency>
+        <Required type="connectionreference" displayName="mme_RepairTest_aa5f.connectionreference.052e27202d20repair20.shared_052e27202d20repair20test5f251f98" solution="Active" id.connectionreferencelogicalname="mme_RepairTest_aa5f.connectionreference.052e27202d20repair20.shared_052e27202d20repair20test5f251f98" />
+        <Dependent type="botcomponent_connectionreference" displayName="botcomponentid.schemaname=mme_RepairTest_aa5f.action.05.27RepairTestManagedDevicesRetire,connectionreferenceid.connectionreferencelogicalname=mme_RepairTest_aa5f.connectionreference.052e27202d20repair20.shared_052e27202d20repair20test5f251f98" id.botcomponentid.schemaname="mme_RepairTest_aa5f.action.05.27RepairTestManagedDevicesRetire" id.connectionreferenceid.connectionreferencelogicalname="mme_RepairTest_aa5f.connectionreference.052e27202d20repair20.shared_052e27202d20repair20test5f251f98" />
+      </MissingDependency>
+      <MissingDependency>
+        <Required type="connectionreference" displayName="mme_RepairTest_aa5f.connectionreference.052e27202d20repair20.shared_052e27202d20repair20test5f251f98" solution="Active" id.connectionreferencelogicalname="mme_RepairTest_aa5f.connectionreference.052e27202d20repair20.shared_052e27202d20repair20test5f251f98" />
+        <Dependent type="botcomponent_connectionreference" displayName="botcomponentid.schemaname=mme_RepairTest_aa5f.action.05.27RepairTestManagedDevicesRotateBitLockerKeys,connectionreferenceid.connectionreferencelogicalname=mme_RepairTest_aa5f.connectionreference.052e27202d20repair20.shared_052e27202d20repair20test5f251f98" id.botcomponentid.schemaname="mme_RepairTest_aa5f.action.05.27RepairTestManagedDevicesRotateBitLockerKeys" id.connectionreferenceid.connectionreferencelogicalname="mme_RepairTest_aa5f.connectionreference.052e27202d20repair20.shared_052e27202d20repair20test5f251f98" />
+      </MissingDependency>
+      <MissingDependency>
+        <Required type="connectionreference" displayName="mme_RepairTest_aa5f.connectionreference.052e27202d20repair20.shared_052e27202d20repair20test5f251f98" solution="Active" id.connectionreferencelogicalname="mme_RepairTest_aa5f.connectionreference.052e27202d20repair20.shared_052e27202d20repair20test5f251f98" />
+        <Dependent type="botcomponent_connectionreference" displayName="botcomponentid.schemaname=mme_RepairTest_aa5f.action.05.27RepairTestManagedDevicesSendCustomNotificationToCompanyPortal,connectionreferenceid.connectionreferencelogicalname=mme_RepairTest_aa5f.connectionreference.052e27202d20repair20.shared_052e27202d20repair20test5f251f98" id.botcomponentid.schemaname="mme_RepairTest_aa5f.action.05.27RepairTestManagedDevicesSendCustomNotificationToCompanyPortal" id.connectionreferenceid.connectionreferencelogicalname="mme_RepairTest_aa5f.connectionreference.052e27202d20repair20.shared_052e27202d20repair20test5f251f98" />
+      </MissingDependency>
+      <MissingDependency>
+        <Required type="connectionreference" displayName="mme_RepairTest_aa5f.connectionreference.052e27202d20repair20.shared_052e27202d20repair20test5f251f98" solution="Active" id.connectionreferencelogicalname="mme_RepairTest_aa5f.connectionreference.052e27202d20repair20.shared_052e27202d20repair20test5f251f98" />
+        <Dependent type="botcomponent_connectionreference" displayName="botcomponentid.schemaname=mme_RepairTest_aa5f.action.05.27RepairTestManagedDevicesSyncDevice,connectionreferenceid.connectionreferencelogicalname=mme_RepairTest_aa5f.connectionreference.052e27202d20repair20.shared_052e27202d20repair20test5f251f98" id.botcomponentid.schemaname="mme_RepairTest_aa5f.action.05.27RepairTestManagedDevicesSyncDevice" id.connectionreferenceid.connectionreferencelogicalname="mme_RepairTest_aa5f.connectionreference.052e27202d20repair20.shared_052e27202d20repair20test5f251f98" />
+      </MissingDependency>
+      <MissingDependency>
+        <Required type="connectionreference" displayName="mme_RepairTest_aa5f.connectionreference.052e27202d20repair20.shared_052e27202d20repair20test5f251f98" solution="Active" id.connectionreferencelogicalname="mme_RepairTest_aa5f.connectionreference.052e27202d20repair20.shared_052e27202d20repair20test5f251f98" />
+        <Dependent type="botcomponent_connectionreference" displayName="botcomponentid.schemaname=mme_RepairTest_aa5f.action.05.27RepairTestManagedDevicesWindowsDefenderScan,connectionreferenceid.connectionreferencelogicalname=mme_RepairTest_aa5f.connectionreference.052e27202d20repair20.shared_052e27202d20repair20test5f251f98" id.botcomponentid.schemaname="mme_RepairTest_aa5f.action.05.27RepairTestManagedDevicesWindowsDefenderScan" id.connectionreferenceid.connectionreferencelogicalname="mme_RepairTest_aa5f.connectionreference.052e27202d20repair20.shared_052e27202d20repair20test5f251f98" />
+      </MissingDependency>
+      <MissingDependency>
+        <Required type="connectionreference" displayName="mme_RepairTest_aa5f.connectionreference.052e27202d20repair20.shared_052e27202d20repair20test5f251f98" solution="Active" id.connectionreferencelogicalname="mme_RepairTest_aa5f.connectionreference.052e27202d20repair20.shared_052e27202d20repair20test5f251f98" />
+        <Dependent type="botcomponent_connectionreference" displayName="botcomponentid.schemaname=mme_RepairTest_aa5f.action.05.27RepairTestManagedDevicesWindowsDefenderUpdateSignatures,connectionreferenceid.connectionreferencelogicalname=mme_RepairTest_aa5f.connectionreference.052e27202d20repair20.shared_052e27202d20repair20test5f251f98" id.botcomponentid.schemaname="mme_RepairTest_aa5f.action.05.27RepairTestManagedDevicesWindowsDefenderUpdateSignatures" id.connectionreferenceid.connectionreferencelogicalname="mme_RepairTest_aa5f.connectionreference.052e27202d20repair20.shared_052e27202d20repair20test5f251f98" />
+      </MissingDependency>
+      <MissingDependency>
+        <Required type="connectionreference" displayName="mme_RepairTest_aa5f.connectionreference.052e27202d20repair20.shared_052e27202d20repair20test5f251f98" solution="Active" id.connectionreferencelogicalname="mme_RepairTest_aa5f.connectionreference.052e27202d20repair20.shared_052e27202d20repair20test5f251f98" />
+        <Dependent type="botcomponent_connectionreference" displayName="botcomponentid.schemaname=mme_RepairTest_aa5f.action.05.27RepairTestManagedDevicesWipe,connectionreferenceid.connectionreferencelogicalname=mme_RepairTest_aa5f.connectionreference.052e27202d20repair20.shared_052e27202d20repair20test5f251f98" id.botcomponentid.schemaname="mme_RepairTest_aa5f.action.05.27RepairTestManagedDevicesWipe" id.connectionreferenceid.connectionreferencelogicalname="mme_RepairTest_aa5f.connectionreference.052e27202d20repair20.shared_052e27202d20repair20test5f251f98" />
+      </MissingDependency>
+      <MissingDependency>
+        <Required type="connectionreference" displayName="mme_RepairTest_aa5f.connectionreference.microsoftlearndocsmc.shared_microsoftlearndocsmcpserver.3739" solution="Active" id.connectionreferencelogicalname="mme_RepairTest_aa5f.connectionreference.microsoftlearndocsmc.shared_microsoftlearndocsmcpserver.3739" />
+        <Dependent type="botcomponent_connectionreference" displayName="botcomponentid.schemaname=mme_RepairTest_aa5f.action.MicrosoftLearnDocsMCP,connectionreferenceid.connectionreferencelogicalname=mme_RepairTest_aa5f.connectionreference.microsoftlearndocsmc.shared_microsoftlearndocsmcpserver.3739" id.botcomponentid.schemaname="mme_RepairTest_aa5f.action.MicrosoftLearnDocsMCP" id.connectionreferenceid.connectionreferencelogicalname="mme_RepairTest_aa5f.connectionreference.microsoftlearndocsmc.shared_microsoftlearndocsmcpserver.3739" />
+      </MissingDependency>
+    </MissingDependencies>
+  </SolutionManifest>
+</ImportExportXml>

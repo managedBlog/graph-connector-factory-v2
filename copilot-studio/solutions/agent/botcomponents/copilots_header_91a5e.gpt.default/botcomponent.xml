@@ -1,7 +1,7 @@
 <botcomponent schemaname="copilots_header_91a5e.gpt.default">
   <componenttype>15</componenttype>
   <iscustomizable>0</iscustomizable>
-  <name>default</name>
+  <name>Microsoft Graph Connector Factory</name>
   <parentbotid>
     <schemaname>copilots_header_91a5e</schemaname>
   </parentbotid>

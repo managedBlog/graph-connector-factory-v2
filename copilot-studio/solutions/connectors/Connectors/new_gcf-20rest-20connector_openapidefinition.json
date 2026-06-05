@@ -196,6 +196,12 @@
                   "type": "string",
                   "x-ms-summary": "Group 3 JSON",
                   "description": "JSON-serialized connector group 3 object. Empty string if fewer than 3 groups."
+                },
+                "runId": {
+                  "type": "string",
+                  "x-ms-summary": "Run ID",
+                  "x-nullable": true,
+                  "description": "Current active run ID for this session context."
                 }
               }
             }
@@ -247,6 +253,12 @@
                   "type": "string",
                   "description": "Inline Swagger JSON string. Use this OR swaggerUrl, not both.",
                   "x-ms-summary": "API Definition",
+                  "x-ms-visibility": "advanced"
+                },
+                "runId": {
+                  "type": "string",
+                  "description": "Optional run ID used for strict isolation.",
+                  "x-ms-summary": "Run ID",
                   "x-ms-visibility": "advanced"
                 }
               }
@@ -455,24 +467,7 @@
         "summary": "List available MCP servers",
         "description": "Returns a curated catalog of Microsoft MCP servers that can be added as tools to a generated agent.",
         "x-ms-visibility": "important",
-        "parameters": [
-          {
-            "name": "category",
-            "in": "query",
-            "required": false,
-            "type": "string",
-            "description": "Filter by category (graph, azure, data, devtools, m365, security).",
-            "x-ms-summary": "Category"
-          },
-          {
-            "name": "stableOnly",
-            "in": "query",
-            "required": false,
-            "type": "string",
-            "description": "If true, only return servers with known stable connector names.",
-            "x-ms-summary": "Stable Only"
-          }
-        ],
+        "parameters": [],
         "responses": {
           "200": {
             "description": "List of MCP servers",
@@ -586,6 +581,144 @@
                 "recKsName3": {
                   "type": "string",
                   "x-ms-summary": "Recommended KS Name 3"
+                },
+                "solutionChoicesJson": {
+                  "type": "string",
+                  "x-ms-summary": "Solution Choices JSON"
+                },
+                "defaultSolutionName": {
+                  "type": "string",
+                  "x-ms-summary": "Default Solution Name"
+                },
+                "solutionListError": {
+                  "type": "string",
+                  "x-ms-summary": "Solution List Error",
+                  "x-nullable": true
+                },
+                "runId": {
+                  "type": "string",
+                  "x-ms-summary": "Run ID",
+                  "x-nullable": true
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/agent/solution/preflight": {
+      "post": {
+        "operationId": "agent_preflightSolutionName",
+        "summary": "Preflight solution name",
+        "description": "Validates a solution unique name and checks whether it already exists in the selected environment.",
+        "x-ms-visibility": "important",
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "type": "object",
+              "required": [
+                "environmentId",
+                "solutionName"
+              ],
+              "properties": {
+                "environmentId": {
+                  "type": "string",
+                  "description": "Power Platform environment ID.",
+                  "x-ms-summary": "Environment ID"
+                },
+                "solutionName": {
+                  "type": "string",
+                  "description": "Candidate solution unique name.",
+                  "x-ms-summary": "Solution Name"
+                }
+              }
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Solution name preflight result",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "originalName": {
+                  "type": "string",
+                  "x-ms-summary": "Original Name"
+                },
+                "normalizedName": {
+                  "type": "string",
+                  "x-ms-summary": "Normalized Name"
+                },
+                "isValid": {
+                  "type": "string",
+                  "x-ms-summary": "Is Valid"
+                },
+                "exists": {
+                  "type": "string",
+                  "x-ms-summary": "Exists"
+                },
+                "message": {
+                  "type": "string",
+                  "x-ms-summary": "Message"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/agent/solution/ensure": {
+      "post": {
+        "operationId": "agent_ensureSolution",
+        "summary": "Ensure solution exists",
+        "description": "Ensures the target solution exists and creates it when missing.",
+        "x-ms-visibility": "important",
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "type": "object",
+              "required": [
+                "environmentId",
+                "solutionName"
+              ],
+              "properties": {
+                "environmentId": {
+                  "type": "string",
+                  "description": "Power Platform environment ID.",
+                  "x-ms-summary": "Environment ID"
+                },
+                "solutionName": {
+                  "type": "string",
+                  "description": "Solution unique name to ensure.",
+                  "x-ms-summary": "Solution Name"
+                }
+              }
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Ensured solution metadata",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "solutionName": {
+                  "type": "string",
+                  "x-ms-summary": "Solution Name"
+                },
+                "created": {
+                  "type": "string",
+                  "x-ms-summary": "Created"
+                },
+                "publisherPrefix": {
+                  "type": "string",
+                  "x-ms-summary": "Publisher Prefix"
                 }
               }
             }
@@ -630,7 +763,7 @@
                 },
                 "solutionName": {
                   "type": "string",
-                  "description": "Target solution (default: GCFApps).",
+                  "description": "Target solution unique name.",
                   "x-ms-summary": "Solution Name"
                 },
                 "mcpServerIds": {
@@ -647,6 +780,12 @@
                   "type": "string",
                   "description": "Custom instructions text.",
                   "x-ms-summary": "Instructions Override"
+                },
+                "runId": {
+                  "type": "string",
+                  "description": "Optional run ID used for strict isolation.",
+                  "x-ms-summary": "Run ID",
+                  "x-ms-visibility": "advanced"
                 }
               }
             }
@@ -706,6 +845,11 @@
                   "type": "string",
                   "x-ms-summary": "Job ID"
                 },
+                "runId": {
+                  "type": "string",
+                  "x-ms-summary": "Run ID",
+                  "x-nullable": true
+                },
                 "status": {
                   "type": "string",
                   "x-ms-summary": "Status"
@@ -733,6 +877,12 @@
           "type": "string",
           "description": "Unique identifier for the deploy job.",
           "x-ms-summary": "Job ID"
+        },
+        "runId": {
+          "type": "string",
+          "description": "Run ID associated with this job when run isolation is used.",
+          "x-ms-summary": "Run ID",
+          "x-nullable": true
         },
         "jobType": {
           "type": "string",
