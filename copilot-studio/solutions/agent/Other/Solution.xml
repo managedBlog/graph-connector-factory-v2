@@ -1,13 +1,13 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
-<ImportExportXml version="9.2.26053.126" SolutionPackageVersion="9.2" languagecode="1033" generatedBy="CrmLive" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" OrganizationVersion="9.2.26053.126" OrganizationSchemaType="Standard" CRMServerServiceabilityVersion="9.2.26054.00132">
+<ImportExportXml version="9.2.26054.132" SolutionPackageVersion="9.2" languagecode="1033" generatedBy="CrmLive" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" OrganizationVersion="9.2.26054.132" OrganizationSchemaType="Standard" CRMServerServiceabilityVersion="9.2.26054.00132">
   <SolutionManifest>
     <UniqueName>GraphConnectorFactoryFull</UniqueName>
     <LocalizedNames>
       <LocalizedName description="Graph Connector Factory - Full" languagecode="1033" />
     </LocalizedNames>
     <Descriptions />
-    <Version>1.0.0.2</Version>
-    <Managed>0</Managed>
+    <Version>1.0.0.5</Version>
+    <Managed>1</Managed>
     <Publisher>
       <UniqueName>ManagedModernEndpoint_demo</UniqueName>
       <LocalizedNames>
@@ -77,7 +77,9 @@
         </Address>
       </Addresses>
     </Publisher>
-    <RootComponents />
+    <RootComponents>
+      <RootComponent type="372" id="{123f2cae-04c0-4c5b-a0f5-9e04677a140e}" schemaName="cr863_5Fmcp-2Dserver-2Dfor-2Denterprise" behavior="0" />
+    </RootComponents>
     <MissingDependencies>
       <MissingDependency>
         <Required type="372" schemaName="new_gcf-20mcp-20agent" displayName="GCF MCP Agent" solution="Active" id="{f1d79e89-1a3f-f111-bec6-70a8a59a4056}" />
@@ -86,6 +88,10 @@
       <MissingDependency>
         <Required type="372" schemaName="new_gcf-20rest-20connector" displayName="GCF REST Connector" solution="Active" id="{dd539b71-323f-f111-bec6-70a8a59a4056}" />
         <Dependent type="connectionreference" displayName="copilots_header_91a5e.shared_new-5fgcf-20rest-20connector-5f251f982b189de9d2.3b64b1b7818145a59f83da81404dde8e" id.connectionreferencelogicalname="copilots_header_91a5e.shared_new-5fgcf-20rest-20connector-5f251f982b189de9d2.3b64b1b7818145a59f83da81404dde8e" />
+      </MissingDependency>
+      <MissingDependency>
+        <Required type="connectionreference" displayName="copilots_header_91a5e.shared_cr863-5fmcp-2dserver-2dfor-2denterprise-5f251f982b189de9d2.ffeabf5ca65a428b9e191d85a199ab84" solution="Active" id.connectionreferencelogicalname="copilots_header_91a5e.shared_cr863-5fmcp-2dserver-2dfor-2denterprise-5f251f982b189de9d2.ffeabf5ca65a428b9e191d85a199ab84" />
+        <Dependent type="botcomponent_connectionreference" displayName="botcomponentid.schemaname=copilots_header_91a5e.action.copilots_header_91a5e.topic.MCP-Server-for-Enterprise,connectionreferenceid.connectionreferencelogicalname=copilots_header_91a5e.shared_cr863-5fmcp-2dserver-2dfor-2denterprise-5f251f982b189de9d2.ffeabf5ca65a428b9e191d85a199ab84" id.botcomponentid.schemaname="copilots_header_91a5e.action.copilots_header_91a5e.topic.MCP-Server-for-Enterprise" id.connectionreferenceid.connectionreferencelogicalname="copilots_header_91a5e.shared_cr863-5fmcp-2dserver-2dfor-2denterprise-5f251f982b189de9d2.ffeabf5ca65a428b9e191d85a199ab84" />
       </MissingDependency>
     </MissingDependencies>
   </SolutionManifest>

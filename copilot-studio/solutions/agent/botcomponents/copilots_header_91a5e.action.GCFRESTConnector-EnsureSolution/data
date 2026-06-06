@@ -1,0 +1,37 @@
+kind: TaskDialog
+modelDisplayName: Ensure Solution
+modelDescription: Creates a solution when it does not exist and returns the resolved unique name.
+inputs:
+  - kind: AutomaticTaskInput
+    propertyName: environmentId
+    name: Environment ID
+    description: Power Platform environment ID
+    isRequired: true
+  - kind: AutomaticTaskInput
+    propertyName: solutionName
+    name: Solution Name
+    description: Solution unique name to ensure
+    isRequired: true
+outputs:
+  - propertyName: solutionName
+  - propertyName: created
+  - propertyName: publisherPrefix
+action:
+  kind: InvokeConnectorTaskAction
+  connectionReference: copilots_header_91a5e.shared_new-5fgcf-20rest-20connector-5f251f982b189de9d2.3b64b1b7818145a59f83da81404dde8e
+  connectionProperties:
+    mode: Invoker
+  operationId: agent_ensureSolution
+  inputType:
+    properties:
+      environmentId:
+        description: Power Platform environment ID
+        displayName: Environment ID
+        isRequired: true
+        type: String
+      solutionName:
+        description: Solution unique name to ensure
+        displayName: Solution Name
+        isRequired: true
+        type: String
+outputMode: All

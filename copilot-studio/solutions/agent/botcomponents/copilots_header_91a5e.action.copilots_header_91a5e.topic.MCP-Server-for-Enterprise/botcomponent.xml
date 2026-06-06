@@ -1,0 +1,10 @@
+<botcomponent schemaname="copilots_header_91a5e.action.copilots_header_91a5e.topic.MCP-Server-for-Enterprise">
+  <componenttype>9</componenttype>
+  <iscustomizable>0</iscustomizable>
+  <name>MCP-Server-for-Enterprise</name>
+  <parentbotid>
+    <schemaname>copilots_header_91a5e</schemaname>
+  </parentbotid>
+  <statecode>0</statecode>
+  <statuscode>1</statuscode>
+</botcomponent>

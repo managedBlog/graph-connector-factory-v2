@@ -2,6 +2,9 @@
   <botcomponent_connectionreference botcomponentid.schemaname="copilots_header_91a5e.action.Computeruse-Computeruse" connectionreferenceid.connectionreferencelogicalname="copilots_header_91a5e.shared_computeroperator.9579692243cc41a08768466803f42469">
     <iscustomizable>1</iscustomizable>
   </botcomponent_connectionreference>
+  <botcomponent_connectionreference botcomponentid.schemaname="copilots_header_91a5e.action.copilots_header_91a5e.topic.MCP-Server-for-Enterprise" connectionreferenceid.connectionreferencelogicalname="copilots_header_91a5e.shared_cr863-5fmcp-2dserver-2dfor-2denterprise-5f251f982b189de9d2.ffeabf5ca65a428b9e191d85a199ab84">
+    <iscustomizable>1</iscustomizable>
+  </botcomponent_connectionreference>
   <botcomponent_connectionreference botcomponentid.schemaname="copilots_header_91a5e.action.GCFMCPAgent-GCFMCPAgent" connectionreferenceid.connectionreferencelogicalname="copilots_header_91a5e.shared_new-5fgcf-20mcp-20agent-5f251f982b189de9d2.935136bad07b42348a21092a8caf5edc">
     <iscustomizable>1</iscustomizable>
   </botcomponent_connectionreference>
@@ -15,6 +18,9 @@
     <iscustomizable>1</iscustomizable>
   </botcomponent_connectionreference>
   <botcomponent_connectionreference botcomponentid.schemaname="copilots_header_91a5e.action.GCFRESTConnector-Deployconnectorpipelineasync" connectionreferenceid.connectionreferencelogicalname="copilots_header_91a5e.shared_new-5fgcf-20rest-20connector-5f251f982b189de9d2.3b64b1b7818145a59f83da81404dde8e">
+    <iscustomizable>1</iscustomizable>
+  </botcomponent_connectionreference>
+  <botcomponent_connectionreference botcomponentid.schemaname="copilots_header_91a5e.action.GCFRESTConnector-EnsureSolution" connectionreferenceid.connectionreferencelogicalname="copilots_header_91a5e.shared_new-5fgcf-20rest-20connector-5f251f982b189de9d2.3b64b1b7818145a59f83da81404dde8e">
     <iscustomizable>1</iscustomizable>
   </botcomponent_connectionreference>
   <botcomponent_connectionreference botcomponentid.schemaname="copilots_header_91a5e.action.GCFRESTConnector-GenerateAgent" connectionreferenceid.connectionreferencelogicalname="copilots_header_91a5e.shared_new-5fgcf-20rest-20connector-5f251f982b189de9d2.3b64b1b7818145a59f83da81404dde8e">
@@ -36,6 +42,9 @@
     <iscustomizable>1</iscustomizable>
   </botcomponent_connectionreference>
   <botcomponent_connectionreference botcomponentid.schemaname="copilots_header_91a5e.action.GCFRESTConnector-Polldeployjobstatus" connectionreferenceid.connectionreferencelogicalname="copilots_header_91a5e.shared_new-5fgcf-20rest-20connector-5f251f982b189de9d2.3b64b1b7818145a59f83da81404dde8e">
+    <iscustomizable>1</iscustomizable>
+  </botcomponent_connectionreference>
+  <botcomponent_connectionreference botcomponentid.schemaname="copilots_header_91a5e.action.GCFRESTConnector-PreflightSolutionName" connectionreferenceid.connectionreferencelogicalname="copilots_header_91a5e.shared_new-5fgcf-20rest-20connector-5f251f982b189de9d2.3b64b1b7818145a59f83da81404dde8e">
     <iscustomizable>1</iscustomizable>
   </botcomponent_connectionreference>
   <botcomponent_connectionreference botcomponentid.schemaname="copilots_header_91a5e.action.MicrosoftLearnDocsMCP-MicrosoftLearnDocsMCPServer" connectionreferenceid.connectionreferencelogicalname="copilots_header_91a5e.shared_microsoftlearndocsmcpserver.6a3f588225184c24a0a321041be01682">

@@ -1,5 +1,5 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
-<ImportExportXml xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" OrganizationVersion="9.2.26053.126" OrganizationSchemaType="Standard" CRMServerServiceabilityVersion="9.2.26054.00132">
+<ImportExportXml xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" OrganizationVersion="9.2.26054.132" OrganizationSchemaType="Standard" CRMServerServiceabilityVersion="9.2.26054.00132">
   <Entities />
   <Roles />
   <Workflows />
@@ -11,6 +11,7 @@
   <optionsets />
   <CustomControls />
   <EntityDataProviders />
+  <Connectors />
   <connectionreferences>
     <connectionreference connectionreferencelogicalname="copilots_header_91a5e.shared_computeroperator.9579692243cc41a08768466803f42469">
       <connectionreferencedisplayname>copilots_header_91a5e.shared_computeroperator.9579692243cc41a08768466803f42469</connectionreferencedisplayname>
