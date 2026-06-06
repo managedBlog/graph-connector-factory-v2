@@ -6,8 +6,8 @@
       <LocalizedName description="Graph Connector Factory - Full" languagecode="1033" />
     </LocalizedNames>
     <Descriptions />
-    <Version>1.0.0.5</Version>
-    <Managed>1</Managed>
+    <Version>1.0.0.6</Version>
+    <Managed>0</Managed>
     <Publisher>
       <UniqueName>ManagedModernEndpoint_demo</UniqueName>
       <LocalizedNames>
