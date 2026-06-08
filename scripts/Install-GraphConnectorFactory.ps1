@@ -90,11 +90,29 @@ $FIC_CONNECTOR_SCHEMAS = @(
     @{ SchemaName = 'cr863_5Fmcp-2Dserver-2Dfor-2Denterprise'; DisplayName = 'MCP-Server-for-Enterprise'; IsEnterprise = $true }
 )
 
-$AGENT_CONNECTOR_INTERNAL_IDS = [ordered]@{
-    'shared_new-5fgcf-20rest-20connector-5f251f982b189de9d2' = 'GCF REST Connector'
-    'shared_new-5fgcf-20mcp-20agent-5f251f982b189de9d2'      = 'GCF MCP Agent'
-    'shared_cr863-5fmcp-2dserver-2dfor-2denterprise-5f251f982b189de9d2' = 'MCP-Server-for-Enterprise'
-}
+$AGENT_CONNECTOR_TARGETS = @(
+    @{
+        Key = 'rest'
+        DisplayName = 'GCF REST Connector'
+        SchemaName = 'new_gcf-20rest-20connector'
+        ConnectorIdPrefix = '/providers/Microsoft.PowerApps/apis/shared_new-5fgcf-20rest-20connector'
+        IsEnterprise = $false
+    },
+    @{
+        Key = 'mcpAgent'
+        DisplayName = 'GCF MCP Agent'
+        SchemaName = 'new_gcf-20mcp-20agent'
+        ConnectorIdPrefix = '/providers/Microsoft.PowerApps/apis/shared_new-5fgcf-20mcp-20agent'
+        IsEnterprise = $false
+    },
+    @{
+        Key = 'enterprise'
+        DisplayName = 'MCP-Server-for-Enterprise'
+        SchemaName = 'cr863_5Fmcp-2Dserver-2Dfor-2Denterprise'
+        ConnectorIdPrefix = '/providers/Microsoft.PowerApps/apis/shared_cr863-5fmcp-2dserver-2dfor-2denterprise'
+        IsEnterprise = $true
+    }
+)
 
 # ─────────────────────────────────────────────────────────────────
 # Helper functions
@@ -220,28 +238,22 @@ function Get-AgentConnectorGuidMap {
         [switch] $SkipEnterprise
     )
 
-    $targets = [ordered]@{
-        'shared_new-5fgcf-20rest-20connector-5f251f982b189de9d2' = $AGENT_CONNECTOR_INTERNAL_IDS['shared_new-5fgcf-20rest-20connector-5f251f982b189de9d2']
-        'shared_new-5fgcf-20mcp-20agent-5f251f982b189de9d2'      = $AGENT_CONNECTOR_INTERNAL_IDS['shared_new-5fgcf-20mcp-20agent-5f251f982b189de9d2']
-    }
-    if (-not $SkipEnterprise) {
-        $targets['shared_cr863-5fmcp-2dserver-2dfor-2denterprise-5f251f982b189de9d2'] = $AGENT_CONNECTOR_INTERNAL_IDS['shared_cr863-5fmcp-2dserver-2dfor-2denterprise-5f251f982b189de9d2']
-    }
-
-    $filter = ($targets.Keys | ForEach-Object { "connectorinternalid eq '$($_)'" }) -join ' or '
-    $url = "$DataverseUrl/api/data/v9.2/connectors?`$select=connectorid,connectorinternalid,statecode,statuscode,modifiedon,createdon&`$filter=$filter&`$orderby=modifiedon desc&`$top=200"
+    $targets = @($AGENT_CONNECTOR_TARGETS | Where-Object { -not ($SkipEnterprise -and $_.IsEnterprise) })
+    $filter = ($targets | ForEach-Object { "name eq '$($_.SchemaName)'" }) -join ' or '
+    $url = "$DataverseUrl/api/data/v9.2/connectors?`$select=connectorid,connectorinternalid,name,statecode,statuscode,modifiedon,createdon&`$filter=$filter&`$orderby=modifiedon desc&`$top=200"
     $response = Invoke-RestMethod -Method Get -Uri $url -Headers $Headers
     $rows = @($response.value)
 
     if ($rows.Count -eq 0) {
-        throw 'No matching custom connector records were returned from Dataverse.'
+        $targetNames = ($targets | ForEach-Object { $_.SchemaName }) -join ', '
+        throw "No matching custom connector records were returned from Dataverse for schemas: $targetNames"
     }
 
     $map = @{}
-    foreach ($internalId in $targets.Keys) {
-        $matches = @($rows | Where-Object { $_.connectorinternalid -eq $internalId })
+    foreach ($target in $targets) {
+        $matches = @($rows | Where-Object { $_.name -eq $target.SchemaName })
         if ($matches.Count -eq 0) {
-            throw "Required connector '$($targets[$internalId])' ($internalId) not found in Dataverse. Ensure Stage 6 connector import has completed."
+            throw "Required connector '$($target.DisplayName)' (schema '$($target.SchemaName)') not found in Dataverse. Ensure Stage 6 connector import has completed."
         }
 
         $active = @($matches | Where-Object { $_.statecode -eq 0 -and $_.statuscode -eq 1 })
@@ -249,11 +261,17 @@ function Get-AgentConnectorGuidMap {
         $selected = $candidates | Sort-Object -Property @{ Expression = 'modifiedon'; Descending = $true }, @{ Expression = 'connectorid'; Descending = $false } | Select-Object -First 1
 
         if ($matches.Count -gt 1) {
-            Write-Warning "Multiple Dataverse connector rows found for '$($targets[$internalId])' ($internalId). Selecting newest by modifiedon: $($selected.connectorid)"
+            Write-Warning "Multiple Dataverse connector rows found for '$($target.DisplayName)' (schema '$($target.SchemaName)'). Selecting newest by modifiedon: $($selected.connectorid)"
         }
 
-        $map[$internalId] = [string] $selected.connectorid
-        Write-Success "Resolved $($targets[$internalId]) connector GUID: $($map[$internalId])"
+        $map[$target.Key] = @{
+            DisplayName = $target.DisplayName
+            SchemaName = $target.SchemaName
+            ConnectorGuid = [string]$selected.connectorid
+            ConnectorInternalId = [string]$selected.connectorinternalid
+            ConnectorIdPrefix = $target.ConnectorIdPrefix
+        }
+        Write-Success "Resolved $($target.DisplayName) connector GUID: $($map[$target.Key].ConnectorGuid)"
     }
 
     return $map
@@ -272,68 +290,65 @@ function Patch-AgentCustomizationsConnectorIds {
         throw "No connectionreferences were found in '$CustomizationsPath'."
     }
 
+    $targets = @($AGENT_CONNECTOR_TARGETS | Where-Object { -not ($SkipEnterprise -and $_.IsEnterprise) })
     $patched = 0
-    foreach ($connectionReference in $connectionReferences) {
-        $connectorPath = [string]$connectionReference.connectorid
-        if ([string]::IsNullOrWhiteSpace($connectorPath)) { continue }
-        if ($connectorPath -notlike '/providers/Microsoft.PowerApps/apis/*') { continue }
+    foreach ($target in $targets) {
+         if (-not $ConnectorGuidMap.ContainsKey($target.Key)) {
+             throw "Connector mapping for '$($target.DisplayName)' is missing."
+         }
+         $targetGuid = [string]$ConnectorGuidMap[$target.Key].ConnectorGuid
+         if ([string]::IsNullOrWhiteSpace($targetGuid)) {
+             throw "Resolved GUID for '$($target.DisplayName)' is empty."
+         }
 
-        $internalId = $connectorPath.Substring('/providers/Microsoft.PowerApps/apis/'.Length)
-        if (-not $ConnectorGuidMap.ContainsKey($internalId)) { continue }
+         $ref = @(
+             $connectionReferences | Where-Object {
+                 ([string]$_.connectorid).StartsWith($target.ConnectorIdPrefix, [System.StringComparison]::OrdinalIgnoreCase)
+             }
+         ) | Select-Object -First 1
+         if (-not $ref) {
+             throw "Required connectionreference for '$($target.DisplayName)' (prefix '$($target.ConnectorIdPrefix)') was not found in customizations.xml."
+         }
 
-        $targetGuid = [string]$ConnectorGuidMap[$internalId]
-        if ([string]::IsNullOrWhiteSpace($targetGuid)) {
-            throw "Resolved GUID for '$internalId' is empty."
-        }
+         if (-not $ref.customconnectorid) {
+             $customConnectorNode = $cust.CreateElement('customconnectorid')
+             $connectorIdNode = $cust.CreateElement('connectorid')
+             $connectorIdNode.InnerText = $targetGuid
+             $customConnectorNode.AppendChild($connectorIdNode) | Out-Null
+             $ref.AppendChild($customConnectorNode) | Out-Null
+             $patched++
+             continue
+         }
 
-        if (-not $connectionReference.customconnectorid) {
-            $customConnectorNode = $cust.CreateElement('customconnectorid')
-            $connectorIdNode = $cust.CreateElement('connectorid')
-            $connectorIdNode.InnerText = $targetGuid
-            $customConnectorNode.AppendChild($connectorIdNode) | Out-Null
-            $connectionReference.AppendChild($customConnectorNode) | Out-Null
-            $patched++
-            continue
-        }
+         if (-not $ref.customconnectorid.connectorid) {
+             $connectorIdNode = $cust.CreateElement('connectorid')
+             $connectorIdNode.InnerText = $targetGuid
+             $ref.customconnectorid.AppendChild($connectorIdNode) | Out-Null
+             $patched++
+             continue
+         }
 
-        if (-not $connectionReference.customconnectorid.connectorid) {
-            $connectorIdNode = $cust.CreateElement('connectorid')
-            $connectorIdNode.InnerText = $targetGuid
-            $connectionReference.customconnectorid.AppendChild($connectorIdNode) | Out-Null
-            $patched++
-            continue
-        }
-
-        $currentGuid = [string]$connectionReference.customconnectorid.connectorid
-        if ($currentGuid -ne $targetGuid) {
-            $connectionReference.customconnectorid.connectorid = $targetGuid
-            $patched++
-        }
+         $currentGuid = [string]$ref.customconnectorid.connectorid
+         if ($currentGuid -ne $targetGuid) {
+             $ref.customconnectorid.connectorid = $targetGuid
+             $patched++
+         }
     }
 
-    $requiredInternalIds = @(
-        'shared_new-5fgcf-20rest-20connector-5f251f982b189de9d2',
-        'shared_new-5fgcf-20mcp-20agent-5f251f982b189de9d2'
-    )
-    if (-not $SkipEnterprise) {
-        $requiredInternalIds += 'shared_cr863-5fmcp-2dserver-2dfor-2denterprise-5f251f982b189de9d2'
-    }
-
-    foreach ($internalId in $requiredInternalIds) {
-        $connectorPath = "/providers/Microsoft.PowerApps/apis/$internalId"
-        $ref = @($connectionReferences | Where-Object { [string]$_.connectorid -eq $connectorPath }) | Select-Object -First 1
-        if (-not $ref) {
-            throw "Required connectionreference for '$internalId' was not found in customizations.xml."
-        }
-
-        $expectedGuid = [string]$ConnectorGuidMap[$internalId]
-        $actualGuid = [string]$ref.customconnectorid.connectorid
-        if ([string]::IsNullOrWhiteSpace($actualGuid)) {
-            throw "Connectionreference for '$internalId' has no customconnectorid after patching."
-        }
-        if ($actualGuid -ne $expectedGuid) {
-            throw "Connectionreference for '$internalId' has customconnectorid '$actualGuid' but expected '$expectedGuid'."
-        }
+    foreach ($target in $targets) {
+         $targetGuid = [string]$ConnectorGuidMap[$target.Key].ConnectorGuid
+         $ref = @(
+             $connectionReferences | Where-Object {
+                 ([string]$_.connectorid).StartsWith($target.ConnectorIdPrefix, [System.StringComparison]::OrdinalIgnoreCase)
+             }
+         ) | Select-Object -First 1
+         $actualGuid = if ($ref -and $ref.customconnectorid) { [string]$ref.customconnectorid.connectorid } else { '' }
+         if ([string]::IsNullOrWhiteSpace($actualGuid)) {
+             throw "Connectionreference for '$($target.DisplayName)' has no customconnectorid after patching."
+         }
+         if ($actualGuid -ne $targetGuid) {
+             throw "Connectionreference for '$($target.DisplayName)' has customconnectorid '$actualGuid' but expected '$targetGuid'."
+         }
     }
 
     $cust.Save($CustomizationsPath)
