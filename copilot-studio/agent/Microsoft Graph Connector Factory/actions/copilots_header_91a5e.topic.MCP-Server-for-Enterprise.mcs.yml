@@ -3,7 +3,7 @@ modelDisplayName: MCP-Server-for-Enterprise
 modelDescription: A Model Context Protocol (MCP) server that enables AI assistants to securely interact with Microsoft Graph API for enterprise identity and access management operations.
 action:
   kind: InvokeExternalAgentTaskAction
-  connectionReference: copilots_header_91a5e.shared_cr863-5fmcp-2dserver-2dfor-2denterprise-5f251f982b189de9d2.ffeabf5ca65a428b9e191d85a199ab84
+  connectionReference: copilots_header_91a5e.shared_cr863-5fmcp-2dserver-2dfor-2denterprise-5f251f982b189de9d2.105c2a1849244680af6f2d89b454e956
   connectionProperties:
     mode: Invoker
 

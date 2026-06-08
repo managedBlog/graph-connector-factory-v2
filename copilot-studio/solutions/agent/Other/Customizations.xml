@@ -21,6 +21,14 @@
       <statecode>0</statecode>
       <statuscode>1</statuscode>
     </connectionreference>
+    <connectionreference connectionreferencelogicalname="copilots_header_91a5e.shared_cr863-5fmcp-2dserver-2dfor-2denterprise-5f251f982b189de9d2.105c2a1849244680af6f2d89b454e956">
+      <connectionreferencedisplayname>copilots_header_91a5e.shared_cr863-5fmcp-2dserver-2dfor-2denterprise-5f251f982b189de9d2.105c2a1849244680af6f2d89b454e956</connectionreferencedisplayname>
+      <connectorid>/providers/Microsoft.PowerApps/apis/shared_cr863-5fmcp-2dserver-2dfor-2denterprise-5f251f982b189de9d2</connectorid>
+      <iscustomizable>0</iscustomizable>
+      <promptingbehavior>0</promptingbehavior>
+      <statecode>0</statecode>
+      <statuscode>1</statuscode>
+    </connectionreference>
     <connectionreference connectionreferencelogicalname="copilots_header_91a5e.shared_microsoftlearndocsmcpserver.6a3f588225184c24a0a321041be01682">
       <connectionreferencedisplayname>copilots_header_91a5e.shared_microsoftlearndocsmcpserver.6a3f588225184c24a0a321041be01682</connectionreferencedisplayname>
       <connectorid>/providers/Microsoft.PowerApps/apis/shared_microsoftlearndocsmcpserver</connectorid>
