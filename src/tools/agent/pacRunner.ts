@@ -346,13 +346,11 @@ export async function ensureSolutionExists(
   const orgUrl = await resolveOrgUrl(environmentId);
   const token = await getDataverseToken(orgUrl);
 
-  // Prefer the same publisher used by GCFApps when available.
-  const readGcfAppsPublisherUri =
-    `${orgUrl}/api/data/v9.2/solutions?` +
-    `$filter=uniquename eq 'GCFApps'&` +
-    `$select=solutionid&` +
-    `$expand=publisherid($select=publisherid,customizationprefix,uniquename)&$top=1`;
-  const gcfResp = await fetch(readGcfAppsPublisherUri, {
+  const defaultPublisherUri =
+    `${orgUrl}/api/data/v9.2/publishers?` +
+    `$select=publisherid,customizationprefix,uniquename&` +
+    `$filter=isdefaultpublisher eq true&$top=1`;
+  const publisherResp = await fetch(defaultPublisherUri, {
     headers: {
       Authorization: `Bearer ${token}`,
       "OData-MaxVersion": "4.0",
@@ -360,52 +358,23 @@ export async function ensureSolutionExists(
       Accept: "application/json",
     },
   });
-  if (!gcfResp.ok) {
-    const errText = await gcfResp.text();
-    throw new Error(`Failed to resolve publisher from GCFApps: ${gcfResp.status} ${errText}`);
+  if (!publisherResp.ok) {
+    const errText = await publisherResp.text();
+    throw new Error(`Failed to query default publisher: ${publisherResp.status} ${errText}`);
   }
-  const gcfJson = (await gcfResp.json()) as {
+  const publisherJson = (await publisherResp.json()) as {
     value?: Array<{
-      publisherid?: {
-        publisherid?: string;
-        customizationprefix?: string;
-      };
+      publisherid?: string;
+      customizationprefix?: string;
     }>;
   };
-  let publisherId = gcfJson.value?.[0]?.publisherid?.publisherid;
-  let publisherPrefix = gcfJson.value?.[0]?.publisherid?.customizationprefix;
-
-  // Fallback to default publisher if GCFApps is unavailable.
-  if (!publisherId) {
-    const fallbackPublisherUri =
-      `${orgUrl}/api/data/v9.2/publishers?` +
-      `$select=publisherid,customizationprefix,uniquename&` +
-      `$filter=uniquename eq 'DefaultPublisher'&$top=1`;
-    const publisherResp = await fetch(fallbackPublisherUri, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "OData-MaxVersion": "4.0",
-        "OData-Version": "4.0",
-        Accept: "application/json",
-      },
-    });
-    if (!publisherResp.ok) {
-      const errText = await publisherResp.text();
-      throw new Error(`Failed to query default publisher: ${publisherResp.status} ${errText}`);
-    }
-    const publisherJson = (await publisherResp.json()) as {
-      value?: Array<{
-        publisherid?: string;
-        customizationprefix?: string;
-      }>;
-    };
-    publisherId = publisherJson.value?.[0]?.publisherid;
-    publisherPrefix = publisherJson.value?.[0]?.customizationprefix;
-  }
+  const publisherId = publisherJson.value?.[0]?.publisherid;
+  const publisherPrefix = publisherJson.value?.[0]?.customizationprefix;
 
   if (!publisherId) {
-    throw new Error(`Could not resolve a publisher to create solution "${solutionName}".`);
+    throw new Error(`Could not resolve the default publisher to create solution "${solutionName}".`);
   }
+  log(`[PAC] Resolved default publisher for "${normalizedName}" (prefix "${publisherPrefix || "mme"}")`);
 
   const createResp = await fetch(`${orgUrl}/api/data/v9.2/solutions`, {
     method: "POST",
