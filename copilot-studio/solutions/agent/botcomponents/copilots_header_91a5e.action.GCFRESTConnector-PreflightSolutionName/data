@@ -1,0 +1,39 @@
+kind: TaskDialog
+modelDisplayName: Preflight Solution Name
+modelDescription: Validates a solution unique name and checks whether it already exists in the selected environment.
+inputs:
+  - kind: AutomaticTaskInput
+    propertyName: environmentId
+    name: Environment ID
+    description: Power Platform environment ID
+    isRequired: true
+  - kind: AutomaticTaskInput
+    propertyName: solutionName
+    name: Solution Name
+    description: Candidate solution unique name
+    isRequired: true
+outputs:
+  - propertyName: originalName
+  - propertyName: normalizedName
+  - propertyName: isValid
+  - propertyName: exists
+  - propertyName: message
+action:
+  kind: InvokeConnectorTaskAction
+  connectionReference: copilots_header_91a5e.shared_new-5fgcf-20rest-20connector-5f251f982b189de9d2.3b64b1b7818145a59f83da81404dde8e
+  connectionProperties:
+    mode: Invoker
+  operationId: agent_preflightSolutionName
+  inputType:
+    properties:
+      environmentId:
+        description: Power Platform environment ID
+        displayName: Environment ID
+        isRequired: true
+        type: String
+      solutionName:
+        description: Candidate solution unique name
+        displayName: Solution Name
+        isRequired: true
+        type: String
+outputMode: All

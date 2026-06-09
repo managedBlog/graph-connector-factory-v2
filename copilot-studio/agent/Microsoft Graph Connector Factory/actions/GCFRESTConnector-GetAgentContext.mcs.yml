@@ -1,0 +1,31 @@
+mcs.metadata:
+  componentName: GCF REST Connector - Get Agent Context
+kind: TaskDialog
+modelDisplayName: Get Agent Context
+modelDescription: Returns the current agent factory context including deployed connectors, agent design decisions made during research, and design context. Used by the AgentFactory topic to pre-populate the composition card.
+outputs:
+  - propertyName: agentName
+  - propertyName: agentPurpose
+  - propertyName: deployedConnectorCount
+  - propertyName: hasDeployedConnectors
+  - propertyName: deployedConnectorsJson
+  - propertyName: connectorSummariesJson
+  - propertyName: recommendedMcpServers
+  - propertyName: recommendedKnowledgeSourcesJson
+  - propertyName: recKsUrl1
+  - propertyName: recKsUrl2
+  - propertyName: recKsUrl3
+  - propertyName: recKsName1
+  - propertyName: recKsName2
+  - propertyName: recKsName3
+  - propertyName: solutionChoicesJson
+  - propertyName: defaultSolutionName
+  - propertyName: solutionListError
+  - propertyName: runId
+action:
+  kind: InvokeConnectorTaskAction
+  connectionReference: copilots_header_91a5e.shared_new-5fgcf-20rest-20connector-5f251f982b189de9d2.3b64b1b7818145a59f83da81404dde8e
+  connectionProperties:
+    mode: Invoker
+  operationId: agent_getContext
+outputMode: All

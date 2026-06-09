@@ -1,3 +1,5 @@
+mcs.metadata:
+  componentName: Signin
 kind: AdaptiveDialog
 beginDialog:
   kind: OnSignIn

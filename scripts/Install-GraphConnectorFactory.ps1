@@ -11,8 +11,8 @@
       4. Config     — Generate config/config.json from template + values.
       5. Artifacts  — Token-replace connector solution files, pack .zip files.
       6. Connectors — Import connector solution via pac solution import.
-      7. FIC        — Discover auto-generated FIC Subjects, add FICs + redirect URIs.
-      8. Agent      — Import agent solution via pac solution import.
+      7. FIC        — Ensure Dataverse app-user membership, discover FIC Subjects, add FICs + redirect URIs.
+      8. Agent      — Resolve tenant connector IDs, patch agent solution, import via pac.
       All          — Run stages 1–8 sequentially.
 
     Architecture: two-app pattern (API app + Client app), optional enterprise app,
@@ -70,7 +70,7 @@ param(
 
     # --- Behaviour ---
     [ValidateSet('ClientSecret', 'Certificate-OpenSSL', 'Certificate-SelfSigned')]
-    [string] $AuthMethod = 'ClientSecret',
+    [string] $AuthMethod = 'Certificate-SelfSigned',
     [switch] $NonInteractive
 )
 
@@ -88,6 +88,30 @@ $FIC_CONNECTOR_SCHEMAS = @(
     @{ SchemaName = 'new_gcf-20rest-20connector'; DisplayName = 'GCF REST Connector'; IsEnterprise = $false },
     @{ SchemaName = 'new_gcf-20mcp-20agent';     DisplayName = 'GCF MCP Agent';       IsEnterprise = $false },
     @{ SchemaName = 'cr863_5Fmcp-2Dserver-2Dfor-2Denterprise'; DisplayName = 'MCP-Server-for-Enterprise'; IsEnterprise = $true }
+)
+
+$AGENT_CONNECTOR_TARGETS = @(
+    @{
+        Key = 'rest'
+        DisplayName = 'GCF REST Connector'
+        SchemaName = 'new_gcf-20rest-20connector'
+        ConnectorIdPrefix = '/providers/Microsoft.PowerApps/apis/shared_new-5fgcf-20rest-20connector'
+        IsEnterprise = $false
+    },
+    @{
+        Key = 'mcpAgent'
+        DisplayName = 'GCF MCP Agent'
+        SchemaName = 'new_gcf-20mcp-20agent'
+        ConnectorIdPrefix = '/providers/Microsoft.PowerApps/apis/shared_new-5fgcf-20mcp-20agent'
+        IsEnterprise = $false
+    },
+    @{
+        Key = 'enterprise'
+        DisplayName = 'MCP-Server-for-Enterprise'
+        SchemaName = 'cr863_5Fmcp-2Dserver-2Dfor-2Denterprise'
+        ConnectorIdPrefix = '/providers/Microsoft.PowerApps/apis/shared_cr863-5fmcp-2dserver-2dfor-2denterprise'
+        IsEnterprise = $true
+    }
 )
 
 # ─────────────────────────────────────────────────────────────────
@@ -150,6 +174,211 @@ function Normalize-ServerHost {
     # Strip any trailing path segments (e.g. /api)
     $HostValue = ($HostValue -split '/')[0]
     return $HostValue
+}
+
+function Ensure-DataverseApiAppUser {
+    param(
+        [Parameter(Mandatory)] [string] $TargetEnvironmentId,
+        [Parameter(Mandatory)] [string] $ApiApplicationId,
+        [string] $RoleName = 'System Administrator'
+    )
+
+    Write-Step "Ensuring Dataverse application user role ('$RoleName') for API app…"
+    $assignOutput = & pac admin assign-user `
+        --environment $TargetEnvironmentId `
+        --user $ApiApplicationId `
+        --role $RoleName `
+        --application-user 2>&1
+    $assignText = ($assignOutput | ForEach-Object { "$_" }) -join "`n"
+
+    if ($LASTEXITCODE -ne 0) {
+        if ($assignText -match '(?i)(already|exists|associated|is assigned|has role)') {
+            Write-Success "Dataverse application user already assigned role '$RoleName'"
+            return
+        }
+        throw "Failed to assign Dataverse application user role '$RoleName' for API app $ApiApplicationId in environment $TargetEnvironmentId.`nCommand: pac admin assign-user --environment $TargetEnvironmentId --user $ApiApplicationId --role `"$RoleName`" --application-user`nOutput: $assignText"
+    }
+
+    Write-Success "Dataverse application user assigned role '$RoleName'"
+}
+
+function Resolve-OrgUrlFromPac {
+    param([Parameter(Mandatory)] [string] $TargetEnvironmentId)
+
+    $envList = pac env list
+    $line = $envList | Where-Object { $_ -match [regex]::Escape($TargetEnvironmentId) } | Select-Object -First 1
+    if (-not $line) {
+        throw "Could not find environment '$TargetEnvironmentId' in 'pac env list' output."
+    }
+
+    $match = [regex]::Match($line, 'https://\S+\.crm\.dynamics\.com/')
+    if (-not $match.Success) {
+        throw "Could not parse Dataverse URL from line: $line"
+    }
+
+    return $match.Value.TrimEnd('/')
+}
+
+function Get-DataverseAccessToken {
+    param([Parameter(Mandatory)] [string] $Resource)
+
+    $token = az account get-access-token --resource $Resource --query accessToken -o tsv
+    if (-not $token) {
+        throw "Failed to acquire Dataverse access token via Azure CLI."
+    }
+    return $token
+}
+
+function Resolve-FirstExistingPath {
+    param(
+        [Parameter(Mandatory)] [string[]] $Candidates,
+        [Parameter(Mandatory)] [string] $Description
+    )
+
+    $resolved = $Candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+    if (-not $resolved) {
+        throw "$Description not found. Checked: $($Candidates -join ', ')"
+    }
+    return $resolved
+}
+
+function Assert-ZipHasRootSolutionXml {
+    param([Parameter(Mandatory)] [string] $ZipPath)
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    $zip = [System.IO.Compression.ZipFile]::OpenRead($ZipPath)
+    try {
+        $hasRootSolution = $zip.Entries | Where-Object { $_.FullName -eq 'solution.xml' } | Select-Object -First 1
+        if (-not $hasRootSolution) {
+            throw "Packed zip is missing root solution.xml: $ZipPath"
+        }
+    }
+    finally {
+        $zip.Dispose()
+    }
+}
+
+function Get-AgentConnectorGuidMap {
+    param(
+        [Parameter(Mandatory)] [string] $DataverseUrl,
+        [Parameter(Mandatory)] [hashtable] $Headers,
+        [switch] $SkipEnterprise
+    )
+
+    $targets = @($AGENT_CONNECTOR_TARGETS | Where-Object { -not ($SkipEnterprise -and $_.IsEnterprise) })
+    $filter = ($targets | ForEach-Object { "name eq '$($_.SchemaName)'" }) -join ' or '
+    $url = "$DataverseUrl/api/data/v9.2/connectors?`$select=connectorid,connectorinternalid,name,statecode,statuscode,modifiedon,createdon&`$filter=$filter&`$orderby=modifiedon desc&`$top=200"
+    $response = Invoke-RestMethod -Method Get -Uri $url -Headers $Headers
+    $rows = @($response.value)
+
+    if ($rows.Count -eq 0) {
+        $targetNames = ($targets | ForEach-Object { $_.SchemaName }) -join ', '
+        throw "No matching custom connector records were returned from Dataverse for schemas: $targetNames"
+    }
+
+    $map = @{}
+    foreach ($target in $targets) {
+        $matches = @($rows | Where-Object { $_.name -eq $target.SchemaName })
+        if ($matches.Count -eq 0) {
+            throw "Required connector '$($target.DisplayName)' (schema '$($target.SchemaName)') not found in Dataverse. Ensure Stage 6 connector import has completed."
+        }
+
+        $active = @($matches | Where-Object { $_.statecode -eq 0 -and $_.statuscode -eq 1 })
+        $candidates = if ($active.Count -gt 0) { $active } else { $matches }
+        $selected = $candidates | Sort-Object -Property @{ Expression = 'modifiedon'; Descending = $true }, @{ Expression = 'connectorid'; Descending = $false } | Select-Object -First 1
+
+        if ($matches.Count -gt 1) {
+            Write-Warning "Multiple Dataverse connector rows found for '$($target.DisplayName)' (schema '$($target.SchemaName)'). Selecting newest by modifiedon: $($selected.connectorid)"
+        }
+
+        $map[$target.Key] = @{
+            DisplayName = $target.DisplayName
+            SchemaName = $target.SchemaName
+            ConnectorGuid = [string]$selected.connectorid
+            ConnectorInternalId = [string]$selected.connectorinternalid
+            ConnectorIdPrefix = $target.ConnectorIdPrefix
+        }
+        Write-Success "Resolved $($target.DisplayName) connector GUID: $($map[$target.Key].ConnectorGuid)"
+    }
+
+    return $map
+}
+
+function Patch-AgentCustomizationsConnectorIds {
+    param(
+        [Parameter(Mandatory)] [string] $CustomizationsPath,
+        [Parameter(Mandatory)] [hashtable] $ConnectorGuidMap,
+        [switch] $SkipEnterprise
+    )
+
+    [xml]$cust = Get-Content $CustomizationsPath -Raw
+    $connectionReferences = @($cust.ImportExportXml.connectionreferences.connectionreference)
+    if ($connectionReferences.Count -eq 0) {
+        throw "No connectionreferences were found in '$CustomizationsPath'."
+    }
+
+    $targets = @($AGENT_CONNECTOR_TARGETS | Where-Object { -not ($SkipEnterprise -and $_.IsEnterprise) })
+    $patched = 0
+    foreach ($target in $targets) {
+         if (-not $ConnectorGuidMap.ContainsKey($target.Key)) {
+             throw "Connector mapping for '$($target.DisplayName)' is missing."
+         }
+         $targetGuid = [string]$ConnectorGuidMap[$target.Key].ConnectorGuid
+         if ([string]::IsNullOrWhiteSpace($targetGuid)) {
+             throw "Resolved GUID for '$($target.DisplayName)' is empty."
+         }
+
+         $ref = @(
+             $connectionReferences | Where-Object {
+                 ([string]$_.connectorid).StartsWith($target.ConnectorIdPrefix, [System.StringComparison]::OrdinalIgnoreCase)
+             }
+         ) | Select-Object -First 1
+         if (-not $ref) {
+             throw "Required connectionreference for '$($target.DisplayName)' (prefix '$($target.ConnectorIdPrefix)') was not found in customizations.xml."
+         }
+
+         if (-not $ref.customconnectorid) {
+             $customConnectorNode = $cust.CreateElement('customconnectorid')
+             $connectorIdNode = $cust.CreateElement('connectorid')
+             $connectorIdNode.InnerText = $targetGuid
+             $customConnectorNode.AppendChild($connectorIdNode) | Out-Null
+             $ref.AppendChild($customConnectorNode) | Out-Null
+             $patched++
+             continue
+         }
+
+         if (-not $ref.customconnectorid.connectorid) {
+             $connectorIdNode = $cust.CreateElement('connectorid')
+             $connectorIdNode.InnerText = $targetGuid
+             $ref.customconnectorid.AppendChild($connectorIdNode) | Out-Null
+             $patched++
+             continue
+         }
+
+         $currentGuid = [string]$ref.customconnectorid.connectorid
+         if ($currentGuid -ne $targetGuid) {
+             $ref.customconnectorid.connectorid = $targetGuid
+             $patched++
+         }
+    }
+
+    foreach ($target in $targets) {
+         $targetGuid = [string]$ConnectorGuidMap[$target.Key].ConnectorGuid
+         $ref = @(
+             $connectionReferences | Where-Object {
+                 ([string]$_.connectorid).StartsWith($target.ConnectorIdPrefix, [System.StringComparison]::OrdinalIgnoreCase)
+             }
+         ) | Select-Object -First 1
+         $actualGuid = if ($ref -and $ref.customconnectorid) { [string]$ref.customconnectorid.connectorid } else { '' }
+         if ([string]::IsNullOrWhiteSpace($actualGuid)) {
+             throw "Connectionreference for '$($target.DisplayName)' has no customconnectorid after patching."
+         }
+         if ($actualGuid -ne $targetGuid) {
+             throw "Connectionreference for '$($target.DisplayName)' has customconnectorid '$actualGuid' but expected '$targetGuid'."
+         }
+    }
+
+    $cust.Save($CustomizationsPath)
+    return $patched
 }
 
 function Invoke-AzCli {
@@ -218,7 +447,7 @@ function Invoke-StagePlan {
   Stage 6  Connectors  — Import connector solution via pac solution import.
   Stage 7  FIC         — Discover auto-generated FIC Subjects on connectors,
                          add Federated Identity Credentials + redirect URIs.
-  Stage 8  Agent       — Import agent solution via pac solution import.
+  Stage 8  Agent       — Resolve tenant connector GUIDs, patch agent zip, import.
 
   CRITICAL ORDERING: Connectors (6) → FIC (7) → Agent (8).
   FIC must run AFTER connectors (to read auto-generated Subject)
@@ -369,7 +598,6 @@ function Invoke-StageEntra {
     $graphAppId = '00000003-0000-0000-c000-000000000000'
     $appReadWriteAllId   = '1bfefb4e-e0b5-418b-a88f-73c46d2cc8e9'  # Application.ReadWrite.All (Application)
     $appRoleAssignRWId   = '06b708a9-e830-4db3-a914-8e69da51d44f'  # AppRoleAssignment.ReadWrite.All (Application)
-    $delegPermGrantRWId  = '8e8e4742-1d2d-4e1b-8804-dc7c4b0f0d2c'  # DelegatedPermissionGrant.ReadWrite.All (Application)
 
     # ── API App ──────────────────────────────────────────────────
     Write-Step 'Creating API app "Graph Connector Factory"…'
@@ -443,8 +671,8 @@ function Invoke-StageEntra {
     Write-Step 'Adding Graph API permissions…'
     Invoke-AzCli @('ad', 'app', 'permission', 'add', '--id', $apiAppId,
         '--api', $graphAppId,
-        '--api-permissions', "$appReadWriteAllId=Role", "$appRoleAssignRWId=Role", "$delegPermGrantRWId=Role") | Out-Null
-    Write-Success 'Graph API permissions added (Application.ReadWrite.All, AppRoleAssignment.ReadWrite.All, DelegatedPermissionGrant.ReadWrite.All)'
+        '--api-permissions', "$appReadWriteAllId=Role", "$appRoleAssignRWId=Role") | Out-Null
+    Write-Success 'Graph API permissions added (Application.ReadWrite.All, AppRoleAssignment.ReadWrite.All)'
 
     # ── Credential creation (secret OR certificate) ──
     $apiSecret       = $null
@@ -1197,6 +1425,7 @@ function Invoke-StageConnectors {
 # Stage 7 — FIC (Federated Identity Credentials)
 #
 # CRITICAL: Must run AFTER Connectors (Stage 6) and BEFORE Agent (Stage 8).
+# This stage also ensures the API app is a Dataverse application user.
 # Power Platform auto-generates FIC Subject values after connector import.
 # There is a propagation delay — we use exponential backoff to wait.
 # ─────────────────────────────────────────────────────────────────
@@ -1207,6 +1436,13 @@ function Invoke-StageFIC {
     Assert-Parameter 'ClientAppObjectId' $ClientAppObjectId 'FIC'
     Assert-Parameter 'TenantId'          $TenantId          'FIC'
     Assert-Parameter 'EnvironmentId'     $EnvironmentId     'FIC'
+    Assert-Parameter 'ApiAppId'          $ApiAppId          'FIC'
+
+    if ($ApiAppId -notmatch '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$') {
+        throw "Parameter -ApiAppId must be a valid app/client GUID for the FIC stage."
+    }
+
+    Ensure-DataverseApiAppUser -TargetEnvironmentId $EnvironmentId -ApiApplicationId $ApiAppId
 
     $issuer = "https://login.microsoftonline.com/$TenantId/v2.0"
 
@@ -1536,6 +1772,8 @@ function Invoke-StageFIC {
 #
 # CRITICAL: Must run AFTER FIC (Stage 7). Connection references in
 # the agent solution need working connectors with valid FIC.
+# This stage also remaps customconnector GUIDs in the agent solution
+# to match connector rows in the target tenant before import.
 # ─────────────────────────────────────────────────────────────────
 
 function Invoke-StageAgent {
@@ -1548,15 +1786,47 @@ function Invoke-StageAgent {
         throw "Agent solution zip not found: $agentZip. Run the Artifacts stage first."
     }
 
-    Write-Step "Importing agent solution: $agentZip"
+    Write-Step "Resolving tenant connector mapping for agent import…"
     Write-Step "Target environment: $EnvironmentId"
 
-    Write-Host "`n  NOTE: The agent solution contains connection references." -ForegroundColor Yellow
-    Write-Host "  Connections may need to be created manually in the portal" -ForegroundColor Yellow
-    Write-Host "  after this import completes.`n" -ForegroundColor Yellow
+    $orgUrl = Resolve-OrgUrlFromPac -TargetEnvironmentId $EnvironmentId
+    Write-Success "Dataverse org: $orgUrl"
+
+    $token = Get-DataverseAccessToken -Resource $orgUrl
+    $headers = @{
+        Authorization = "Bearer $token"
+        Accept        = 'application/json'
+    }
+
+    $connectorGuidMap = Get-AgentConnectorGuidMap -DataverseUrl $orgUrl -Headers $headers -SkipEnterprise:$SkipEnterprise.IsPresent
+
+    Write-Step 'Patching agent solution custom connector bindings…'
+    $stagingDir = Join-Path $solutionsOutputDir 'staging-agent'
+    $patchedZip = Join-Path $solutionsOutputDir 'GCFApps_agent_patched.zip'
+    if (Test-Path $stagingDir) {
+        Remove-Item $stagingDir -Recurse -Force
+    }
+    if (Test-Path $patchedZip) {
+        Remove-Item $patchedZip -Force
+    }
+
+    Expand-Archive -Path $agentZip -DestinationPath $stagingDir -Force
+
+    $customizationsPath = Resolve-FirstExistingPath -Description 'Agent customizations.xml in unpacked solution' -Candidates @(
+        (Join-Path $stagingDir 'customizations.xml'),
+        (Join-Path $stagingDir 'Other' 'Customizations.xml')
+    )
+
+    $patchedCount = Patch-AgentCustomizationsConnectorIds -CustomizationsPath $customizationsPath -ConnectorGuidMap $connectorGuidMap -SkipEnterprise:$SkipEnterprise.IsPresent
+    Write-Success "Patched $patchedCount custom connector binding(s) in customizations.xml"
+
+    Compress-Archive -Path "$stagingDir\*" -DestinationPath $patchedZip -Force
+    Assert-ZipHasRootSolutionXml -ZipPath $patchedZip
+
+    Write-Step "Importing patched agent solution: $patchedZip"
 
     $pacArgs = @('solution', 'import',
-        '--path', $agentZip,
+        '--path', $patchedZip,
         '--force-overwrite',
         '--publish-changes',
         '--environment', $EnvironmentId)
@@ -1578,12 +1848,21 @@ function Invoke-StageAgent {
         Write-Host "    - Ensure connectors were imported first (Stage 6)" -ForegroundColor Yellow
         Write-Host "    - Ensure FIC was configured (Stage 7)" -ForegroundColor Yellow
         Write-Host "    - Try with --settings-file for connection reference mapping" -ForegroundColor Yellow
-        Write-Host "    - Check if connections need manual creation in the portal" -ForegroundColor Yellow
+        Write-Host "    - Patched agent zip retained at: $patchedZip" -ForegroundColor Yellow
+        if (Test-Path $stagingDir) {
+            Write-Host "    - Unpacked staging retained at: $stagingDir" -ForegroundColor Yellow
+        }
         throw 'pac solution import failed for agent solution'
     }
 
     Write-Host ($pacOutput -join "`n") -ForegroundColor DarkGray
     Write-Success 'Agent solution imported successfully'
+    if (Test-Path $patchedZip) {
+        Remove-Item $patchedZip -Force
+    }
+    if (Test-Path $stagingDir) {
+        Remove-Item $stagingDir -Recurse -Force
+    }
 
     Write-Host "`n────────────────────────────────────────────────────────" -ForegroundColor Cyan
     Write-Host "  Agent Solution Import Complete" -ForegroundColor Green

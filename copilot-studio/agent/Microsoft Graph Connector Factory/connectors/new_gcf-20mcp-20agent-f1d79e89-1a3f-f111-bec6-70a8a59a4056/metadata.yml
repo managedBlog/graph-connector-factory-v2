@@ -1,0 +1,21 @@
+﻿{
+  "connectorid": "f1d79e89-1a3f-f111-bec6-70a8a59a4056",
+  "name": "new_gcf-20mcp-20agent",
+  "displayname": "GCF MCP Agent",
+  "description": "MCP agent connector for Graph Connector Factory v2. Enables AI-powered research of Microsoft Graph API endpoints and custom connector generation via MCP Streamable protocol.",
+  "connectorinternalid": "shared_new-5fgcf-20mcp-20agent-5f251f982b189de9d2",
+  "openapidefinition": "connectors/new_gcf-20mcp-20agent-f1d79e89-1a3f-f111-bec6-70a8a59a4056/openapidefinition.json",
+  "connectionparameters": "connectors/new_gcf-20mcp-20agent-f1d79e89-1a3f-f111-bec6-70a8a59a4056/connectionparameters.json",
+  "connectionparametersets": null,
+  "policytemplateinstances": "connectors/new_gcf-20mcp-20agent-f1d79e89-1a3f-f111-bec6-70a8a59a4056/policytemplateinstances.json",
+  "iconbrandcolor": "#007ee5",
+  "iconblob": "connectors/new_gcf-20mcp-20agent-f1d79e89-1a3f-f111-bec6-70a8a59a4056/iconblob.png",
+  "connectortype": 1,
+  "statecode": 0,
+  "statuscode": 1,
+  "ismanaged": false,
+  "componentstate": 0,
+  "createdon": "2026-04-23T13:44:24Z",
+  "modifiedon": "2026-06-08T16:46:51Z",
+  "versionnumber": 4295221
+}

@@ -48,9 +48,9 @@ The install script supports three auth methods for the server's own credentials:
 
 | Method | Flag | Description |
 |--------|------|-------------|
-| Client Secret | `-AuthMethod ClientSecret` | (Default) Creates a client secret; store in `GCF_CLIENT_SECRET` env var at runtime |
+| Client Secret | `-AuthMethod ClientSecret` | Creates a client secret; store in `GCF_CLIENT_SECRET` env var at runtime |
 | Certificate (OpenSSL) | `-AuthMethod Certificate-OpenSSL` | Generates a cert with OpenSSL; uploads public key to Entra |
-| Certificate (Self-Signed) | `-AuthMethod Certificate-SelfSigned` | Generates a self-signed cert via PowerShell; uploads to Entra |
+| Certificate (Self-Signed) | `-AuthMethod Certificate-SelfSigned` | **Default.** Generates a self-signed cert via PowerShell; uploads to Entra |
 
 Certificate methods store the PEM file in `config/` (gitignored). The certificate path
 is written to `config/config.json` automatically.
@@ -160,8 +160,11 @@ Generates `config/config.json` from the template with your values.
 
 Runs `Prepare-Artifacts.ps1` to:
 - Token-replace connector swagger and apiProperties files (`__SERVER_HOST__`, `__OAUTH_CLIENT_ID__`, `__OAUTH_RESOURCE_URI__`, `__TENANT_ID__`)
+- Token-replace Enterprise MCP connector auth values (`__ENTERPRISE_APP_ID__`, `__TENANT_ID__`)
 - Retarget the enterprise connector to your tenant (if `-EnterpriseAppId` provided)
 - Pack both solution ZIPs (`artifacts/solutions/GCFApps_connectors.zip` + `GCFApps_agent.zip`)
+
+If you are **not** using `-SkipEnterprise`, pass `-EnterpriseAppId` in this stage. Artifact prep now fails fast if enterprise auth tokens are unresolved.
 
 ### Stage 6: Connectors
 
@@ -182,10 +185,11 @@ Imports the connector solution via `pac solution import`.
 ```
 
 This stage:
-1. Queries Power Platform for the imported connectors
-2. Discovers the auto-generated FIC Subject values (with exponential backoff — up to ~5 min)
-3. Creates FICs on the Client app (and Enterprise app for the enterprise connector)
-4. Adds redirect URIs to the Client app
+1. Ensures the API app is assigned as a Dataverse application user (System Administrator role)
+2. Queries Power Platform for the imported connectors
+3. Discovers the auto-generated FIC Subject values (with exponential backoff — up to ~5 min)
+4. Creates FICs on the Client app (and Enterprise app for the enterprise connector)
+5. Adds redirect URIs to the Client app
 
 ### Stage 8: Agent
 
@@ -223,6 +227,8 @@ The enterprise app registration requires two API permissions:
 # Using client secret
 $env:GCF_CLIENT_SECRET = "your-secret"
 $env:MCP_TRANSPORT = "http"
+# Optional: enable strict run isolation (requires runId on deploy/generate APIs)
+$env:GCF_STRICT_RUN_ISOLATION = "true"
 node dist/index.js
 
 # Or using certificate (configured in config.json during Stage 4)

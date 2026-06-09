@@ -1,0 +1,13 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Connector xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <connectorid>dd539b71-323f-f111-bec6-70a8a59a4056</connectorid>
+  <description>Unified custom connector for Graph Connector Factory. Exposes research operations (list Graph API operations, generate connectors, manage session context) and deployment operations (deploy connectors, check names, list environments). All operations require OAuth authentication.</description>
+  <displayname>GCF REST Connector</displayname>
+  <iconbrandcolor>#007ee5</iconbrandcolor>
+  <name>new_gcf-20rest-20connector</name>
+  <connectortype>1</connectortype>
+  <openapidefinition>/Connector/new_gcf-20rest-20connector_openapidefinition.json</openapidefinition>
+  <connectionparameters>/Connector/new_gcf-20rest-20connector_connectionparameters.json</connectionparameters>
+  <policytemplateinstances>/Connector/new_gcf-20rest-20connector_policytemplateinstances.json</policytemplateinstances>
+  <iconblob>/Connector/new_gcf-20rest-20connector_iconblob.Png</iconblob>
+</Connector>

@@ -1,0 +1,60 @@
+﻿{
+  "token": {
+    "type": "oauthSetting",
+    "oAuthSettings": {
+      "identityProvider": "aad",
+      "clientId": "ca5fd8e9-f88f-468f-9dd4-d765e697e121",
+      "clientAssertionType": "GenericFederatedIdentityCredential",
+      "scopes": [],
+      "redirectMode": "GlobalPerConnector",
+      "redirectUrl": "https://global.consent.azure-apim.net/redirect/new-5fgcf-20rest-20connector-5f251f982b189de9d2",
+      "properties": {
+        "IsFirstParty": "False",
+        "AzureActiveDirectoryResourceId": "api://ba19e159-ef0b-454b-bd62-04925595450c",
+        "IsOnbehalfofLoginSupported": true,
+        "FederatedIdentityCredentials": {
+          "Issuer": "https://login.microsoftonline.com/1ccffdab-21fe-40b2-9b3d-c3a7222a330e/v2.0",
+          "Subject": "/eid1/c/pub/t/q_3PHP4hskCbPcOnIiozDg/a/k972yLpWjkypg7DpMYfrNA/unitedstates-002_new-5fgcf-20rest-20connector-5f251f982b189de9d2",
+          "Audience": "api://AzureADTokenExchange"
+        }
+      },
+      "customParameters": {
+        "LoginUri": {
+          "value": "https://login.microsoftonline.com"
+        },
+        "TenantId": {
+          "value": "1ccffdab-21fe-40b2-9b3d-c3a7222a330e"
+        },
+        "ResourceUri": {
+          "value": "api://ba19e159-ef0b-454b-bd62-04925595450c"
+        },
+        "EnableOnbehalfOfLogin": {
+          "value": "false"
+        },
+        "grantType": {
+          "value": "authorization_code_with_federated_identity_credentials"
+        }
+      }
+    },
+    "uiDefinition": {
+      "displayName": "OAuth Connection",
+      "description": "OAuth Connection",
+      "constraints": {
+        "required": "true",
+        "hidden": "false"
+      }
+    }
+  },
+  "token:TenantId": {
+    "type": "string",
+    "metadata": {
+      "sourceType": "AzureActiveDirectoryTenant"
+    },
+    "uiDefinition": {
+      "constraints": {
+        "required": "false",
+        "hidden": "true"
+      }
+    }
+  }
+}

@@ -1,0 +1,18 @@
+mcs.metadata:
+  componentName: GCF REST Connector - List MCP Servers
+kind: TaskDialog
+modelDisplayName: List MCP Servers
+modelDescription: Lists available Microsoft MCP servers that can be added to a generated agent during Phase 6 (Agent Factory). Do NOT call during research or connector planning. Returns server names, descriptions, and categories.
+
+outputs:
+  - propertyName: body
+
+action:
+  kind: InvokeConnectorTaskAction
+  connectionReference: copilots_header_91a5e.shared_new-5fgcf-20rest-20connector-5f251f982b189de9d2.3b64b1b7818145a59f83da81404dde8e
+  connectionProperties:
+    mode: Invoker
+
+  operationId: agent_listMcpServers
+
+outputMode: All

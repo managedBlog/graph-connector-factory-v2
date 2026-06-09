@@ -10,11 +10,12 @@
     __TENANT_ID__) are replaced in the 4 tokenized files.
 
     Enterprise connector (MCP Server for Enterprise / cr863) handling:
-      - If -EnterpriseAppId is provided: replaces the source clientId, flips
-        IsFirstParty to False, and replaces the source tenant ID.
+      - If -EnterpriseAppId is provided: replaces __ENTERPRISE_APP_ID__, flips
+        IsFirstParty to False, and replaces __TENANT_ID__.
       - If -SkipEnterprise: strips the enterprise connector files from the solution
         and removes its entries from solution.xml and customizations.xml.
-      - If neither: enterprise files are left as-is (may not work in target tenant).
+      - If neither: tokenized enterprise files fail fast so tenant-specific IDs
+        are not silently packaged.
 
 .PARAMETER ServerHost
     Server hostname (e.g. abc123-3001.usw3.devtunnels.ms)
@@ -63,6 +64,33 @@ $solutionsDir = Join-Path $repoRoot "copilot-studio" "solutions"
 $connectorsSrcDir = Join-Path $solutionsDir "connectors"
 $agentSrcDir = Join-Path $solutionsDir "agent"
 
+function Resolve-FirstExistingPath {
+    param(
+        [Parameter(Mandatory)] [string[]] $Candidates,
+        [Parameter(Mandatory)] [string] $Description
+    )
+    $resolved = $Candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+    if (-not $resolved) {
+        throw "$Description not found. Checked: $($Candidates -join ', ')"
+    }
+    return $resolved
+}
+
+function Assert-ZipHasRootSolutionXml {
+    param([Parameter(Mandatory)] [string] $ZipPath)
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    $zip = [System.IO.Compression.ZipFile]::OpenRead($ZipPath)
+    try {
+        $hasRootSolution = $zip.Entries | Where-Object { $_.FullName -eq 'solution.xml' } | Select-Object -First 1
+        if (-not $hasRootSolution) {
+            throw "Packed zip is missing root solution.xml: $ZipPath"
+        }
+    }
+    finally {
+        $zip.Dispose()
+    }
+}
+
 if (-not $OutputDir) {
     $OutputDir = Join-Path $repoRoot "artifacts" "solutions"
 }
@@ -72,7 +100,7 @@ if (-not (Test-Path $OutputDir)) {
     New-Item -ItemType Directory -Path $OutputDir -Force | Out-Null
 }
 
-# Source-tenant constants (baked into the exported solution files)
+# Source-tenant constants (fallback for legacy non-tokenized exports)
 $SOURCE_TENANT_ID             = '1ccffdab-21fe-40b2-9b3d-c3a7222a330e'
 $SOURCE_ENTERPRISE_CLIENT_ID  = '1b29ab3c-915f-4521-8860-a1fbd8399ed7'
 
@@ -92,6 +120,21 @@ $tokenizedFiles = @(
     'new_gcf-20mcp-20agent_connectionparameters.json'
 )
 
+# Enterprise connector files that may contain tokenized auth settings
+$enterpriseJsonFiles = @(
+    'cr863_5Fmcp-2Dserver-2Dfor-2Denterprise_connectionparameters.json',
+    'cr863_5Fmcp-2Dserver-2Dfor-2Denterprise_connectionparametersets.json'
+)
+
+# Required placeholder tokens per file. Fail fast if export drift replaced tokens
+# with environment-specific values before packaging.
+$requiredTokensByFile = @{
+    'new_gcf-20rest-20connector_openapidefinition.json' = @('__SERVER_HOST__')
+    'new_gcf-20mcp-20agent_openapidefinition.json'      = @('__SERVER_HOST__')
+    'new_gcf-20rest-20connector_connectionparameters.json' = @('__OAUTH_CLIENT_ID__', '__OAUTH_RESOURCE_URI__', '__TENANT_ID__')
+    'new_gcf-20mcp-20agent_connectionparameters.json'      = @('__OAUTH_CLIENT_ID__', '__OAUTH_RESOURCE_URI__', '__TENANT_ID__')
+}
+
 Write-Host "`n=== Preparing Solution Artifacts ===" -ForegroundColor Cyan
 Write-Host "Source:  $solutionsDir"
 Write-Host "Output:  $OutputDir"
@@ -108,7 +151,21 @@ Write-Host "  Copied connector solution to staging" -ForegroundColor Green
 
 # ─── Step 2: Token-replace custom connector files ────────────────────────
 
-$connectorDir = Join-Path $stagingDir "Connector"
+$connectorDir = Resolve-FirstExistingPath -Description "Connector source folder in staging" -Candidates @(
+    (Join-Path $stagingDir "Connectors"), # modern PAC unpack layout
+    (Join-Path $stagingDir "Connector")   # legacy layout
+)
+
+$solutionXmlPath = Resolve-FirstExistingPath -Description "Solution manifest in staging" -Candidates @(
+    (Join-Path $stagingDir "Other" "Solution.xml"), # modern PAC unpack layout
+    (Join-Path $stagingDir "solution.xml")          # legacy layout
+)
+
+$custXmlPath = Resolve-FirstExistingPath -Description "Customizations manifest in staging" -Candidates @(
+    (Join-Path $stagingDir "Other" "Customizations.xml"), # modern PAC unpack layout
+    (Join-Path $stagingDir "customizations.xml")          # legacy layout
+)
+
 Write-Host "  Replacing tokens in custom connector files…" -ForegroundColor Yellow
 
 foreach ($fileName in $tokenizedFiles) {
@@ -118,6 +175,11 @@ foreach ($fileName in $tokenizedFiles) {
     }
 
     $content = Get-Content $filePath -Raw
+    foreach ($requiredToken in $requiredTokensByFile[$fileName]) {
+        if (-not $content.Contains($requiredToken)) {
+            throw "Missing expected token '$requiredToken' in $fileName. Re-export or re-tokenize connector source files before running Prepare-Artifacts."
+        }
+    }
     foreach ($key in $tokenMap.Keys) {
         $content = $content.Replace($key, $tokenMap[$key])
     }
@@ -138,29 +200,23 @@ if ($SkipEnterprise) {
     }
 
     # Strip enterprise RootComponent from solution.xml
-    $solutionXmlPath = Join-Path $stagingDir "solution.xml"
-    if (Test-Path $solutionXmlPath) {
-        [xml]$sol = Get-Content $solutionXmlPath -Raw
-        $entRoot = $sol.ImportExportXml.SolutionManifest.RootComponents.RootComponent |
-            Where-Object { $_.schemaName -like "*cr863_5Fmcp-2Dserver-2Dfor-2Denterprise*" }
-        if ($entRoot) {
-            $entRoot.ParentNode.RemoveChild($entRoot) | Out-Null
-            $sol.Save($solutionXmlPath)
-            Write-Host "    Stripped RootComponent from solution.xml" -ForegroundColor DarkGray
-        }
+    [xml]$sol = Get-Content $solutionXmlPath -Raw
+    $entRoot = $sol.ImportExportXml.SolutionManifest.RootComponents.RootComponent |
+        Where-Object { $_.schemaName -like "*cr863_5Fmcp-2Dserver-2Dfor-2Denterprise*" }
+    if ($entRoot) {
+        $entRoot.ParentNode.RemoveChild($entRoot) | Out-Null
+        $sol.Save($solutionXmlPath)
+        Write-Host "    Stripped RootComponent from solution.xml" -ForegroundColor DarkGray
     }
 
     # Strip enterprise Connector from customizations.xml
-    $custXmlPath = Join-Path $stagingDir "customizations.xml"
-    if (Test-Path $custXmlPath) {
-        [xml]$cust = Get-Content $custXmlPath -Raw
-        $entConn = $cust.ImportExportXml.Connectors.Connector |
-            Where-Object { $_.name -like "*cr863_5Fmcp-2Dserver-2Dfor-2Denterprise*" }
-        if ($entConn) {
-            $entConn.ParentNode.RemoveChild($entConn) | Out-Null
-            $cust.Save($custXmlPath)
-            Write-Host "    Stripped Connector from customizations.xml" -ForegroundColor DarkGray
-        }
+    [xml]$cust = Get-Content $custXmlPath -Raw
+    $entConn = $cust.ImportExportXml.Connectors.Connector |
+        Where-Object { $_.name -like "*cr863_5Fmcp-2Dserver-2Dfor-2Denterprise*" }
+    if ($entConn) {
+        $entConn.ParentNode.RemoveChild($entConn) | Out-Null
+        $cust.Save($custXmlPath)
+        Write-Host "    Stripped Connector from customizations.xml" -ForegroundColor DarkGray
     }
 
     Write-Host "    ✓ Enterprise connector stripped" -ForegroundColor Green
@@ -172,6 +228,12 @@ elseif (-not [string]::IsNullOrWhiteSpace($EnterpriseAppId)) {
     foreach ($f in $entJsonFiles) {
         $content = Get-Content -LiteralPath $f.FullName -Raw
         $changed = $false
+
+        # Replace tokenized enterprise clientId with target
+        if ($content.Contains('__ENTERPRISE_APP_ID__')) {
+            $content = $content.Replace('__ENTERPRISE_APP_ID__', $EnterpriseAppId)
+            $changed = $true
+        }
 
         # Replace source enterprise clientId with target
         if ($content.Contains($SOURCE_ENTERPRISE_CLIENT_ID)) {
@@ -191,6 +253,12 @@ elseif (-not [string]::IsNullOrWhiteSpace($EnterpriseAppId)) {
             $changed = $true
         }
 
+        # Replace shared tenant token with target
+        if ($content.Contains('__TENANT_ID__')) {
+            $content = $content.Replace('__TENANT_ID__', $TenantId)
+            $changed = $true
+        }
+
         if ($changed) {
             Set-Content -LiteralPath $f.FullName -Value $content -Encoding UTF8 -NoNewline
             Write-Host "    ✓ $($f.Name)" -ForegroundColor Green
@@ -199,10 +267,32 @@ elseif (-not [string]::IsNullOrWhiteSpace($EnterpriseAppId)) {
 }
 else {
     Write-Host "  Enterprise connector: no -EnterpriseAppId or -SkipEnterprise provided" -ForegroundColor DarkYellow
-    Write-Host "    Files left as-is with source-tenant values — connector may not work" -ForegroundColor DarkYellow
+    Write-Host "    Files left as-is — connector may not work" -ForegroundColor DarkYellow
 }
 
-# ─── Step 4: Validate no unresolved tokens remain ────────────────────────
+# ─── Step 4: Normalize connector icon metadata ────────────────────────────
+
+$defaultIconConnectors = @(
+    "new_gcf-20mcp-20agent.xml",
+    "cr863_5Fmcp-2Dserver-2Dfor-2Denterprise.xml"
+)
+
+Write-Host "  Normalizing connector icon metadata…" -ForegroundColor Yellow
+foreach ($fileName in $defaultIconConnectors) {
+    $filePath = Join-Path $connectorDir $fileName
+    if (-not (Test-Path $filePath)) {
+        continue
+    }
+
+    $content = Get-Content -LiteralPath $filePath -Raw
+    $updated = [regex]::Replace($content, "(?m)^\s*<iconblob>.*</iconblob>\r?\n?", "")
+    if ($updated -ne $content) {
+        Set-Content -LiteralPath $filePath -Value $updated -Encoding UTF8 -NoNewline
+        Write-Host "    ✓ Removed iconblob from $fileName (platform default icon)" -ForegroundColor Green
+    }
+}
+
+# ─── Step 5: Validate no unresolved tokens remain ────────────────────────
 
 Write-Host "  Validating no unresolved tokens…" -ForegroundColor Yellow
 $unresolvedFound = $false
@@ -216,34 +306,61 @@ foreach ($fileName in $tokenizedFiles) {
         }
     }
 }
+
+# Validate enterprise tokens only when enterprise connector is retained
+if (-not $SkipEnterprise) {
+    foreach ($fileName in $enterpriseJsonFiles) {
+        $filePath = Join-Path $connectorDir $fileName
+        if (Test-Path $filePath) {
+            $content = Get-Content $filePath -Raw
+            if ($content.Contains('__ENTERPRISE_APP_ID__')) {
+                Write-Host "    ✗ Unresolved token in ${fileName}: __ENTERPRISE_APP_ID__" -ForegroundColor Red
+                $unresolvedFound = $true
+            }
+            if ($content.Contains('__TENANT_ID__')) {
+                Write-Host "    ✗ Unresolved token in ${fileName}: __TENANT_ID__" -ForegroundColor Red
+                $unresolvedFound = $true
+            }
+        }
+    }
+}
+
 if ($unresolvedFound) {
-    throw "Unresolved placeholder tokens found in connector files. Check parameter values."
+    throw "Unresolved placeholder tokens found in connector files. Check parameter values or pass -EnterpriseAppId / -SkipEnterprise."
 }
 Write-Host "    ✓ All tokens resolved" -ForegroundColor Green
 
-# ─── Step 5: Pack connector solution .zip ────────────────────────────────
+# ─── Step 6: Pack connector solution .zip ────────────────────────────────
 
 $connectorZip = Join-Path $OutputDir "GCFApps_connectors.zip"
 if (Test-Path $connectorZip) {
     Remove-Item $connectorZip -Force
 }
 
-# Zip CONTENTS of staging dir (solution.xml must be at zip root)
-Compress-Archive -Path "$stagingDir\*" -DestinationPath $connectorZip -Force
+# Package connector solution using SolutionPackager-aware layout handling
+pac solution pack --zipfile $connectorZip --folder $stagingDir --packagetype Unmanaged
+if ($LASTEXITCODE -ne 0) {
+    throw "pac solution pack failed for connector solution."
+}
+Assert-ZipHasRootSolutionXml -ZipPath $connectorZip
 Write-Host "  ✓ Connector solution: $connectorZip" -ForegroundColor Green
 
 # Clean up staging
 Remove-Item $stagingDir -Recurse -Force
 
-# ─── Step 6: Pack agent solution .zip ────────────────────────────────────
+# ─── Step 7: Pack agent solution .zip ────────────────────────────────────
 
 $agentZip = Join-Path $OutputDir "GCFApps_agent.zip"
 if (Test-Path $agentZip) {
     Remove-Item $agentZip -Force
 }
 
-# Agent solution has no token replacement — zip directly
-Compress-Archive -Path "$agentSrcDir\*" -DestinationPath $agentZip -Force
+# Agent solution has no token replacement — pack directly from source folder
+pac solution pack --zipfile $agentZip --folder $agentSrcDir --packagetype Unmanaged
+if ($LASTEXITCODE -ne 0) {
+    throw "pac solution pack failed for agent solution."
+}
+Assert-ZipHasRootSolutionXml -ZipPath $agentZip
 Write-Host "  ✓ Agent solution: $agentZip" -ForegroundColor Green
 
 # ─── Done ────────────────────────────────────────────────────────────────

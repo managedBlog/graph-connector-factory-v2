@@ -1,0 +1,67 @@
+kind: TaskDialog
+modelDisplayName: Deploy connector pipeline async
+modelDescription: Start an asynchronous deploy of a Power Platform custom connector. Returns a jobId immediately. Poll graph_deployStatus with the jobId to track progress and get results.
+inputs:
+  - kind: AutomaticTaskInput
+    propertyName: baseName
+    name: Base Name
+    description: Validated connector display name
+  - kind: AutomaticTaskInput
+    propertyName: environmentId
+    name: Environment ID
+    description: Target Power Platform environment ID (GUID)
+  - kind: AutomaticTaskInput
+    propertyName: authType
+    name: Auth Type
+    description: Auth type for the deployed connector
+  - kind: AutomaticTaskInput
+    propertyName: swaggerUrl
+    name: Swagger URL
+    description: URL to the generated Swagger definition
+  - kind: AutomaticTaskInput
+    propertyName: runId
+    name: Run ID
+    description: Optional run ID used for strict isolation
+    isRequired: false
+
+outputs:
+  - propertyName: jobId
+
+  - propertyName: status
+
+action:
+  kind: InvokeConnectorTaskAction
+  connectionReference: copilots_header_91a5e.shared_new-5fgcf-20rest-20connector-5f251f982b189de9d2.3b64b1b7818145a59f83da81404dde8e
+  connectionProperties:
+    mode: Invoker
+
+  operationId: graph_deployPipeline
+
+  inputType:
+    properties:
+      baseName:
+        displayName: Base Name
+        description: Validated connector display name
+        isRequired: true
+        type: String
+      environmentId:
+        displayName: Environment ID
+        description: Target Power Platform environment ID (GUID)
+        isRequired: true
+        type: String
+      authType:
+        displayName: Auth Type
+        description: Auth type for the deployed connector
+        isRequired: true
+        type: String
+      swaggerUrl:
+        displayName: Swagger URL
+        description: URL to the generated Swagger definition
+        isRequired: true
+        type: String
+      runId:
+        displayName: Run ID
+        description: Optional run ID used for strict isolation
+        isRequired: false
+        type: String
+outputMode: All

@@ -1,3 +1,5 @@
+mcs.metadata:
+  componentName: MicrosoftLearnDocsMCP-MicrosoftLearnDocsMCPServer
 kind: TaskDialog
 modelDisplayName: Microsoft Learn Docs MCP Server
 modelDescription: MCP Server to search Microsoft Learn content

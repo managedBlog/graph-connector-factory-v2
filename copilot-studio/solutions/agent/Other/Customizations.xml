@@ -1,0 +1,66 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<ImportExportXml xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" OrganizationVersion="9.2.26054.132" OrganizationSchemaType="Standard" CRMServerServiceabilityVersion="9.2.26054.00132">
+  <Entities />
+  <Roles />
+  <Workflows />
+  <FieldSecurityProfiles />
+  <Templates />
+  <EntityMaps />
+  <EntityRelationships />
+  <OrganizationSettings />
+  <optionsets />
+  <CustomControls />
+  <EntityDataProviders />
+  <Connectors />
+  <connectionreferences>
+    <connectionreference connectionreferencelogicalname="copilots_header_91a5e.shared_computeroperator.9579692243cc41a08768466803f42469">
+      <connectionreferencedisplayname>copilots_header_91a5e.shared_computeroperator.9579692243cc41a08768466803f42469</connectionreferencedisplayname>
+      <connectorid>/providers/Microsoft.PowerApps/apis/shared_computeroperator</connectorid>
+      <iscustomizable>0</iscustomizable>
+      <promptingbehavior>0</promptingbehavior>
+      <statecode>0</statecode>
+      <statuscode>1</statuscode>
+    </connectionreference>
+    <connectionreference connectionreferencelogicalname="copilots_header_91a5e.shared_cr863-5fmcp-2dserver-2dfor-2denterprise-5f251f982b189de9d2.105c2a1849244680af6f2d89b454e956">
+      <connectionreferencedisplayname>copilots_header_91a5e.shared_cr863-5fmcp-2dserver-2dfor-2denterprise-5f251f982b189de9d2.105c2a1849244680af6f2d89b454e956</connectionreferencedisplayname>
+      <connectorid>/providers/Microsoft.PowerApps/apis/shared_cr863-5fmcp-2dserver-2dfor-2denterprise-5f251f982b189de9d2</connectorid>
+      <iscustomizable>0</iscustomizable>
+      <promptingbehavior>0</promptingbehavior>
+      <statecode>0</statecode>
+      <statuscode>1</statuscode>
+    </connectionreference>
+    <connectionreference connectionreferencelogicalname="copilots_header_91a5e.shared_microsoftlearndocsmcpserver.6a3f588225184c24a0a321041be01682">
+      <connectionreferencedisplayname>copilots_header_91a5e.shared_microsoftlearndocsmcpserver.6a3f588225184c24a0a321041be01682</connectionreferencedisplayname>
+      <connectorid>/providers/Microsoft.PowerApps/apis/shared_microsoftlearndocsmcpserver</connectorid>
+      <iscustomizable>0</iscustomizable>
+      <promptingbehavior>0</promptingbehavior>
+      <statecode>0</statecode>
+      <statuscode>1</statuscode>
+    </connectionreference>
+    <connectionreference connectionreferencelogicalname="copilots_header_91a5e.shared_new-5fgcf-20mcp-20agent-5f251f982b189de9d2.935136bad07b42348a21092a8caf5edc">
+      <connectionreferencedisplayname>copilots_header_91a5e.shared_new-5fgcf-20mcp-20agent-5f251f982b189de9d2.935136bad07b42348a21092a8caf5edc</connectionreferencedisplayname>
+      <connectorid>/providers/Microsoft.PowerApps/apis/shared_new-5fgcf-20mcp-20agent-5f251f982b189de9d2</connectorid>
+      <customconnectorid>
+        <connectorid>f1d79e89-1a3f-f111-bec6-70a8a59a4056</connectorid>
+      </customconnectorid>
+      <iscustomizable>0</iscustomizable>
+      <promptingbehavior>0</promptingbehavior>
+      <statecode>0</statecode>
+      <statuscode>1</statuscode>
+    </connectionreference>
+    <connectionreference connectionreferencelogicalname="copilots_header_91a5e.shared_new-5fgcf-20rest-20connector-5f251f982b189de9d2.3b64b1b7818145a59f83da81404dde8e">
+      <connectionreferencedisplayname>copilots_header_91a5e.shared_new-5fgcf-20rest-20connector-5f251f982b189de9d2.3b64b1b7818145a59f83da81404dde8e</connectionreferencedisplayname>
+      <connectorid>/providers/Microsoft.PowerApps/apis/shared_new-5fgcf-20rest-20connector-5f251f982b189de9d2</connectorid>
+      <customconnectorid>
+        <connectorid>dd539b71-323f-f111-bec6-70a8a59a4056</connectorid>
+      </customconnectorid>
+      <iscustomizable>0</iscustomizable>
+      <promptingbehavior>0</promptingbehavior>
+      <statecode>0</statecode>
+      <statuscode>1</statuscode>
+    </connectionreference>
+  </connectionreferences>
+  <Languages>
+    <Language>1033</Language>
+  </Languages>
+</ImportExportXml>

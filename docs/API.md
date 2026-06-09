@@ -60,6 +60,9 @@ captured via `graph_setDesignContext`. All fields are flattened at the top level
 
 **Response:** Flat JSON object with all endpoint tracking and design context fields.
 
+This endpoint is read-only and does not accept run control query parameters.
+Run IDs remain server-managed and are surfaced in the response for status correlation.
+
 ---
 
 ### GET /api/graph/environments
@@ -131,9 +134,10 @@ Start an asynchronous deployment of a Power Platform custom connector. Returns a
 | `swaggerContent` | string | Yes | Generated Swagger 2.0 JSON |
 | `baseName` | string | Yes | Connector name |
 | `environmentId` | string | Yes | Target environment ID |
-| `authType` | string | No | Auth type (default: `FederatedIdentity`) |
+| `authType` | string | No | Auth type (default: `FederatedIdentity`). For managed/federated identity in Power Platform, use delegated flow (not `client_credentials`). |
 | `oauthTenantId` | string | No | Entra tenant ID |
 | `oauthResourceUri` | string | No | OAuth resource URI |
+| `runId` | string | No* | Run ID to scope execution to an existing active run |
 
 **Response (202 Accepted):**
 
@@ -146,6 +150,7 @@ Start an asynchronous deployment of a Power Platform custom connector. Returns a
 ```
 
 The response is **flattened** (not nested) for Swagger 2.0 / Copilot Studio compatibility.
+Response also includes `runId` when present.
 
 ---
 
@@ -159,8 +164,11 @@ Batch deploy multiple connectors. Each group is deployed sequentially.
 |-------|------|----------|-------------|
 | `groups` | string | Yes | JSON string of deploy groups |
 | `environmentId` | string | Yes | Target environment ID |
+| `runId` | string | No* | Run ID to scope execution to an existing active run |
 
 **Response:** JSON with per-group deploy results.
+
+`*` When `GCF_STRICT_RUN_ISOLATION=true`, `runId` is required for deploy and batch deploy.
 
 ---
 
@@ -186,6 +194,65 @@ Loop until status is `success`, `partial`, or `failed`.
 | `errors` | array | Error messages (on failure) |
 | `summary` | string | Human-readable summary |
 | `elapsedMs` | number | Total elapsed time |
+
+---
+
+### GET /api/agent/context
+
+Returns agent factory context, deployed connector summaries, and run-scoped deployment data.
+
+**Response notes:**
+
+- Includes `runId` and `strictRunIsolation`.
+- `deployedConnectorsJson` and `connectorSummariesJson` are scoped to the active server-managed run when one is active.
+- Includes `solutionChoicesJson` and `defaultSolutionName` for first-card solution selection.
+
+---
+
+### POST /api/agent/solution/preflight
+
+Validates a candidate solution unique name and checks whether it already exists.
+
+**Request body:**
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `environmentId` | string | Yes | Target environment |
+| `solutionName` | string | Yes | Candidate solution unique name |
+
+**Response fields:** `originalName`, `normalizedName`, `isValid`, `exists`, `message`.
+
+---
+
+### POST /api/agent/solution/ensure
+
+Creates the solution if missing, or returns existing solution metadata.
+
+**Request body:**
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `environmentId` | string | Yes | Target environment |
+| `solutionName` | string | Yes | Solution unique name |
+
+**Response fields:** `solutionName`, `created`, `publisherPrefix`.
+
+---
+
+### POST /api/agent/generate
+
+Starts asynchronous Copilot Studio agent generation from deployed connector context.
+
+**Request body additions:**
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `solutionName` | string | Yes | Existing solution unique name (no default fallback) |
+| `runId` | string | No* | Run ID to scope deployed connector selection |
+
+`*` When `GCF_STRICT_RUN_ISOLATION=true`, `runId` is required.
+
+Status can return `success`, `partial`, or `failed`. `partial` indicates PAC succeeded but full Dataverse verification was incomplete.
 
 ---
 

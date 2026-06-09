@@ -1,0 +1,149 @@
+kind: BotDefinition
+entity:
+  accessControlPolicy: GroupMembership
+  authenticationMode: Integrated
+  authenticationTrigger: Always
+  configuration:
+    settings:
+      GenerativeActionsEnabled: true
+    isAgentConnectable: true
+    gPTSettings:
+      $kind: GPTSettings
+    aISettings:
+      $kind: AISettings
+      useModelKnowledge: true
+      isFileAnalysisEnabled: true
+      isSemanticSearchEnabled: true
+      contentModeration: Low
+    recognizer:
+      $kind: GenerativeAIRecognizer
+
+  template: kickStartTemplate-1.0.0
+
+components:
+  - kind: DialogComponent
+    managedProperties:
+      isCustomizable: false
+    displayName: Reset Conversation
+    parentBotId: 81e6e367-4e49-f111-bec6-7ced8d6e690c
+    shareContext: {}
+    state: Active
+    status: Active
+    schemaName: mme_topic_ResetConversation
+    dialog:
+      startBehavior: UseLatestPublishedContentAndCancelOtherTopics
+      beginDialog:
+        kind: OnSystemRedirect
+        id: main
+        actions:
+          - kind: SendActivity
+            id: sendMessage_reset
+            activity: What can I help you with?
+          - kind: ClearAllVariables
+            id: clearAllVariables_reset
+            variables: ConversationScopedVariables
+          - kind: CancelAllDialogs
+            id: cancelAllDialogs_reset
+  - kind: DialogComponent
+    managedProperties:
+      isCustomizable: false
+    displayName: Conversation Start
+    parentBotId: 81e6e367-4e49-f111-bec6-7ced8d6e690c
+    shareContext: {}
+    state: Active
+    status: Active
+    schemaName: mme_topic_ConversationStart
+    dialog:
+      startBehavior: UseLatestPublishedContentAndCancelOtherTopics
+      beginDialog:
+        kind: OnConversationStart
+        id: main
+        actions:
+          - kind: SendActivity
+            id: sendMessage_start
+            activity: Hello! I'm here to help. What can I do for you?
+  - kind: DialogComponent
+    managedProperties:
+      isCustomizable: false
+    displayName: End of Conversation
+    parentBotId: 81e6e367-4e49-f111-bec6-7ced8d6e690c
+    shareContext: {}
+    state: Active
+    status: Active
+    schemaName: mme_topic_EndofConversation
+    dialog:
+      startBehavior: UseLatestPublishedContentAndCancelOtherTopics
+      beginDialog:
+        kind: OnSystemMessage
+        condition: =Topic.EndConversation
+        id: main
+        actions:
+          - kind: SendActivity
+            id: sendMessage_end
+            activity: Thank you! Have a great day.
+  - kind: DialogComponent
+    managedProperties:
+      isCustomizable: false
+    displayName: Fallback
+    parentBotId: 81e6e367-4e49-f111-bec6-7ced8d6e690c
+    shareContext: {}
+    state: Active
+    status: Active
+    schemaName: mme_topic_Fallback
+    dialog:
+      startBehavior: UseLatestPublishedContentAndCancelOtherTopics
+      beginDialog:
+        kind: OnUnknownIntent
+        id: main
+        actions:
+          - kind: SendActivity
+            id: sendMessage_fallback
+            activity: I'm not sure I understand. Could you rephrase your request?
+  - kind: DialogComponent
+    managedProperties:
+      isCustomizable: false
+    displayName: On Error
+    parentBotId: 81e6e367-4e49-f111-bec6-7ced8d6e690c
+    shareContext: {}
+    state: Active
+    status: Active
+    schemaName: mme_topic_OnError
+    dialog:
+      startBehavior: UseLatestPublishedContentAndCancelOtherTopics
+      beginDialog:
+        kind: OnError
+        id: main
+        actions:
+          - kind: SendActivity
+            id: sendMessage_error
+            activity: I encountered an error. Please try again or rephrase your request.
+  - kind: DialogComponent
+    managedProperties:
+      isCustomizable: false
+    displayName: Sign In
+    parentBotId: 81e6e367-4e49-f111-bec6-7ced8d6e690c
+    shareContext: {}
+    state: Active
+    status: Active
+    schemaName: mme_topic_SignIn
+    dialog:
+      startBehavior: UseLatestPublishedContentAndCancelOtherTopics
+      beginDialog:
+        kind: OnSignIn
+        id: main
+        actions:
+          - kind: SignInCard
+            id: signInCard_main
+            title: Login
+            text: To continue, please login
+  - kind: DialogComponent
+    managedProperties:
+      isCustomizable: false
+    displayName: Generative Answers
+    parentBotId: 81e6e367-4e49-f111-bec6-7ced8d6e690c
+    shareContext: {}
+    state: Active
+    status: Active
+    schemaName: mme_gpt_default
+    dialog:
+      kind: Gpt

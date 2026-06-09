@@ -1,8 +1,7 @@
 <botcomponent schemaname="copilots_header_91a5e.topic.ResetConversation">
   <componenttype>9</componenttype>
-  <description>ResetConversation</description>
   <iscustomizable>0</iscustomizable>
-  <name>Reset Conversation</name>
+  <name>ResetConversation</name>
   <parentbotid>
     <schemaname>copilots_header_91a5e</schemaname>
   </parentbotid>

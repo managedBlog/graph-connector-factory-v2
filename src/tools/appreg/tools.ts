@@ -901,6 +901,7 @@ const appregConfigureForConnectorTool: ToolDefinition = {
 
     // Step 3: Add FIC
     if (ficSubject && ficIssuer) {
+      const expectedAudiences = ficAudience ? [ficAudience] : ["api://AzureADTokenExchange"];
       // Idempotency: check if FIC with same subject exists
       const existingFic = await client.getFederatedIdentityCredentialBySubject(
         appObjectId,
@@ -916,20 +917,66 @@ const appregConfigureForConnectorTool: ToolDefinition = {
         };
       } else {
         const ficName = `fic-${connectorId ?? "connector"}`.replace(/[^a-zA-Z0-9_-]/g, "-").slice(0, 120);
-        const fic = await client.addFederatedIdentityCredential(appObjectId, {
-          name: ficName,
-          issuer: ficIssuer,
-          subject: ficSubject,
-          audiences: ficAudience ? [ficAudience] : ["api://AzureADTokenExchange"],
-        });
-        results["federatedIdentityCredential"] = {
-          created: true,
-          id: fic.id,
-          name: fic.name,
-          subject: fic.subject,
-          issuer: fic.issuer,
-          audiences: fic.audiences,
-        };
+        try {
+          const fic = await client.addFederatedIdentityCredential(appObjectId, {
+            name: ficName,
+            issuer: ficIssuer,
+            subject: ficSubject,
+            audiences: expectedAudiences,
+          });
+          results["federatedIdentityCredential"] = {
+            created: true,
+            id: fic.id,
+            name: fic.name,
+            subject: fic.subject,
+            issuer: fic.issuer,
+            audiences: fic.audiences,
+          };
+        } catch (err) {
+          const errMsg = err instanceof Error ? err.message : String(err);
+          const isDuplicate400 = errMsg.includes("Graph API error 400:") &&
+            errMsg.toLowerCase().includes("duplicate values");
+          if (!isDuplicate400) {
+            throw err;
+          }
+
+          // Replication-safe recovery: the create may have succeeded on first attempt.
+          const MAX_RECOVERY_READS = 3;
+          const RECOVERY_DELAY_MS = 2000;
+          let recoveredFic = null as Awaited<
+            ReturnType<typeof client.getFederatedIdentityCredentialBySubject>
+          >;
+          for (let attempt = 0; attempt < MAX_RECOVERY_READS; attempt++) {
+            await new Promise((resolve) => setTimeout(resolve, RECOVERY_DELAY_MS));
+            recoveredFic = await client.getFederatedIdentityCredentialBySubject(appObjectId, ficSubject);
+            if (recoveredFic) break;
+          }
+          if (!recoveredFic) {
+            throw err;
+          }
+
+          const issuerMatches = recoveredFic.issuer === ficIssuer;
+          const recoveredAudiences = recoveredFic.audiences ?? [];
+          const audiencesMatch = expectedAudiences.every((aud) => recoveredAudiences.includes(aud));
+          if (!issuerMatches || !audiencesMatch) {
+            throw err;
+          }
+
+          log(
+            `[AppReg] Recovered duplicate FIC as idempotent success for app ${appObjectId} ` +
+            `(subject: ${ficSubject}, ficId: ${recoveredFic.id})`
+          );
+          results["federatedIdentityCredential"] = {
+            created: false,
+            alreadyExists: true,
+            recoveredAfterDuplicate: true,
+            id: recoveredFic.id,
+            name: recoveredFic.name,
+            subject: recoveredFic.subject,
+            issuer: recoveredFic.issuer,
+            audiences: recoveredFic.audiences,
+          };
+        }
       }
     }
 
@@ -1026,11 +1073,9 @@ const appregConfigureForConnectorTool: ToolDefinition = {
         results["permissionError"] = {
           error: permMsg,
           hint: "Admin consent grant failed. This typically means the server's service principal " +
-            "needs the Cloud Application Administrator directory role in Entra ID, or the " +
-            "DelegatedPermissionGrant.ReadWrite.All application permission with admin consent. " +
-            "To fix: open the Azure portal → Entra ID → App registrations → find the Graph Connector Factory " +
-            "API app → API permissions → Grant admin consent. Alternatively, assign the Cloud Application " +
-            "Administrator role to the app's service principal under Entra ID → Roles and administrators.",
+            "needs the Cloud Application Administrator directory role in Entra ID. " +
+            "To fix: open the Azure portal → Entra ID → Roles and administrators → Cloud Application " +
+            "Administrator → assign the Graph Connector Factory service principal.",
           scopes: graphApiScopes,
         };
       }

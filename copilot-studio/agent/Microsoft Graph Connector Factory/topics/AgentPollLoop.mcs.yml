@@ -1,0 +1,20 @@
+mcs.metadata:
+  componentName: Agent Poll Loop
+kind: AdaptiveDialog
+beginDialog:
+  kind: OnRecognizedIntent
+  id: main
+  intent:
+    displayName: Agent Poll Loop
+    includeInOnSelectIntent: false
+    triggerQueries:
+      - Check agent generation status
+      - Poll agent generation
+
+          actions:
+            - kind: SendActivity
+      id: sendActivity_info
+      activity: |-
+        ℹ️ Agent generation polling is handled automatically when you use the Agent Factory topic.
+
+        If you need to check on a running job, please use the agent factory tools directly.

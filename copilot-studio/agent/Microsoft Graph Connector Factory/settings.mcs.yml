@@ -1,4 +1,4 @@
-﻿displayName: Microsoft Graph Connector Factory
+displayName: Microsoft Graph Connector Factory
 schemaName: copilots_header_91a5e
 accessControlPolicy: GroupMembership
 authenticationMode: Integrated
@@ -20,5 +20,6 @@ configuration:
   recognizer:
     kind: GenerativeAIRecognizer
 
+publishedOn: 2026-06-07T03:16:05.0000000Z
 template: default-2.1.0
 language: 1033

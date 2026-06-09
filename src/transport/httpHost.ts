@@ -20,6 +20,10 @@
  *   POST /api/testing/multi-plan — Generate multi-connector CUA test plan
  *   GET  /download/:id/:filename — Serve generated files
  *   POST /api/graph/test/batch-echo — Test endpoint
+ *   GET  /api/agent/mcp-servers     — List MCP servers for agent composition
+ *   GET  /api/agent/context         — Agent factory context + deploy results
+ *   POST /api/agent/generate        — Generate Copilot Studio agent (async)
+ *   GET  /api/agent/generate/status — Poll agent generation status
  */
 
 import * as fs from "fs";
@@ -40,6 +44,15 @@ import { invokeTool as invokeAppregTool } from "../tools/appreg/tools";
 import { executeDeployPipeline } from "../tools/deploy/pipeline";
 import type { DeployPipelineInput } from "../tools/deploy/pipeline";
 import type { EnrichedOperation } from "../tools/graph/types";
+import {
+  listMcpServers as agentListMcpServers,
+  generateAgent,
+  listSolutions,
+  preflightSolutionName,
+  ensureSolutionExists,
+} from "../tools/agent";
+import type { DeployedConnectorInfo, AgentGenerationInput, KnowledgeSource } from "../tools/agent";
+import { resolveEnvironmentId } from "../tools/agent/pacRunner";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -171,14 +184,17 @@ type DeployJobStatus = "accepted" | "running" | "success" | "partial" | "failed"
 
 interface DeployJob {
   readonly id: string;
-  readonly jobType: "deploy" | "batchDeploy";
+  readonly jobType: "deploy" | "batchDeploy" | "agent-generate";
   status: DeployJobStatus;
   readonly createdAt: number;
-  completedAt?: number;
+  completedAt?: number | undefined;
   readonly ownerKey: string | undefined;
-  result?: Record<string, unknown>;
-  batchProgress?: { total: number; completed: number; succeeded: number; currentBaseName?: string };
-  error?: string;
+  readonly runId?: string | undefined;
+  result?: Record<string, unknown> | undefined;
+  batchProgress?: { total: number; completed: number; succeeded: number; currentBaseName?: string | undefined } | undefined;
+  stageCode?: string | undefined;
+  stageMessage?: string | undefined;
+  error?: string | undefined;
 }
 
 /** Long-poll max wait (ms). Leaves 5s buffer for Copilot Studio's 30s limit. */
@@ -187,13 +203,43 @@ const DEPLOY_STATUS_POLL_MAX_MS = 25_000;
 const DEPLOY_STATUS_POLL_INTERVAL_MS = 1_000;
 /** How long completed jobs stay in memory before sweep (ms). */
 const DEPLOY_JOB_TTL_MS = 60 * 60 * 1_000;
+/** Whether strict runId isolation is enabled for deploy/generate endpoints. */
+const STRICT_RUN_ISOLATION = /^(1|true|yes|on)$/i.test(process.env["GCF_STRICT_RUN_ISOLATION"] ?? "");
+/** Run metadata TTL (ms). */
+const RUN_STATE_TTL_MS = 4 * 60 * 60 * 1_000;
 
 // ─── Session types ────────────────────────────────────────────────────────────
+
+type SessionRunStatus = "active" | "completed";
+
+type RunStageStatus = "not_started" | "running" | "success" | "partial" | "failed";
+
+interface SessionRunStages {
+  deploy: RunStageStatus;
+  cua: RunStageStatus;
+  agent: RunStageStatus;
+  updatedAt: number;
+}
+
+interface SessionRunState {
+  createdAt: number;
+  lastActivity: number;
+  status: SessionRunStatus;
+  stages: SessionRunStages;
+}
+
+interface DeployResultEntry extends Record<string, unknown> {
+  runId?: string | undefined;
+}
 
 interface SessionContextEntry {
   endpoints: string[];
   lastActivity: number;
   designContext?: Record<string, unknown>;
+  agentContext?: Record<string, unknown>;
+  deployResults?: DeployResultEntry[];
+  runStates?: Record<string, SessionRunState>;
+  lastRunId?: string | undefined;
 }
 
 type SessionKeySource = "oid" | "sub" | "userObjectId" | "conversation" | "mcpSessionId" | "none";
@@ -227,7 +273,7 @@ export interface HttpHostOptions {
 
 export function startHttpServer(options: HttpHostOptions): void {
   const { config } = options;
-  const port = options.port ?? config.server.port ?? 3001;
+  const port = options.port ?? (parseInt(process.env["GCF_PORT"] ?? "", 10) || (config.server.port ?? 3001));
   const outputRoot = path.resolve(config.output?.dir ?? path.join(process.cwd(), "output"));
   const ttlMinutes = options.outputTtlMinutes ?? config.output?.ttlMinutes ?? 15;
   const ttlMs = ttlMinutes * 60 * 1000;
@@ -319,16 +365,53 @@ export function startHttpServer(options: HttpHostOptions): void {
   // ─── Deploy job store ─────────────────────────────────────────────────
 
   const deployJobs = new Map<string, DeployJob>();
+  const agentJobs = new Map<string, DeployJob>();
+  const recentAgentGenerateRequests = new Map<string, { jobId: string; createdAt: number }>();
+  const AGENT_REQUEST_DEDUPE_TTL_MS = 15 * 60 * 1000;
 
   function sweepExpiredJobs(): void {
     const now = Date.now();
-    for (const [id, job] of deployJobs) {
-      if (job.status === "accepted" || job.status === "running") continue;
-      if (job.completedAt && now - job.completedAt > DEPLOY_JOB_TTL_MS) {
-        deployJobs.delete(id);
-        log(`[DeployJob] Expired job ${id} (completed ${Math.round((now - job.completedAt) / 60_000)}m ago)`);
+    const sweep = (jobs: Map<string, DeployJob>, label: string) => {
+      for (const [id, job] of jobs) {
+        if (job.status === "accepted" || job.status === "running") continue;
+        if (job.completedAt && now - job.completedAt > DEPLOY_JOB_TTL_MS) {
+          jobs.delete(id);
+          log(`[${label}] Expired job ${id} (completed ${Math.round((now - job.completedAt) / 60_000)}m ago)`);
+        }
+      }
+    };
+    sweep(deployJobs, "DeployJob");
+    sweep(agentJobs, "AgentJob");
+    for (const [key, value] of recentAgentGenerateRequests) {
+      if (now - value.createdAt > AGENT_REQUEST_DEDUPE_TTL_MS) {
+        recentAgentGenerateRequests.delete(key);
       }
     }
+  }
+
+  function buildAgentRequestDedupeKey(
+    ownerKey: string | undefined,
+    runId: string | undefined,
+    input: AgentGenerationInput,
+  ): string {
+    const mcpServerIds = [...(input.mcpServerIds ?? [])].sort();
+    const knowledgeSources = (input.knowledgeSources ?? []).map((item) => ({
+      type: item.type,
+      url: item.url.trim(),
+      displayName: item.displayName.trim(),
+      description: item.description.trim(),
+    }));
+    return JSON.stringify({
+      ownerKey: ownerKey ?? "",
+      runId: runId ?? "",
+      agentName: input.agentName.trim(),
+      agentPurpose: input.agentPurpose.trim(),
+      environmentId: input.environmentId.trim(),
+      solutionName: input.solutionName.trim(),
+      instructionsOverride: (input.instructionsOverride ?? "").trim(),
+      mcpServerIds,
+      knowledgeSources,
+    });
   }
 
   function flattenDeployJob(job: DeployJob): Record<string, unknown> {
@@ -336,6 +419,7 @@ export function startHttpServer(options: HttpHostOptions): void {
     return {
       jobId: job.id,
       jobType: job.jobType,
+      runId: job.runId ?? null,
       status: job.status,
       retryAfter: (job.status === "accepted" || job.status === "running") ? 5 : null,
       createdAt: job.createdAt,
@@ -371,6 +455,18 @@ export function startHttpServer(options: HttpHostOptions): void {
   const sessionAliases = new Map<string, string>();
 
   function normalizeSessionKey(value: unknown): string | undefined {
+    if (typeof value !== "string") return undefined;
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : undefined;
+  }
+
+  function parseBoolean(value: unknown): boolean {
+    if (typeof value === "boolean") return value;
+    if (typeof value !== "string") return false;
+    return /^(1|true|yes|on)$/i.test(value.trim());
+  }
+
+  function normalizeRunId(value: unknown): string | undefined {
     if (typeof value !== "string") return undefined;
     const trimmed = value.trim();
     return trimmed.length > 0 ? trimmed : undefined;
@@ -446,6 +542,167 @@ export function startHttpServer(options: HttpHostOptions): void {
     const aliased = sessionContext.get(alias);
     if (!aliased) return undefined;
     return { key: alias, ctx: aliased };
+  }
+
+  function getOrCreateSessionContext(sessionId: string): SessionContextEntry {
+    const existing = sessionContext.get(sessionId);
+    if (existing) return existing;
+    const created: SessionContextEntry = { endpoints: [], lastActivity: Date.now() };
+    sessionContext.set(sessionId, created);
+    return created;
+  }
+
+  function isRunStateExpired(runState: SessionRunState, now: number): boolean {
+    return now - runState.lastActivity > RUN_STATE_TTL_MS;
+  }
+
+  function getRunState(
+    sessionId: string,
+    runId: string,
+  ): SessionRunState | undefined {
+    const ctx = sessionContext.get(sessionId);
+    if (!ctx?.runStates) return undefined;
+    const runState = ctx.runStates[runId];
+    if (!runState) return undefined;
+    const now = Date.now();
+    if (isRunStateExpired(runState, now)) {
+      delete ctx.runStates[runId];
+      if (ctx.lastRunId === runId) {
+        ctx.lastRunId = undefined;
+      }
+      return undefined;
+    }
+    return runState;
+  }
+
+  function createInitialRunStages(now: number): SessionRunStages {
+    return {
+      deploy: "not_started",
+      cua: "not_started",
+      agent: "not_started",
+      updatedAt: now,
+    };
+  }
+
+  function ensureRunState(sessionId: string, runId: string): SessionRunState {
+    const ctx = getOrCreateSessionContext(sessionId);
+    const now = Date.now();
+    if (!ctx.runStates) {
+      ctx.runStates = {};
+    }
+
+    const existing = getRunState(sessionId, runId);
+    if (existing) {
+      existing.status = "active";
+      if (!existing.stages) {
+        existing.stages = createInitialRunStages(now);
+      }
+      existing.lastActivity = now;
+      return existing;
+    }
+
+    const created: SessionRunState = {
+      createdAt: now,
+      lastActivity: now,
+      status: "active",
+      stages: createInitialRunStages(now),
+    };
+    ctx.runStates[runId] = created;
+    return created;
+  }
+
+  function tattooRunIdOnContexts(sessionId: string, runId: string): void {
+    const ctx = getOrCreateSessionContext(sessionId);
+    if (!ctx.designContext) {
+      ctx.designContext = {};
+    }
+    if (!ctx.agentContext) {
+      ctx.agentContext = {};
+    }
+    ctx.designContext["runId"] = runId;
+    ctx.agentContext["runId"] = runId;
+    ctx.lastRunId = runId;
+    ctx.lastActivity = Date.now();
+  }
+
+  function ensureTattooedRunId(
+    sessionId: string,
+    options?: { mintIfMissing?: boolean; forceNew?: boolean },
+  ): string | undefined {
+    const ctx = getOrCreateSessionContext(sessionId);
+    const forceNew = options?.forceNew ?? false;
+    const mintIfMissing = options?.mintIfMissing ?? false;
+
+    if (!forceNew) {
+      const candidates = [
+        normalizeRunId(ctx.designContext?.["runId"]),
+        normalizeRunId(ctx.agentContext?.["runId"]),
+        normalizeRunId(ctx.lastRunId),
+      ];
+      for (const candidate of candidates) {
+        if (!candidate || !looksLikeUuid(candidate)) continue;
+        ensureRunState(sessionId, candidate);
+        markRunActivity(sessionId, candidate);
+        tattooRunIdOnContexts(sessionId, candidate);
+        return candidate;
+      }
+    }
+
+    if (!mintIfMissing) {
+      return undefined;
+    }
+
+    const runId = mintRunIdForSession(sessionId);
+    tattooRunIdOnContexts(sessionId, runId);
+    return runId;
+  }
+
+  function updateRunStage(
+    sessionId: string,
+    runId: string,
+    stage: "deploy" | "cua" | "agent",
+    status: RunStageStatus,
+  ): void {
+    const runState = ensureRunState(sessionId, runId);
+    const now = Date.now();
+    runState.stages[stage] = status;
+    runState.stages.updatedAt = now;
+    runState.lastActivity = now;
+    const ctx = sessionContext.get(sessionId);
+    if (ctx) {
+      ctx.lastRunId = runId;
+      ctx.lastActivity = now;
+    }
+  }
+
+  function mintRunIdForSession(sessionId: string): string {
+    const ctx = getOrCreateSessionContext(sessionId);
+    const runId = randomUUID();
+    const now = Date.now();
+    if (!ctx.runStates) {
+      ctx.runStates = {};
+    }
+    ctx.runStates[runId] = {
+      createdAt: now,
+      lastActivity: now,
+      status: "active",
+      stages: createInitialRunStages(now),
+    };
+    ctx.lastRunId = runId;
+    ctx.lastActivity = now;
+    return runId;
+  }
+
+  function markRunActivity(sessionId: string, runId: string): void {
+    const runState = getRunState(sessionId, runId);
+    if (!runState) return;
+    const now = Date.now();
+    runState.lastActivity = now;
+    const ctx = sessionContext.get(sessionId);
+    if (ctx) {
+      ctx.lastRunId = runId;
+      ctx.lastActivity = now;
+    }
   }
 
   function trackEndpointForSession(sessionId: string, endpoint: string): void {
@@ -536,6 +793,30 @@ export function startHttpServer(options: HttpHostOptions): void {
     log(`[Session ${sessionId.slice(0, 8)}] Design context updated: ${Object.keys(partial).join(", ")}`);
   }
 
+  function updateAgentContextForSession(sessionId: string, partial: Record<string, unknown>): void {
+    const ctx = sessionContext.get(sessionId);
+    if (ctx) {
+      ctx.agentContext = { ...(ctx.agentContext ?? {}), ...partial };
+      ctx.lastActivity = Date.now();
+    } else {
+      sessionContext.set(sessionId, { endpoints: [], lastActivity: Date.now(), agentContext: partial });
+    }
+    log(`[Session ${sessionId.slice(0, 8)}] Agent context updated: ${Object.keys(partial).join(", ")}`);
+  }
+
+  function appendDeployResult(sessionId: string, result: Record<string, unknown>, runId?: string): void {
+    const ctx = sessionContext.get(sessionId);
+    if (ctx) {
+      if (!ctx.deployResults) ctx.deployResults = [];
+      ctx.deployResults.push({ ...result, runId });
+      ctx.lastActivity = Date.now();
+      if (runId) {
+        markRunActivity(sessionId, runId);
+      }
+      log(`[Session ${sessionId.slice(0, 8)}] Deploy result persisted (total: ${ctx.deployResults.length})`);
+    }
+  }
+
   function createSession(): { id: string; createdAt: number } {
     const session = { id: randomUUID(), createdAt: Date.now() };
     sessions.set(session.id, session);
@@ -555,6 +836,17 @@ export function startHttpServer(options: HttpHostOptions): void {
       if (now - ctx.lastActivity > SESSION_TTL_MS) {
         sessionContext.delete(id);
         log(`Session context expired (sliding TTL): ${id}`);
+        continue;
+      }
+      if (ctx.runStates) {
+        for (const [runId, runState] of Object.entries(ctx.runStates)) {
+          if (isRunStateExpired(runState, now)) {
+            delete ctx.runStates[runId];
+            if (ctx.lastRunId === runId) {
+              ctx.lastRunId = undefined;
+            }
+          }
+        }
       }
     }
     for (const [aliasKey, canonicalKey] of sessionAliases) {
@@ -739,7 +1031,36 @@ export function startHttpServer(options: HttpHostOptions): void {
             log(`[WARN] [Session context] graph_setDesignContext succeeded but no stable session key resolved`);
           } else {
             registerAliases(tracking, tracking.key, sessionId);
-            updateDesignContextForSession(tracking.key, args);
+            const forceNewSession = parseBoolean(args["startNewSession"]);
+            const runId = ensureTattooedRunId(tracking.key, {
+              mintIfMissing: true,
+              forceNew: forceNewSession,
+            });
+            const designArgs = { ...args };
+            delete designArgs["startNewSession"];
+            if (runId) {
+              designArgs["runId"] = runId;
+            }
+            updateDesignContextForSession(tracking.key, designArgs);
+          }
+        }
+
+        // ── agent_setDesignContext interceptor: persist agent factory context ──
+        if (toolName === "agent_setDesignContext" && !rpcRes.result?.isError) {
+          const args = (params?.["arguments"] as Record<string, unknown>) ?? {};
+          const tracking = resolveSessionKeyForRequest(req, {
+            mcpSessionId: sessionId,
+          });
+          if (!tracking.key) {
+            log(`[WARN] [Session context] agent_setDesignContext succeeded but no stable session key resolved`);
+          } else {
+            registerAliases(tracking, tracking.key, sessionId);
+            const runId = ensureTattooedRunId(tracking.key, { mintIfMissing: false });
+            const agentArgs = { ...args };
+            if (runId) {
+              agentArgs["runId"] = runId;
+            }
+            updateAgentContextForSession(tracking.key, agentArgs);
           }
         }
       } // end tools/call intercept
@@ -861,11 +1182,17 @@ export function startHttpServer(options: HttpHostOptions): void {
     const sessionId = tracking.key;
 
     let ctx: SessionContextEntry | undefined;
+    let contextKey: string | undefined;
+    let effectiveRunId: string | undefined;
 
     if (sessionId) {
       registerAliases(tracking, sessionId);
       const resolved = resolveContextKey(sessionId);
+      contextKey = resolved?.key ?? sessionId;
       ctx = resolved?.ctx;
+      if (!ctx && contextKey) {
+        ctx = getOrCreateSessionContext(contextKey);
+      }
       if (!ctx) {
         log(`[Session context] Key "${sessionId.slice(0, 8)}" not found — returning empty context`);
       } else if (resolved?.key && resolved.key !== sessionId) {
@@ -873,6 +1200,10 @@ export function startHttpServer(options: HttpHostOptions): void {
       }
     } else {
       log(`[WARN] [Session context] No session key available — returning empty context`);
+    }
+
+    if (contextKey && ctx) {
+      effectiveRunId = ensureTattooedRunId(contextKey, { mintIfMissing: false });
     }
 
     const legacyEndpoints = ctx?.endpoints ?? [];
@@ -1078,7 +1409,7 @@ export function startHttpServer(options: HttpHostOptions): void {
 
     const connectorCount = typeof designContext["connectorCount"] === "number"
       ? designContext["connectorCount"] as number
-      : 0;
+      : connectorGroups.length;
 
     const authType = typeof designContext["authType"] === "string" ? designContext["authType"] as string : null;
     const appRegistrationStrategy = typeof designContext["appRegistrationStrategy"] === "string"
@@ -1105,6 +1436,7 @@ export function startHttpServer(options: HttpHostOptions): void {
       group2Json,
       group3Json,
       maxOperations: config.graphResearch.maxOperationsPerConnector ?? 256,
+      runId: effectiveRunId ?? "",
     };
     log(`[Session context] Response: hasDesignContext=${responsePayload.hasDesignContext}, connectorCount=${responsePayload.connectorCount}, g1Len=${group1Json.length}`);
     res.json(responsePayload);
@@ -1545,12 +1877,47 @@ export function startHttpServer(options: HttpHostOptions): void {
         caller: reqCtx?.caller ? { ...reqCtx.caller } : undefined,
       };
 
-      // Derive owner key from session header or token claims
-      const sessionKey = normalizeSessionKey(
-        req.headers["x-session-id"] ?? req.headers["x-ms-conversation-id"],
-      );
-      const claims = extractTokenClaims(req.headers["authorization"] as string | undefined);
-      const ownerKey = sessionKey ?? claims?.oidKey ?? claims?.subKey ?? undefined;
+      // Derive owner key consistently with the rest of the server.
+      const tracking = resolveSessionKeyForRequest(req, {});
+      const ownerKey = tracking.key;
+      if (ownerKey) {
+        registerAliases(tracking, ownerKey);
+      }
+      const resolvedOwner = ownerKey ? resolveContextKey(ownerKey) : undefined;
+      const ownerContextKey = resolvedOwner?.key ?? ownerKey;
+      const ownerContext = ownerContextKey ? (resolvedOwner?.ctx ?? getOrCreateSessionContext(ownerContextKey)) : undefined;
+
+      const requestedRunId = normalizeRunId(body["runId"]);
+      let effectiveRunId: string | undefined;
+      if (requestedRunId) {
+        if (!looksLikeUuid(requestedRunId)) {
+          res.status(400).json({ error: "runId must be a valid UUID." });
+          return;
+        }
+        if (!ownerContextKey) {
+          res.status(400).json({ error: "Cannot validate runId without a stable session key." });
+          return;
+        }
+        const runState = getRunState(ownerContextKey, requestedRunId);
+        if (!runState || runState.status !== "active") {
+          res.status(400).json({ error: "Unknown or inactive runId for this session." });
+          return;
+        }
+        effectiveRunId = requestedRunId;
+        markRunActivity(ownerContextKey, effectiveRunId);
+      } else if (STRICT_RUN_ISOLATION) {
+        res.status(400).json({
+          error: "runId is required when strict run isolation is enabled.",
+          code: "RUN_ID_REQUIRED",
+        });
+        return;
+      } else if (ownerContextKey) {
+        const lastRunId = ensureTattooedRunId(ownerContextKey, { mintIfMissing: false });
+        if (lastRunId && getRunState(ownerContextKey, lastRunId)?.status === "active") {
+          effectiveRunId = lastRunId;
+          markRunActivity(ownerContextKey, effectiveRunId);
+        }
+      }
 
       const jobId = randomUUID();
       const job: DeployJob = {
@@ -1559,8 +1926,12 @@ export function startHttpServer(options: HttpHostOptions): void {
         status: "accepted",
         createdAt: Date.now(),
         ownerKey,
+        runId: effectiveRunId,
       };
       deployJobs.set(jobId, job);
+      if (effectiveRunId && ownerContextKey) {
+        updateRunStage(ownerContextKey, effectiveRunId, "deploy", "running");
+      }
 
       log(`[Deploy REST] Created job ${jobId} (owner=${ownerKey ?? "anonymous"})`);
 
@@ -1568,6 +1939,9 @@ export function startHttpServer(options: HttpHostOptions): void {
       void (async () => {
         try {
           job.status = "running";
+          if (effectiveRunId && ownerContextKey) {
+            updateRunStage(ownerContextKey, effectiveRunId, "deploy", "running");
+          }
           const result = await runWithRequestContext(capturedCtx, () =>
             executeDeployPipeline(pipelineInput, config),
           ) as Awaited<ReturnType<typeof executeDeployPipeline>>;
@@ -1593,12 +1967,49 @@ export function startHttpServer(options: HttpHostOptions): void {
           };
           job.status = result.status === "success" ? "success" : result.errors?.length ? "partial" : "success";
           job.completedAt = Date.now();
+          if (effectiveRunId && ownerContextKey) {
+            const stageStatus: RunStageStatus = job.status === "success"
+              ? "success"
+              : (job.status === "partial" ? "partial" : "failed");
+            updateRunStage(ownerContextKey, effectiveRunId, "deploy", stageStatus);
+          }
           log(`[Deploy REST] Job ${jobId} completed: status=${job.status}`);
+
+          // Persist deploy result to session context for agent factory
+          if (connector?.connectorId && ownerContextKey) {
+            const designCtx = resolveContextKey(ownerContextKey)?.ctx.designContext;
+            const connectorGroups = designCtx?.["connectorGroups"] as Array<Record<string, unknown>> | undefined;
+            const matchingGroup = connectorGroups?.find((g) =>
+              g["baseName"] === pipelineInput.baseName || g["name"] === pipelineInput.baseName,
+            );
+            const groupOps = matchingGroup?.["operations"] as Array<Record<string, unknown>> | undefined;
+            const operations = groupOps?.map((op) => ({
+              operationId: String(op["operationId"] ?? ""),
+              summary: String(op["summary"] ?? op["operationId"] ?? ""),
+              method: String(op["method"] ?? "GET").toUpperCase(),
+              path: String(op["path"] ?? ""),
+            })).filter((o) => o.operationId) ?? [];
+            appendDeployResult(ownerContextKey, {
+              timestamp: Date.now(),
+              connectorId: connector.connectorId,
+              apiName: connector.connectorId.split("/").pop() ?? "",
+              displayName: connector.displayName,
+              baseName: pipelineInput.baseName ?? "",
+              environmentId: connector.environmentId,
+              authType: connector.authType ?? "Unknown",
+              appRegistrationAppId: appReg?.appId ?? undefined,
+              operationIds: (matchingGroup?.["operationIds"] as string[]) ?? [],
+              operations,
+            }, effectiveRunId);
+          }
         } catch (err) {
           const message = err instanceof Error ? err.message : String(err);
           job.status = "failed";
           job.error = message;
           job.completedAt = Date.now();
+          if (effectiveRunId && ownerContextKey) {
+            updateRunStage(ownerContextKey, effectiveRunId, "deploy", "failed");
+          }
           log(`[Deploy REST] Job ${jobId} FAILED: ${message}`);
         }
       })();
@@ -1654,11 +2065,46 @@ export function startHttpServer(options: HttpHostOptions): void {
         caller: reqCtx?.caller ? { ...reqCtx.caller } : undefined,
       };
 
-      const sessionKey = normalizeSessionKey(
-        req.headers["x-session-id"] ?? req.headers["x-ms-conversation-id"],
-      );
-      const claims = extractTokenClaims(req.headers["authorization"] as string | undefined);
-      const ownerKey = sessionKey ?? claims?.oidKey ?? claims?.subKey ?? undefined;
+      const tracking = resolveSessionKeyForRequest(req, {});
+      const ownerKey = tracking.key;
+      if (ownerKey) {
+        registerAliases(tracking, ownerKey);
+      }
+      const resolvedOwner = ownerKey ? resolveContextKey(ownerKey) : undefined;
+      const ownerContextKey = resolvedOwner?.key ?? ownerKey;
+      const ownerContext = ownerContextKey ? (resolvedOwner?.ctx ?? getOrCreateSessionContext(ownerContextKey)) : undefined;
+
+      const requestedRunId = normalizeRunId(body["runId"]);
+      let effectiveRunId: string | undefined;
+      if (requestedRunId) {
+        if (!looksLikeUuid(requestedRunId)) {
+          res.status(400).json({ error: "runId must be a valid UUID." });
+          return;
+        }
+        if (!ownerContextKey) {
+          res.status(400).json({ error: "Cannot validate runId without a stable session key." });
+          return;
+        }
+        const runState = getRunState(ownerContextKey, requestedRunId);
+        if (!runState || runState.status !== "active") {
+          res.status(400).json({ error: "Unknown or inactive runId for this session." });
+          return;
+        }
+        effectiveRunId = requestedRunId;
+        markRunActivity(ownerContextKey, effectiveRunId);
+      } else if (STRICT_RUN_ISOLATION) {
+        res.status(400).json({
+          error: "runId is required when strict run isolation is enabled.",
+          code: "RUN_ID_REQUIRED",
+        });
+        return;
+      } else if (ownerContextKey) {
+        const lastRunId = ensureTattooedRunId(ownerContextKey, { mintIfMissing: false });
+        if (lastRunId && getRunState(ownerContextKey, lastRunId)?.status === "active") {
+          effectiveRunId = lastRunId;
+          markRunActivity(ownerContextKey, effectiveRunId);
+        }
+      }
 
       const jobId = randomUUID();
       const job: DeployJob = {
@@ -1667,9 +2113,13 @@ export function startHttpServer(options: HttpHostOptions): void {
         status: "accepted",
         createdAt: Date.now(),
         ownerKey,
+        runId: effectiveRunId,
         batchProgress: { total: groups.length, completed: 0, succeeded: 0 },
       };
       deployJobs.set(jobId, job);
+      if (effectiveRunId && ownerContextKey) {
+        updateRunStage(ownerContextKey, effectiveRunId, "deploy", "running");
+      }
 
       log(`[BatchDeploy] Created job ${jobId} for ${groups.length} group(s) (owner=${ownerKey ?? "anonymous"})`);
 
@@ -1677,6 +2127,9 @@ export function startHttpServer(options: HttpHostOptions): void {
       void (async () => {
         try {
           job.status = "running";
+          if (effectiveRunId && ownerContextKey) {
+            updateRunStage(ownerContextKey, effectiveRunId, "deploy", "running");
+          }
           const results: Array<{
             baseName: string; status: string;
             connectorId: string; connectorDisplayName: string;
@@ -1733,6 +2186,34 @@ export function startHttpServer(options: HttpHostOptions): void {
               });
               job.batchProgress!.succeeded++;
               log(`[BatchDeploy] Job ${jobId}: "${groupBaseName}" succeeded`);
+
+              // Persist deploy result for agent factory (mirrors single deploy logic)
+              if (connector?.connectorId && ownerContextKey) {
+                const designCtx = resolveContextKey(ownerContextKey)?.ctx.designContext;
+                const connectorGroups = designCtx?.["connectorGroups"] as Array<Record<string, unknown>> | undefined;
+                const matchingGroup = connectorGroups?.find((g) =>
+                  g["baseName"] === groupBaseName || g["name"] === groupBaseName,
+                );
+                const groupOps = matchingGroup?.["operations"] as Array<Record<string, unknown>> | undefined;
+                const operations = groupOps?.map((op) => ({
+                  operationId: String(op["operationId"] ?? ""),
+                  summary: String(op["summary"] ?? op["operationId"] ?? ""),
+                  method: String(op["method"] ?? "GET").toUpperCase(),
+                  path: String(op["path"] ?? ""),
+                })).filter((o) => o.operationId) ?? [];
+                appendDeployResult(ownerContextKey, {
+                  timestamp: Date.now(),
+                  connectorId: connector.connectorId,
+                  apiName: connector.connectorId.split("/").pop() ?? "",
+                  displayName: connector.displayName,
+                  baseName: groupBaseName,
+                  environmentId,
+                  authType: connector.authType ?? "Unknown",
+                  appRegistrationAppId: appReg?.appId ?? undefined,
+                  operationIds: (matchingGroup?.["operationIds"] as string[]) ?? [],
+                  operations,
+                }, effectiveRunId);
+              }
             } catch (groupErr) {
               const msg = groupErr instanceof Error ? groupErr.message : String(groupErr);
               log(`[BatchDeploy] Job ${jobId}: "${groupBaseName}" FAILED: ${msg}`);
@@ -1754,6 +2235,12 @@ export function startHttpServer(options: HttpHostOptions): void {
           };
           job.status = successCount === results.length ? "success" : successCount > 0 ? "partial" : "failed";
           job.completedAt = Date.now();
+          if (effectiveRunId && ownerContextKey) {
+            const stageStatus: RunStageStatus = job.status === "success"
+              ? "success"
+              : (job.status === "partial" ? "partial" : "failed");
+            updateRunStage(ownerContextKey, effectiveRunId, "deploy", stageStatus);
+          }
           delete job.batchProgress!.currentBaseName;
           log(`[BatchDeploy] Job ${jobId} complete: ${successCount}/${results.length} succeeded`);
         } catch (err) {
@@ -1761,6 +2248,9 @@ export function startHttpServer(options: HttpHostOptions): void {
           job.status = "failed";
           job.error = message;
           job.completedAt = Date.now();
+          if (effectiveRunId && ownerContextKey) {
+            updateRunStage(ownerContextKey, effectiveRunId, "deploy", "failed");
+          }
           log(`[BatchDeploy] Job ${jobId} FAILED: ${message}`);
         }
       })();
@@ -1982,11 +2472,7 @@ export function startHttpServer(options: HttpHostOptions): void {
 
       // Owner check: if job has an owner, validate caller matches
       if (job.ownerKey) {
-        const sessionKey = normalizeSessionKey(
-          req.headers["x-session-id"] ?? req.headers["x-ms-conversation-id"],
-        );
-        const claims = extractTokenClaims(req.headers["authorization"] as string | undefined);
-        const callerKey = sessionKey ?? claims?.oidKey ?? claims?.subKey ?? undefined;
+        const callerKey = resolveSessionKeyForRequest(req, {}).key;
 
         if (callerKey !== job.ownerKey) {
           res.json({
@@ -2110,6 +2596,542 @@ export function startHttpServer(options: HttpHostOptions): void {
       parsedGroups,
       resultsJson: JSON.stringify(sampleResults),
     });
+  });
+
+  // ─── Agent Factory: MCP Servers ────────────────────────────────────────
+
+  app.get("/api/agent/mcp-servers", (req, res) => {
+    try {
+      const category = req.query["category"] as string | undefined;
+      const filter: { category?: string } = {};
+      if (category != null) filter.category = category;
+      const servers = agentListMcpServers(filter);
+      res.json({ servers, count: servers.length });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      res.status(500).json({ error: message });
+    }
+  });
+
+  // ─── Agent Factory: Get Agent Context ──────────────────────────────────
+
+  app.use("/api/agent", (req, _res, next) => {
+    const tracking = resolveSessionKeyForRequest(req, {});
+    const keyPreview = tracking.key ? tracking.key.slice(0, 8) : "none";
+    log(`[Agent API] ${req.method} ${req.path} keySource=${tracking.source} key=${keyPreview}`);
+    next();
+  });
+
+  app.get("/api/agent/context", async (req, res) => {
+    try {
+      const tracking = resolveSessionKeyForRequest(req, {});
+      if (!tracking.key) {
+        res.json({
+          agentContext: null,
+          deployedConnectors: [],
+          designContext: null,
+          runId: null,
+          solutionChoicesJson: "[{\"title\":\"Create new solution\",\"value\":\"__new__\"}]",
+          defaultSolutionName: "__new__",
+          solutionListError: null,
+        });
+        return;
+      }
+      registerAliases(tracking, tracking.key);
+      const resolved = resolveContextKey(tracking.key);
+      const contextKey = resolved?.key ?? tracking.key;
+      const ctx = resolved?.ctx ?? getOrCreateSessionContext(contextKey);
+      const dc = ctx?.designContext as Record<string, unknown> | undefined;
+      const ac = ctx?.agentContext as Record<string, unknown> | undefined;
+
+      const effectiveRunId = ensureTattooedRunId(contextKey, { mintIfMissing: false });
+
+      const deployedAll = ctx?.deployResults ?? [];
+      const deployed = effectiveRunId
+        ? deployedAll.filter((item) => item.runId === effectiveRunId)
+        : (STRICT_RUN_ISOLATION ? [] : deployedAll);
+
+      // Build deployed connector summaries for the card
+      const connectorSummaries = (deployed as Array<Record<string, unknown>>).map((d) => ({
+        displayName: d["displayName"] ?? "",
+        apiName: d["apiName"] ?? "",
+        operationCount: Array.isArray(d["operationIds"]) && (d["operationIds"] as string[]).length > 0
+          ? (d["operationIds"] as string[]).length
+          : Array.isArray(d["operations"]) ? (d["operations"] as unknown[]).length : 0,
+      }));
+
+      // Extract flat knowledge source URLs for card pre-population
+      const ksList = Array.isArray(ac?.["knowledgeSources"]) ? ac["knowledgeSources"] as Array<Record<string, unknown>> : [];
+
+      const environmentId = ((dc?.["environmentId"] as string | undefined)?.trim())
+        || config.powerPlatform.defaultEnvironmentId
+        || undefined;
+      let solutionListError: string | null = null;
+      let solutionChoicesJson = JSON.stringify([
+        { title: "Create new solution", value: "__new__" },
+      ]);
+      let defaultSolutionName = "__new__";
+      if (environmentId) {
+        try {
+          const resolvedEnvironmentId = await resolveEnvironmentId(environmentId);
+          const solutions = await listSolutions(resolvedEnvironmentId);
+          const options = solutions.slice(0, 75).map((solution: { friendlyName: string; uniqueName: string }) => ({
+            title: `${solution.friendlyName} (${solution.uniqueName})`,
+            value: solution.uniqueName,
+          }));
+          defaultSolutionName = solutions[0]?.uniqueName ?? "__new__";
+          solutionChoicesJson = JSON.stringify([
+            ...options,
+            { title: "Create new solution", value: "__new__" },
+          ]);
+        } catch (solutionErr) {
+          solutionListError = solutionErr instanceof Error ? solutionErr.message : String(solutionErr);
+          logError(`[Agent Context] Failed to load solution list: ${solutionListError}`);
+        }
+      }
+
+      res.json({
+        agentName: ac?.["agentName"] ?? dc?.["agentName"] ?? "",
+        agentPurpose: ac?.["agentPurpose"] ?? dc?.["agentPurpose"] ?? "",
+        deployedConnectorCount: String(deployed.length),
+        hasDeployedConnectors: deployed.length > 0 ? "true" : "false",
+        deployedConnectorsJson: JSON.stringify(deployed),
+        connectorSummariesJson: JSON.stringify(connectorSummaries),
+        // Research-phase recommendations from agent context
+        recommendedMcpServers: (normalizeMcpServerIds(ac?.["selectedMcpServers"]) ?? []).join(","),
+        recommendedKnowledgeSourcesJson: Array.isArray(ac?.["knowledgeSources"])
+          ? JSON.stringify(ac["knowledgeSources"])
+          : "[]",
+        // Flat knowledge source URLs for card pre-population
+        recKsUrl1: ksList.length > 0 ? String(ksList[0]?.["url"] ?? "") : "",
+        recKsUrl2: ksList.length > 1 ? String(ksList[1]?.["url"] ?? "") : "",
+        recKsUrl3: ksList.length > 2 ? String(ksList[2]?.["url"] ?? "") : "",
+        recKsName1: ksList.length > 0 ? String(ksList[0]?.["displayName"] ?? "") : "",
+        recKsName2: ksList.length > 1 ? String(ksList[1]?.["displayName"] ?? "") : "",
+        recKsName3: ksList.length > 2 ? String(ksList[2]?.["displayName"] ?? "") : "",
+        solutionChoicesJson,
+        defaultSolutionName,
+        solutionListError,
+        runId: effectiveRunId ?? "",
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      res.status(500).json({ error: message });
+    }
+  });
+
+  app.get("/api/agent/solutions", async (req, res) => {
+    try {
+      const environmentId = (req.query["environmentId"] as string | undefined)?.trim();
+      if (!environmentId) {
+        res.status(400).json({ error: "environmentId query parameter is required." });
+        return;
+      }
+      const resolvedEnvironmentId = await resolveEnvironmentId(environmentId);
+      const solutions = await listSolutions(resolvedEnvironmentId);
+      const options = solutions.slice(0, 75).map((solution: { friendlyName: string; uniqueName: string }) => ({
+        title: `${solution.friendlyName} (${solution.uniqueName})`,
+        value: solution.uniqueName,
+      }));
+      res.json({
+        solutions,
+        options,
+        count: solutions.length,
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      res.status(500).json({ error: message });
+    }
+  });
+
+  app.post("/api/agent/solution/preflight", async (req, res) => {
+    try {
+      const body = req.body as Record<string, unknown>;
+      const environmentId = (body["environmentId"] as string | undefined)?.trim();
+      const solutionName = (body["solutionName"] as string | undefined)?.trim();
+      if (!environmentId) {
+        res.status(400).json({ error: "environmentId is required." });
+        return;
+      }
+      if (!solutionName) {
+        res.status(400).json({ error: "solutionName is required." });
+        return;
+      }
+      const resolvedEnvironmentId = await resolveEnvironmentId(environmentId);
+      const preflight = await preflightSolutionName(resolvedEnvironmentId, solutionName);
+      res.json({
+        originalName: preflight.originalName,
+        normalizedName: preflight.normalizedName,
+        isValid: preflight.isValid ? "true" : "false",
+        exists: preflight.exists ? "true" : "false",
+        message: preflight.message ?? "",
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      res.status(500).json({ error: message });
+    }
+  });
+
+  app.post("/api/agent/solution/ensure", async (req, res) => {
+    try {
+      const body = req.body as Record<string, unknown>;
+      const environmentId = (body["environmentId"] as string | undefined)?.trim();
+      const solutionName = (body["solutionName"] as string | undefined)?.trim();
+      if (!environmentId) {
+        res.status(400).json({ error: "environmentId is required." });
+        return;
+      }
+      if (!solutionName) {
+        res.status(400).json({ error: "solutionName is required." });
+        return;
+      }
+      const resolvedEnvironmentId = await resolveEnvironmentId(environmentId);
+      const preflight = await preflightSolutionName(resolvedEnvironmentId, solutionName);
+      if (!preflight.isValid) {
+        res.status(400).json({
+          error: preflight.message ?? "Invalid solution name.",
+          normalizedName: preflight.normalizedName,
+          isValid: "false",
+        });
+        return;
+      }
+      const ensured = await ensureSolutionExists(resolvedEnvironmentId, preflight.normalizedName);
+      res.json({
+        solutionName: preflight.normalizedName,
+        created: ensured.created ? "true" : "false",
+        publisherPrefix: ensured.publisherPrefix,
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      res.status(500).json({ error: message });
+    }
+  });
+
+  // ─── Agent Factory: Generate Agent (async job) ─────────────────────────
+
+  // Input normalization helpers — CS topic sends strings, endpoint expects typed values
+  function normalizeMcpServerIds(raw: unknown): string[] | undefined {
+    if (!raw) return undefined;
+    if (Array.isArray(raw)) {
+      const filtered = raw.filter((s) => typeof s === "string" && s.trim());
+      return filtered.length > 0 ? filtered : undefined;
+    }
+    if (typeof raw === "string") {
+      const trimmed = raw.trim();
+      if (!trimmed || trimmed === "none" || trimmed === "[]") return undefined;
+      const parts = trimmed.split(",").map((s) => s.trim()).filter(Boolean);
+      return parts.length > 0 ? parts : undefined;
+    }
+    return undefined;
+  }
+
+  function normalizeKnowledgeSources(raw: unknown): KnowledgeSource[] | undefined {
+    if (!raw) return undefined;
+    // Already an array of objects
+    if (Array.isArray(raw)) return raw.length > 0 ? raw : undefined;
+    // JSON string from topic
+    if (typeof raw === "string") {
+      const trimmed = raw.trim();
+      if (!trimmed || trimmed === "none" || trimmed === "[]") return undefined;
+      try {
+        const parsed = JSON.parse(trimmed);
+        return Array.isArray(parsed) && parsed.length > 0 ? parsed : undefined;
+      } catch {
+        log(`[Agent Generate] Could not parse knowledgeSources JSON: ${trimmed.slice(0, 200)}`);
+        return undefined;
+      }
+    }
+    return undefined;
+  }
+
+
+  app.post("/api/agent/generate", async (req, res) => {
+    try {
+      const body = req.body as Record<string, unknown>;
+
+      // Resolve session context first — research-phase data falls back to agent/design context
+      const tracking = resolveSessionKeyForRequest(req, {});
+      const ownerKey = tracking.key;
+      if (ownerKey) {
+        registerAliases(tracking, ownerKey);
+      }
+      const resolvedContext = ownerKey ? resolveContextKey(ownerKey) : undefined;
+      const contextKey = resolvedContext?.key ?? ownerKey;
+      const ctx = contextKey ? (resolvedContext?.ctx ?? getOrCreateSessionContext(contextKey)) : undefined;
+      const ac = ctx?.agentContext as Record<string, unknown> | undefined;
+      const dc = ctx?.designContext as Record<string, unknown> | undefined;
+
+      // Agent name/purpose: body → agent context → design context
+      const agentName = (body["agentName"] as string) ||
+        (ac?.["agentName"] as string) || (dc?.["agentName"] as string) || "";
+      const agentPurpose = (body["agentPurpose"] as string) ||
+        (ac?.["agentPurpose"] as string) || (dc?.["agentPurpose"] as string) || "";
+
+      if (!agentName || !agentPurpose) {
+        res.status(400).json({ error: "agentName and agentPurpose are required." });
+        return;
+      }
+
+      const requestedRunId = normalizeRunId(body["runId"]);
+      let effectiveRunId: string | undefined;
+      if (requestedRunId) {
+        if (!looksLikeUuid(requestedRunId)) {
+          res.status(400).json({ error: "runId must be a valid UUID." });
+          return;
+        }
+        if (!contextKey) {
+          res.status(400).json({ error: "Cannot validate runId without a stable session key." });
+          return;
+        }
+        const runState = getRunState(contextKey, requestedRunId);
+        if (!runState || runState.status !== "active") {
+          res.status(400).json({ error: "Unknown or inactive runId for this session." });
+          return;
+        }
+        effectiveRunId = requestedRunId;
+        markRunActivity(contextKey, effectiveRunId);
+      } else if (STRICT_RUN_ISOLATION) {
+        res.status(400).json({
+          error: "runId is required when strict run isolation is enabled.",
+          code: "RUN_ID_REQUIRED",
+        });
+        return;
+      } else if (contextKey) {
+        const lastRunId = ensureTattooedRunId(contextKey, { mintIfMissing: false });
+        if (lastRunId && getRunState(contextKey, lastRunId)?.status === "active") {
+          effectiveRunId = lastRunId;
+        }
+      }
+
+      const deployedConnectors = (
+        effectiveRunId
+          ? (ctx?.deployResults ?? []).filter((item) => item.runId === effectiveRunId)
+          : (ctx?.deployResults ?? [])
+      ) as unknown as DeployedConnectorInfo[];
+
+      if (deployedConnectors.length === 0) {
+        const detail = effectiveRunId
+          ? `No deployed connectors found for runId ${effectiveRunId}.`
+          : "No deployed connectors found.";
+        res.status(400).json({ error: `${detail} Deploy connectors first.` });
+        return;
+      }
+
+      const environmentId = body["environmentId"] as string ??
+        (dc?.["environmentId"] as string) ?? "";
+      const rawSolutionName = body["solutionName"];
+      const solutionName = typeof rawSolutionName === "string" ? rawSolutionName.trim() : "";
+
+      if (!environmentId) {
+        res.status(400).json({ error: "environmentId is required." });
+        return;
+      }
+      if (!solutionName) {
+        res.status(400).json({ error: "solutionName is required." });
+        return;
+      }
+
+      const resolvedEnvironmentId = await resolveEnvironmentId(environmentId);
+      const solutionPreflight = await preflightSolutionName(resolvedEnvironmentId, solutionName);
+      if (!solutionPreflight.isValid) {
+        res.status(400).json({
+          error: solutionPreflight.message ?? "Invalid solution name.",
+          normalizedName: solutionPreflight.normalizedName,
+        });
+        return;
+      }
+      if (!solutionPreflight.exists) {
+        res.status(400).json({
+          error: `Solution "${solutionPreflight.normalizedName}" does not exist. Create it before generating the agent.`,
+          normalizedName: solutionPreflight.normalizedName,
+          code: "SOLUTION_NOT_FOUND",
+        });
+        return;
+      }
+
+      const generationInput: AgentGenerationInput = {
+        agentName,
+        agentPurpose,
+        mcpServerIds: normalizeMcpServerIds(body["mcpServerIds"]) ??
+          normalizeMcpServerIds(ac?.["selectedMcpServers"]),
+        knowledgeSources: normalizeKnowledgeSources(body["knowledgeSources"] ?? body["knowledgeSourcesJson"]) ??
+          normalizeKnowledgeSources(ac?.["knowledgeSources"]),
+        instructionsOverride: (body["instructionsOverride"] as string | undefined) ??
+          (ac?.["instructionsOverride"] as string | undefined),
+        environmentId,
+        solutionName: solutionPreflight.normalizedName,
+      };
+
+      const dedupeKey = buildAgentRequestDedupeKey(ownerKey, effectiveRunId, generationInput);
+      const existingRequest = recentAgentGenerateRequests.get(dedupeKey);
+      if (existingRequest) {
+        const existingJob = agentJobs.get(existingRequest.jobId);
+        if (existingJob) {
+          res.status(202).json({
+            jobId: existingJob.id,
+            runId: existingJob.runId ?? null,
+            status: existingJob.status,
+            stageCode: existingJob.stageCode ?? null,
+            stageMessage: existingJob.stageMessage ?? null,
+            retryAfter: (existingJob.status === "accepted" || existingJob.status === "running") ? 10 : null,
+          });
+          return;
+        }
+        recentAgentGenerateRequests.delete(dedupeKey);
+      }
+
+      const jobId = randomUUID();
+      const job: DeployJob = {
+        id: jobId,
+        jobType: "agent-generate",
+        status: "accepted",
+        stageCode: "queued",
+        stageMessage: "Queued for agent generation...",
+        createdAt: Date.now(),
+        ownerKey,
+        runId: effectiveRunId,
+      };
+      agentJobs.set(jobId, job);
+      recentAgentGenerateRequests.set(dedupeKey, { jobId, createdAt: Date.now() });
+      if (effectiveRunId && contextKey) {
+        updateRunStage(contextKey, effectiveRunId, "agent", "running");
+      }
+
+      log(`[Agent Generate] Created job ${jobId}`);
+
+      // Fire-and-forget
+      void (async () => {
+        try {
+          job.status = "running";
+          job.stageCode = "preparing";
+          job.stageMessage = "Preparing agent generation...";
+          if (effectiveRunId && contextKey) {
+            updateRunStage(contextKey, effectiveRunId, "agent", "running");
+          }
+          const result = await generateAgent(generationInput, deployedConnectors, (progress) => {
+            job.stageCode = progress.stageCode;
+            job.stageMessage = progress.stageMessage;
+          });
+          job.result = result as unknown as Record<string, unknown>;
+          job.status = result.finalStatus === "partial"
+            ? "partial"
+            : (result.success ? "success" : "failed");
+          if (!result.success && result.finalStatus !== "partial") {
+            job.error = result.error ?? result.failureReason;
+          }
+          job.stageCode = "completed";
+          job.stageMessage = "Agent generation complete.";
+          job.completedAt = Date.now();
+          if (effectiveRunId && contextKey) {
+            const stageStatus: RunStageStatus = job.status === "success"
+              ? "success"
+              : (job.status === "partial" ? "partial" : "failed");
+            updateRunStage(contextKey, effectiveRunId, "agent", stageStatus);
+          }
+          log(`[Agent Generate] Job ${jobId} completed: ${job.status}`);
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          job.status = "failed";
+          job.stageCode = "failed";
+          job.stageMessage = "Agent generation failed.";
+          job.error = message;
+          job.completedAt = Date.now();
+          if (effectiveRunId && contextKey) {
+            updateRunStage(contextKey, effectiveRunId, "agent", "failed");
+          }
+          log(`[Agent Generate] Job ${jobId} FAILED: ${message}`);
+        }
+      })();
+
+      res.status(202).json({
+        jobId,
+        runId: effectiveRunId ?? null,
+        status: "accepted",
+        stageCode: job.stageCode ?? null,
+        stageMessage: job.stageMessage ?? null,
+        retryAfter: 10,
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      res.status(500).json({ error: message });
+    }
+  });
+
+  // ─── Agent Factory: Poll Generation Status ─────────────────────────────
+
+  app.get("/api/agent/generate/status", async (req, res) => {
+    try {
+      const jobId = (req.query["jobId"] as string | undefined)?.trim();
+      if (!jobId) {
+        res.status(400).json({ error: "jobId query parameter is required." });
+        return;
+      }
+
+      const job = agentJobs.get(jobId);
+      if (!job) {
+        res.json({ jobId, status: "expired", error: "Job not found or expired." });
+        return;
+      }
+
+      if (job.ownerKey) {
+        const callerKey = resolveSessionKeyForRequest(req, {}).key;
+        if (callerKey !== job.ownerKey) {
+          res.json({
+            jobId,
+            runId: job.runId ?? null,
+            status: "unauthorized",
+            retryAfter: null,
+            error: "You are not the owner of this job.",
+          });
+          return;
+        }
+      }
+
+      // If terminal, return immediately
+      if (job.status !== "accepted" && job.status !== "running") {
+        res.json({
+          jobId: job.id,
+          runId: job.runId ?? null,
+          status: job.status,
+          stageCode: job.stageCode ?? null,
+          stageMessage: job.stageMessage ?? null,
+          result: job.result ?? null,
+          error: job.error ?? null,
+        });
+        return;
+      }
+
+      // Long-poll
+      const deadline = Date.now() + DEPLOY_STATUS_POLL_MAX_MS;
+      while (Date.now() < deadline) {
+        if (job.status !== "accepted" && job.status !== "running") {
+          res.json({
+            jobId: job.id,
+            runId: job.runId ?? null,
+            status: job.status,
+            stageCode: job.stageCode ?? null,
+            stageMessage: job.stageMessage ?? null,
+            result: job.result ?? null,
+            error: job.error ?? null,
+          });
+          return;
+        }
+        await new Promise((resolve) => setTimeout(resolve, DEPLOY_STATUS_POLL_INTERVAL_MS));
+      }
+
+      res.json({
+        jobId: job.id,
+        runId: job.runId ?? null,
+        status: job.status,
+        stageCode: job.stageCode ?? null,
+        stageMessage: job.stageMessage ?? null,
+        result: {},
+        retryAfter: 10,
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      res.status(500).json({ error: message });
+    }
   });
 
   // ─── Cleanup sweep ────────────────────────────────────────────────────

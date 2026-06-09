@@ -789,6 +789,40 @@ const SCOPE_PREFIX_MAP: Record<string, string> = {
   roleDefinition: "DeviceManagementRBAC",
   deviceEnrollmentConfiguration: "DeviceManagementServiceConfig",
   termsAndConditions: "DeviceManagementServiceConfig",
+  // App registration / service principal entities all use Application.* scopes
+  application: "Application",
+  servicePrincipal: "Application",
+  appRoleAssignment: "AppRoleAssignment",
+  oAuth2PermissionGrant: "DelegatedPermissionGrant",
+  // Directory objects
+  directoryObject: "Directory",
+  directoryRole: "RoleManagement",
+  directoryRoleTemplate: "RoleManagement",
+  // User & group entities
+  user: "User",
+  group: "Group",
+  orgContact: "OrgContact",
+  // Mail, calendar, contacts
+  message: "Mail",
+  mailFolder: "Mail",
+  event: "Calendars",
+  calendar: "Calendars",
+  contact: "Contacts",
+  contactFolder: "Contacts",
+  // Files & sites
+  driveItem: "Files",
+  drive: "Files",
+  site: "Sites",
+  list: "Sites",
+  listItem: "Sites",
+  // Teams
+  team: "Team",
+  channel: "Channel",
+  chatMessage: "ChannelMessage",
+  chat: "Chat",
+  // Security
+  alert: "SecurityEvents",
+  secureScore: "SecurityEvents",
 };
 
 /**

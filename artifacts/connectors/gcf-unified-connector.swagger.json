@@ -3,7 +3,7 @@
   "info": {
     "title": "GCF REST Connector",
     "description": "Unified custom connector for Graph Connector Factory. Exposes research operations (list Graph API operations, generate connectors, manage session context) and deployment operations (deploy connectors, check names, list environments). All operations require OAuth authentication.",
-    "version": "1.0",
+    "version": "1.1",
     "contact": {
       "name": "Graph Connector Factory",
       "url": "https://github.com/managedBlog/graph-connector-factory-v2"
@@ -196,6 +196,12 @@
                   "type": "string",
                   "x-ms-summary": "Group 3 JSON",
                   "description": "JSON-serialized connector group 3 object. Empty string if fewer than 3 groups."
+                },
+                "runId": {
+                  "type": "string",
+                  "x-ms-summary": "Run ID",
+                  "x-nullable": true,
+                  "description": "Current active run ID for this session context."
                 }
               }
             }
@@ -247,6 +253,12 @@
                   "type": "string",
                   "description": "Inline Swagger JSON string. Use this OR swaggerUrl, not both.",
                   "x-ms-summary": "API Definition",
+                  "x-ms-visibility": "advanced"
+                },
+                "runId": {
+                  "type": "string",
+                  "description": "Optional run ID used for strict isolation.",
+                  "x-ms-summary": "Run ID",
                   "x-ms-visibility": "advanced"
                 }
               }
@@ -448,6 +460,428 @@
           }
         }
       }
+    },
+    "/api/agent/mcp-servers": {
+      "get": {
+        "operationId": "agent_listMcpServers",
+        "summary": "List available MCP servers",
+        "description": "Returns a curated catalog of Microsoft MCP servers that can be added as tools to a generated agent.",
+        "x-ms-visibility": "important",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "List of MCP servers",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "servers": {
+                  "type": "array",
+                  "x-ms-summary": "Servers",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "description": "Catalog ID."
+                      },
+                      "displayName": {
+                        "type": "string",
+                        "description": "Server name."
+                      },
+                      "description": {
+                        "type": "string",
+                        "description": "What this server does."
+                      },
+                      "category": {
+                        "type": "string",
+                        "description": "Category."
+                      },
+                      "stable": {
+                        "type": "boolean",
+                        "description": "Connector name is globally stable."
+                      }
+                    }
+                  }
+                },
+                "count": {
+                  "type": "integer",
+                  "x-ms-summary": "Count"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/agent/context": {
+      "get": {
+        "operationId": "agent_getContext",
+        "summary": "Get agent factory context",
+        "description": "Returns deployed connectors from this session, agent design decisions from research, and design context.",
+        "x-ms-visibility": "important",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Agent factory context",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "agentName": {
+                  "type": "string",
+                  "x-ms-summary": "Agent Name"
+                },
+                "agentPurpose": {
+                  "type": "string",
+                  "x-ms-summary": "Agent Purpose"
+                },
+                "deployedConnectorCount": {
+                  "type": "string",
+                  "x-ms-summary": "Deployed Connector Count"
+                },
+                "hasDeployedConnectors": {
+                  "type": "string",
+                  "x-ms-summary": "Has Deployed Connectors"
+                },
+                "deployedConnectorsJson": {
+                  "type": "string",
+                  "x-ms-summary": "Deployed Connectors JSON"
+                },
+                "connectorSummariesJson": {
+                  "type": "string",
+                  "x-ms-summary": "Connector Summaries JSON"
+                },
+                "recommendedMcpServers": {
+                  "type": "string",
+                  "x-ms-summary": "Recommended MCP Servers"
+                },
+                "recommendedKnowledgeSourcesJson": {
+                  "type": "string",
+                  "x-ms-summary": "Recommended Knowledge Sources JSON"
+                },
+                "recKsUrl1": {
+                  "type": "string",
+                  "x-ms-summary": "Recommended KS URL 1"
+                },
+                "recKsUrl2": {
+                  "type": "string",
+                  "x-ms-summary": "Recommended KS URL 2"
+                },
+                "recKsUrl3": {
+                  "type": "string",
+                  "x-ms-summary": "Recommended KS URL 3"
+                },
+                "recKsName1": {
+                  "type": "string",
+                  "x-ms-summary": "Recommended KS Name 1"
+                },
+                "recKsName2": {
+                  "type": "string",
+                  "x-ms-summary": "Recommended KS Name 2"
+                },
+                "recKsName3": {
+                  "type": "string",
+                  "x-ms-summary": "Recommended KS Name 3"
+                },
+                "solutionChoicesJson": {
+                  "type": "string",
+                  "x-ms-summary": "Solution Choices JSON"
+                },
+                "defaultSolutionName": {
+                  "type": "string",
+                  "x-ms-summary": "Default Solution Name"
+                },
+                "solutionListError": {
+                  "type": "string",
+                  "x-ms-summary": "Solution List Error",
+                  "x-nullable": true
+                },
+                "runId": {
+                  "type": "string",
+                  "x-ms-summary": "Run ID",
+                  "x-nullable": true
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/agent/solution/preflight": {
+      "post": {
+        "operationId": "agent_preflightSolutionName",
+        "summary": "Preflight solution name",
+        "description": "Validates a solution unique name and checks whether it already exists in the selected environment.",
+        "x-ms-visibility": "important",
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "type": "object",
+              "required": [
+                "environmentId",
+                "solutionName"
+              ],
+              "properties": {
+                "environmentId": {
+                  "type": "string",
+                  "description": "Power Platform environment ID.",
+                  "x-ms-summary": "Environment ID"
+                },
+                "solutionName": {
+                  "type": "string",
+                  "description": "Candidate solution unique name.",
+                  "x-ms-summary": "Solution Name"
+                }
+              }
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Solution name preflight result",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "originalName": {
+                  "type": "string",
+                  "x-ms-summary": "Original Name"
+                },
+                "normalizedName": {
+                  "type": "string",
+                  "x-ms-summary": "Normalized Name"
+                },
+                "isValid": {
+                  "type": "string",
+                  "x-ms-summary": "Is Valid"
+                },
+                "exists": {
+                  "type": "string",
+                  "x-ms-summary": "Exists"
+                },
+                "message": {
+                  "type": "string",
+                  "x-ms-summary": "Message"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/agent/solution/ensure": {
+      "post": {
+        "operationId": "agent_ensureSolution",
+        "summary": "Ensure solution exists",
+        "description": "Ensures the target solution exists and creates it when missing.",
+        "x-ms-visibility": "important",
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "type": "object",
+              "required": [
+                "environmentId",
+                "solutionName"
+              ],
+              "properties": {
+                "environmentId": {
+                  "type": "string",
+                  "description": "Power Platform environment ID.",
+                  "x-ms-summary": "Environment ID"
+                },
+                "solutionName": {
+                  "type": "string",
+                  "description": "Solution unique name to ensure.",
+                  "x-ms-summary": "Solution Name"
+                }
+              }
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Ensured solution metadata",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "solutionName": {
+                  "type": "string",
+                  "x-ms-summary": "Solution Name"
+                },
+                "created": {
+                  "type": "string",
+                  "x-ms-summary": "Created"
+                },
+                "publisherPrefix": {
+                  "type": "string",
+                  "x-ms-summary": "Publisher Prefix"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/agent/generate": {
+      "post": {
+        "operationId": "agent_generateAgent",
+        "summary": "Generate a Copilot Studio agent",
+        "description": "Generates and deploys a new Copilot Studio agent. Returns a job ID for async polling via agent_generateStatus.",
+        "x-ms-visibility": "important",
+        "x-ms-api-timeout": 120,
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "type": "object",
+              "required": [
+                "agentName",
+                "agentPurpose",
+                "environmentId"
+              ],
+              "properties": {
+                "agentName": {
+                  "type": "string",
+                  "description": "Display name for the new agent.",
+                  "x-ms-summary": "Agent Name"
+                },
+                "agentPurpose": {
+                  "type": "string",
+                  "description": "What the agent should do.",
+                  "x-ms-summary": "Agent Purpose"
+                },
+                "environmentId": {
+                  "type": "string",
+                  "description": "Power Platform environment ID.",
+                  "x-ms-summary": "Environment ID"
+                },
+                "solutionName": {
+                  "type": "string",
+                  "description": "Target solution unique name.",
+                  "x-ms-summary": "Solution Name"
+                },
+                "mcpServerIds": {
+                  "type": "string",
+                  "description": "Comma-separated MCP server catalog IDs.",
+                  "x-ms-summary": "MCP Server IDs"
+                },
+                "knowledgeSourcesJson": {
+                  "type": "string",
+                  "description": "JSON array of knowledge sources.",
+                  "x-ms-summary": "Knowledge Sources JSON"
+                },
+                "instructionsOverride": {
+                  "type": "string",
+                  "description": "Custom instructions text.",
+                  "x-ms-summary": "Instructions Override"
+                },
+                "runId": {
+                  "type": "string",
+                  "description": "Optional run ID used for strict isolation.",
+                  "x-ms-summary": "Run ID",
+                  "x-ms-visibility": "advanced"
+                }
+              }
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "Job accepted",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "jobId": {
+                  "type": "string",
+                  "description": "Job ID for polling.",
+                  "x-ms-summary": "Job ID"
+                },
+                "status": {
+                  "type": "string",
+                  "description": "Initial status.",
+                  "x-ms-summary": "Status"
+                },
+                "retryAfter": {
+                  "type": "integer",
+                  "description": "Seconds before first poll.",
+                  "x-ms-summary": "Retry After"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/agent/generate/status": {
+      "get": {
+        "operationId": "agent_generateStatus",
+        "summary": "Poll agent generation status",
+        "description": "Long-polls an agent generation job. Returns status and result when complete.",
+        "x-ms-visibility": "important",
+        "x-ms-api-timeout": 30,
+        "parameters": [
+          {
+            "name": "jobId",
+            "in": "query",
+            "required": true,
+            "type": "string",
+            "description": "Agent generation job ID.",
+            "x-ms-summary": "Job ID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Job status and result",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "jobId": {
+                  "type": "string",
+                  "x-ms-summary": "Job ID"
+                },
+                "runId": {
+                  "type": "string",
+                  "x-ms-summary": "Run ID",
+                  "x-nullable": true
+                },
+                "status": {
+                  "type": "string",
+                  "x-ms-summary": "Status"
+                },
+                "retryAfter": {
+                  "type": "integer",
+                  "x-ms-summary": "Retry After",
+                  "x-nullable": true
+                },
+                "stageCode": {
+                  "type": "string",
+                  "x-ms-summary": "Stage Code",
+                  "x-nullable": true
+                },
+                "stageMessage": {
+                  "type": "string",
+                  "x-ms-summary": "Stage Message",
+                  "x-nullable": true
+                },
+                "result": {
+                  "type": "object",
+                  "x-ms-summary": "Result"
+                },
+                "error": {
+                  "type": "string",
+                  "x-ms-summary": "Error"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "definitions": {
@@ -458,6 +892,12 @@
           "type": "string",
           "description": "Unique identifier for the deploy job.",
           "x-ms-summary": "Job ID"
+        },
+        "runId": {
+          "type": "string",
+          "description": "Run ID associated with this job when run isolation is used.",
+          "x-ms-summary": "Run ID",
+          "x-nullable": true
         },
         "jobType": {
           "type": "string",

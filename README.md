@@ -143,8 +143,16 @@ The server starts on `http://localhost:3001`. Verify with:
 curl http://localhost:3001/health
 ```
 
-For full deployment to Power Platform (app registrations, connector import, agent import),
-see the [Installation Guide](docs/INSTALLATION.md).
+For full deployment to Power Platform, use the installation pipeline:
+
+```powershell
+.\scripts\Install-GraphConnectorFactory.ps1 -Stage All `
+    -ServerHost "your-server.devtunnels.ms" `
+    -EnvironmentId "your-power-platform-environment-id"
+```
+
+For stage-by-stage deployment and troubleshooting details, see the
+[Installation Guide](docs/INSTALLATION.md).
 
 ## Configuration
 

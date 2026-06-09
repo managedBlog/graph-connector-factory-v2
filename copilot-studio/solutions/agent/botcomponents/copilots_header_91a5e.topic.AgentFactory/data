@@ -1,0 +1,1234 @@
+kind: AdaptiveDialog
+beginDialog:
+  kind: OnRecognizedIntent
+  id: main
+  intent:
+    displayName: Agent Factory
+    includeInOnSelectIntent: false
+    triggerQueries:
+      - Create an agent
+      - Build me an agent
+      - Agent factory
+      - Generate agent
+      - Make a new agent
+      - Create a Copilot Studio agent
+      - Build an agent from my connectors
+
+  actions:
+    # ── Step 1: Initialize variables (Power Fx requires declaration before use) ──
+
+    - kind: SetVariable
+      id: setVar_initRecAgentName
+      variable: Topic.recAgentName
+      value: =""
+
+    - kind: SetVariable
+      id: setVar_initRecAgentPurpose
+      variable: Topic.recAgentPurpose
+      value: =""
+
+    - kind: SetVariable
+      id: setVar_initDeployedConnectorCount
+      variable: Topic.deployedConnectorCount
+      value: ="0"
+
+    - kind: SetVariable
+      id: setVar_initConnectorSummariesJson
+      variable: Topic.connectorSummariesJson
+      value: ="[]"
+
+    - kind: SetVariable
+      id: setVar_initRecommendedMcpServers
+      variable: Topic.recommendedMcpServers
+      value: =""
+
+    - kind: SetVariable
+      id: setVar_initRecKsName1
+      variable: Topic.recKsName1
+      value: =""
+
+    - kind: SetVariable
+      id: setVar_initRecKsUrl1
+      variable: Topic.recKsUrl1
+      value: =""
+
+    - kind: SetVariable
+      id: setVar_initRecKsName2
+      variable: Topic.recKsName2
+      value: =""
+
+    - kind: SetVariable
+      id: setVar_initRecKsUrl2
+      variable: Topic.recKsUrl2
+      value: =""
+
+    - kind: SetVariable
+      id: setVar_initRecKsName3
+      variable: Topic.recKsName3
+      value: =""
+
+    - kind: SetVariable
+      id: setVar_initRecKsUrl3
+      variable: Topic.recKsUrl3
+      value: =""
+
+    - kind: SetVariable
+      id: setVar_initRunId
+      variable: Topic.runId
+      value: =""
+
+    - kind: SetVariable
+      id: setVar_initPreflightRetryCount
+      variable: Topic.preflightRetryCount
+      value: =0
+
+    - kind: SetVariable
+      id: setVar_initSolutionPreflightWarning
+      variable: Topic.solutionPreflightWarning
+      value: =""
+
+    - kind: SetVariable
+      id: setVar_initSolutionCorrectionChoice
+      variable: Topic.solutionCorrectionChoice
+      value: =""
+
+    - kind: SetVariable
+      id: setVar_initCorrectedSolutionName
+      variable: Topic.correctedSolutionName
+      value: =""
+
+    # ── Step 2: Get session context ──
+
+    - kind: BeginDialog
+      id: beginDialog_sessionContext
+      dialog: copilots_header_91a5e.action.GCFRESTConnector-Getsessioncontext
+      output:
+        binding:
+          environmentId: Topic.environmentId
+          hasDesignContext: Topic.hasDesignContext
+          baseName: Topic.baseName
+          runId: Topic.runId
+
+    # ── Step 1b: Get agent factory context (research-phase recommendations) ──
+
+    - kind: BeginDialog
+      id: beginDialog_agentContext
+      dialog: copilots_header_91a5e.action.GCFRESTConnector-GetAgentContext
+      output:
+        binding:
+          agentName: Topic.recAgentName
+          agentPurpose: Topic.recAgentPurpose
+          deployedConnectorCount: Topic.deployedConnectorCount
+          hasDeployedConnectors: Topic.hasDeployedConnectors
+          connectorSummariesJson: Topic.connectorSummariesJson
+          recommendedMcpServers: Topic.recommendedMcpServers
+          recommendedKnowledgeSourcesJson: Topic.recommendedKnowledgeSourcesJson
+          recKsUrl1: Topic.recKsUrl1
+          recKsUrl2: Topic.recKsUrl2
+          recKsUrl3: Topic.recKsUrl3
+          recKsName1: Topic.recKsName1
+          recKsName2: Topic.recKsName2
+          recKsName3: Topic.recKsName3
+          solutionChoicesJson: Topic.solutionChoicesJson
+          defaultSolutionName: Topic.defaultSolutionName
+          solutionListError: Topic.solutionListError
+          runId: Topic.runId
+
+    # ── Step 2: Guard — require deployed connectors ──
+
+    - kind: ConditionGroup
+      id: condGroup_checkContext
+      conditions:
+        - id: cond_noContext
+          condition: =!Topic.hasDesignContext
+          actions:
+            - kind: SendActivity
+              id: sendActivity_noContext
+              activity: |-
+                ⚠️ **No design context found.**
+
+                You need to deploy at least one custom connector before creating an agent.
+                Use the **Connector Pipeline** (say "Build connectors") to deploy connectors first, then come back here.
+            - kind: EndDialog
+              id: endDialog_noContext
+
+    # ── Step 2b: Initialize card variables (Power Fx requires explicit declaration) ──
+
+    - kind: SetVariable
+      id: setVar_afAgentName
+      variable: Topic.afAgentName
+      value: =Coalesce(Topic.recAgentName, Topic.baseName, "My Custom Agent")
+
+    - kind: SetVariable
+      id: setVar_afAgentPurpose
+      variable: Topic.afAgentPurpose
+      value: =Coalesce(Topic.recAgentPurpose, "")
+
+    - kind: SetVariable
+      id: setVar_afSolutionChoice
+      variable: Topic.afSolutionChoice
+      value: =If(!IsBlank(Topic.newSolutionName), "__new__", Coalesce(Topic.solutionChoice, Topic.defaultSolutionName, "__new__"))
+
+    - kind: SetVariable
+      id: setVar_afSolutionChoicesJson
+      variable: Topic.afSolutionChoicesJson
+      value: =If(Or(IsBlank(Topic.solutionChoicesJson), Trim(Topic.solutionChoicesJson) = "[]"), "[{""title"":""Create new solution"",""value"":""__new__""}]", Topic.solutionChoicesJson)
+
+    - kind: SetVariable
+      id: setVar_afNewSolutionName
+      variable: Topic.afNewSolutionName
+      value: =Coalesce(Topic.newSolutionName, "")
+
+    - kind: SetVariable
+      id: setVar_afConnectorCount
+      variable: Topic.afConnectorCount
+      value: =If(IsBlank(Topic.deployedConnectorCount), "0", Topic.deployedConnectorCount)
+
+    - kind: SetVariable
+      id: setVar_afConnectorSummaries
+      variable: Topic.afConnectorSummaries
+      value: =If(IsBlank(Topic.connectorSummariesJson), "[]", Topic.connectorSummariesJson)
+
+    - kind: SetVariable
+      id: setVar_afMcpServers
+      variable: Topic.afMcpServers
+      value: =If(IsBlank(Topic.recommendedMcpServers), "", Topic.recommendedMcpServers)
+
+    - kind: SetVariable
+      id: setVar_afKsName1
+      variable: Topic.afKsName1
+      value: =Coalesce(Topic.recKsName1, "")
+
+    - kind: SetVariable
+      id: setVar_afKsUrl1
+      variable: Topic.afKsUrl1
+      value: =Coalesce(Topic.recKsUrl1, "")
+
+    - kind: SetVariable
+      id: setVar_afKsName2
+      variable: Topic.afKsName2
+      value: =Coalesce(Topic.recKsName2, "")
+
+    - kind: SetVariable
+      id: setVar_afKsUrl2
+      variable: Topic.afKsUrl2
+      value: =Coalesce(Topic.recKsUrl2, "")
+
+    - kind: SetVariable
+      id: setVar_afKsName3
+      variable: Topic.afKsName3
+      value: =Coalesce(Topic.recKsName3, "")
+
+    - kind: SetVariable
+      id: setVar_afKsUrl3
+      variable: Topic.afKsUrl3
+      value: =Coalesce(Topic.recKsUrl3, "")
+
+    # ── Step 3: Display Agent Composition Card ──
+
+    - kind: AdaptiveCardPrompt
+      id: adaptiveCard_agentComposition
+      card: |-
+        ={
+          type: "AdaptiveCard",
+          version: "1.5",
+          body: [
+            {
+              type: "TextBlock",
+              text: "🏭 Agent Factory",
+              weight: "Bolder",
+              size: "Large",
+              wrap: true
+            },
+            {
+              type: "TextBlock",
+              text: "Create a new Copilot Studio agent from your deployed connectors, MCP servers, and knowledge sources.",
+              wrap: true,
+              spacing: "Small"
+            },
+            {
+              type: "TextBlock",
+              text: "Agent Name",
+              weight: "Bolder",
+              spacing: "Medium"
+            },
+            {
+              type: "Input.Text",
+              id: "agentName",
+              placeholder: "Enter agent name",
+              value: Topic.afAgentName
+            },
+            {
+              type: "TextBlock",
+              text: "Agent Purpose",
+              weight: "Bolder"
+            },
+            {
+              type: "Input.Text",
+              id: "agentPurpose",
+              placeholder: "Describe what this agent should do",
+              isMultiline: true,
+              value: Topic.afAgentPurpose
+            },
+            {
+              type: "TextBlock",
+              text: "Target Solution",
+              weight: "Bolder"
+            },
+            {
+              type: "Input.ChoiceSet",
+              id: "solutionChoice",
+              style: "compact",
+              value: Topic.afSolutionChoice,
+              choices: ForAll(
+                Table(ParseJSON(Topic.afSolutionChoicesJson)),
+                {
+                  title: Text(Value.title),
+                  value: Text(Value.value)
+                }
+              )
+            },
+            {
+              type: "TextBlock",
+              text: "If you select Create new solution, you will enter the solution unique name in the next step.",
+              wrap: true,
+              size: "Small",
+              isSubtle: true,
+              spacing: "Small"
+            },
+            {
+              type: "ColumnSet",
+              spacing: "Large",
+              separator: true,
+              selectAction: {
+                type: "Action.ToggleVisibility",
+                targetElements: ["d-connectors"]
+              },
+              columns: [
+                {
+                  type: "Column",
+                  width: "stretch",
+                  items: [
+                    {
+                      type: "TextBlock",
+                      text: Concatenate("📦 Deployed Connectors (", Topic.afConnectorCount, ")"),
+                      weight: "Bolder",
+                      color: "Accent",
+                      wrap: true
+                    }
+                  ]
+                },
+                {
+                  type: "Column",
+                  width: "auto",
+                  verticalContentAlignment: "Center",
+                  items: [
+                    {type: "Icon", name: "ChevronDown", size: "Small", color: "Accent"}
+                  ]
+                }
+              ]
+            },
+            {
+              type: "Container",
+              id: "d-connectors",
+              isVisible: false,
+              spacing: "None",
+              items: If(
+                IsBlank(Topic.afConnectorSummaries) Or Topic.afConnectorSummaries = "[]",
+                [
+                  {
+                    type: "TextBlock",
+                    text: "No connectors deployed yet.",
+                    isSubtle: true,
+                    wrap: true
+                  }
+                ],
+                ForAll(
+                  Table(ParseJSON(Topic.afConnectorSummaries)),
+                  {
+                    type: "ColumnSet",
+                    spacing: "Small",
+                    columns: [
+                      { type: "Column", width: "auto", verticalContentAlignment: "Center", items: [{ type: "TextBlock", text: "✅" }] },
+                      { type: "Column", width: "stretch", items: [{ type: "TextBlock", text: Concatenate(Text(Value.displayName), " — ", Text(Value.operationCount), " operations"), wrap: true }] }
+                    ]
+                  }
+                )
+              )
+            },
+
+            {
+              type: "ColumnSet",
+              spacing: "Small",
+              separator: true,
+              selectAction: {
+                type: "Action.ToggleVisibility",
+                targetElements: ["d-knowledge"]
+              },
+              columns: [
+                {
+                  type: "Column",
+                  width: "stretch",
+                  items: [
+                    {
+                      type: "TextBlock",
+                      text: "🔌 Knowledge Sources (SharePoint)",
+                      weight: "Bolder",
+                      color: "Accent",
+                      wrap: true
+                    }
+                  ]
+                },
+                {
+                  type: "Column",
+                  width: "auto",
+                  verticalContentAlignment: "Center",
+                  items: [
+                    {type: "Icon", name: "ChevronDown", size: "Small", color: "Accent"}
+                  ]
+                }
+              ]
+            },
+            {
+              type: "Container",
+              id: "d-knowledge",
+              isVisible: false,
+              spacing: "None",
+              items: [
+                {
+                  type: "TextBlock",
+                  text: "Add SharePoint site URLs as knowledge sources for the agent.",
+                  wrap: true,
+                  size: "Small",
+                  isSubtle: true
+                },
+                {
+                  type: "TextBlock",
+                  text: "Source 1",
+                  weight: "Bolder",
+                  size: "Small",
+                  spacing: "Medium"
+                },
+                {
+                  type: "Input.Text",
+                  id: "sharepointName1",
+                  placeholder: "Name (optional — derived from URL if blank)",
+                  value: Topic.afKsName1
+                },
+                {
+                  type: "Input.Text",
+                  id: "sharepointUrl1",
+                  placeholder: "https://tenant.sharepoint.com/sites/...",
+                  value: Topic.afKsUrl1
+                },
+                {
+                  type: "TextBlock",
+                  text: "Source 2 (optional)",
+                  weight: "Bolder",
+                  size: "Small",
+                  spacing: "Medium"
+                },
+                {
+                  type: "Input.Text",
+                  id: "sharepointName2",
+                  placeholder: "Name (optional)",
+                  value: Topic.afKsName2
+                },
+                {
+                  type: "Input.Text",
+                  id: "sharepointUrl2",
+                  placeholder: "https://tenant.sharepoint.com/sites/...",
+                  value: Topic.afKsUrl2
+                },
+                {
+                  type: "TextBlock",
+                  text: "Source 3 (optional)",
+                  weight: "Bolder",
+                  size: "Small",
+                  spacing: "Medium"
+                },
+                {
+                  type: "Input.Text",
+                  id: "sharepointName3",
+                  placeholder: "Name (optional)",
+                  value: Topic.afKsName3
+                },
+                {
+                  type: "Input.Text",
+                  id: "sharepointUrl3",
+                  placeholder: "https://tenant.sharepoint.com/sites/...",
+                  value: Topic.afKsUrl3
+                }
+              ]
+            },
+
+            {
+              type: "ColumnSet",
+              spacing: "Small",
+              separator: true,
+              selectAction: {
+                type: "Action.ToggleVisibility",
+                targetElements: ["d-mcp"]
+              },
+              columns: [
+                {
+                  type: "Column",
+                  width: "stretch",
+                  items: [
+                    {
+                      type: "TextBlock",
+                      text: "🤖 MCP Servers",
+                      weight: "Bolder",
+                      color: "Accent",
+                      wrap: true
+                    }
+                  ]
+                },
+                {
+                  type: "Column",
+                  width: "auto",
+                  verticalContentAlignment: "Center",
+                  items: [
+                    {type: "Icon", name: "ChevronDown", size: "Small", color: "Accent"}
+                  ]
+                }
+              ]
+            },
+            {
+              type: "Container",
+              id: "d-mcp",
+              isVisible: false,
+              spacing: "None",
+              items: [
+                {
+                  type: "TextBlock",
+                  text: If(!IsBlank(Topic.afMcpServers), "Pre-selected based on research phase. Adjust as needed.", "Select MCP servers to add as agent tools."),
+                  wrap: true,
+                  size: "Small",
+                  isSubtle: true
+                },
+                {
+                  type: "Container",
+                  spacing: "Small",
+                  items: ForAll(
+                    Table(
+                      {sid: "ms-learn-docs", tid: "mcp_mslearn", label: "📚 Microsoft Learn Docs MCP"},
+                      {sid: "sentinel", tid: "mcp_sentinel", label: "🛡️ Microsoft Sentinel MCP"},
+                      {sid: "m365-admin", tid: "mcp_m365admin", label: "⚙️ Microsoft 365 Admin Center MCP"},
+                      {sid: "fabric-iq", tid: "mcp_fabriciq", label: "📊 Fabric IQ Ontology MCP"}
+                    ),
+                    {
+                      type: "Input.Toggle",
+                      id: Text(ThisRecord.tid),
+                      title: Text(ThisRecord.label),
+                      value: If(Not(IsBlank(Topic.afMcpServers)) And Not(IsBlank(Find(Text(ThisRecord.sid), Topic.afMcpServers))), Text(ThisRecord.sid), ""),
+                      valueOn: Text(ThisRecord.sid),
+                      valueOff: "",
+                      spacing: "Small"
+                    }
+                  )
+                },
+                {
+                  type: "ColumnSet",
+                  spacing: "Medium",
+                  selectAction: {
+                    type: "Action.ToggleVisibility",
+                    targetElements: ["d-workiq"]
+                  },
+                  columns: [
+                    {
+                      type: "Column",
+                      width: "stretch",
+                      items: [
+                        {
+                          type: "TextBlock",
+                          text: "📧 Work IQ — M365 (Preview)",
+                          weight: "Bolder",
+                          size: "Small",
+                          color: "Accent"
+                        }
+                      ]
+                    },
+                    {
+                      type: "Column",
+                      width: "auto",
+                      verticalContentAlignment: "Center",
+                      items: [
+                        {type: "Icon", name: "ChevronDown", size: "xxSmall", color: "Accent"}
+                      ]
+                    }
+                  ]
+                },
+                {
+                  type: "Container",
+                  id: "d-workiq",
+                  isVisible: false,
+                  spacing: "None",
+                  items: [
+                    {
+                      type: "TextBlock",
+                      text: "Work IQ servers provide M365 productivity tools. These features are in preview.",
+                      wrap: true,
+                      size: "Small",
+                      isSubtle: true
+                    },
+                    {
+                      type: "Container",
+                      spacing: "Small",
+                      items: ForAll(
+                        Table(
+                          {sid: "workiq-mail", tid: "mcp_workiq_mail", label: "Mail (Outlook)"},
+                          {sid: "workiq-calendar", tid: "mcp_workiq_calendar", label: "Calendar (Outlook)"},
+                          {sid: "workiq-teams", tid: "mcp_workiq_teams", label: "Teams"},
+                          {sid: "workiq-word", tid: "mcp_workiq_word", label: "Word"},
+                          {sid: "workiq-user", tid: "mcp_workiq_user", label: "User (Profile & Presence)"},
+                          {sid: "workiq-copilot", tid: "mcp_workiq_copilot", label: "Copilot Search"},
+                          {sid: "workiq-onedrive", tid: "mcp_workiq_onedrive", label: "OneDrive"},
+                          {sid: "workiq-sharepoint", tid: "mcp_workiq_sharepoint", label: "SharePoint"}
+                        ),
+                        {
+                          type: "Input.Toggle",
+                          id: Text(ThisRecord.tid),
+                          title: Text(ThisRecord.label),
+                          value: If(Not(IsBlank(Topic.afMcpServers)) And Not(IsBlank(Find(Text(ThisRecord.sid), Topic.afMcpServers))), Text(ThisRecord.sid), ""),
+                          valueOn: Text(ThisRecord.sid),
+                          valueOff: "",
+                          spacing: "Small"
+                        }
+                      )
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          actions: [
+            {
+              type: "Action.Submit",
+              title: "Submit"
+            }
+          ]
+        }
+      output:
+        binding:
+          actionSubmitId: Topic.cardActionId
+          agentName: Topic.agentName
+          agentPurpose: Topic.agentPurpose
+          solutionChoice: Topic.solutionChoice
+          sharepointName1: Topic.sharepointName1
+          sharepointName2: Topic.sharepointName2
+          sharepointName3: Topic.sharepointName3
+          sharepointUrl1: Topic.sharepointUrl1
+          sharepointUrl2: Topic.sharepointUrl2
+          sharepointUrl3: Topic.sharepointUrl3
+          mcp_mslearn: Topic.mcpMslearn
+          mcp_sentinel: Topic.mcpSentinel
+          mcp_m365admin: Topic.mcpM365Admin
+          mcp_fabriciq: Topic.mcpFabricIq
+          mcp_workiq_mail: Topic.mcpWorkiqMail
+          mcp_workiq_calendar: Topic.mcpWorkiqCalendar
+          mcp_workiq_teams: Topic.mcpWorkiqTeams
+          mcp_workiq_word: Topic.mcpWorkiqWord
+          mcp_workiq_user: Topic.mcpWorkiqUser
+          mcp_workiq_copilot: Topic.mcpWorkiqCopilot
+          mcp_workiq_onedrive: Topic.mcpWorkiqOnedrive
+          mcp_workiq_sharepoint: Topic.mcpWorkiqSharepoint
+
+      outputType:
+        properties:
+          actionSubmitId: String
+          agentName: String
+          agentPurpose: String
+          solutionChoice: String
+          sharepointName1: String
+          sharepointName2: String
+          sharepointName3: String
+          sharepointUrl1: String
+          sharepointUrl2: String
+          sharepointUrl3: String
+          mcp_mslearn: String
+          mcp_sentinel: String
+          mcp_m365admin: String
+          mcp_fabriciq: String
+          mcp_workiq_mail: String
+          mcp_workiq_calendar: String
+          mcp_workiq_teams: String
+          mcp_workiq_word: String
+          mcp_workiq_user: String
+          mcp_workiq_copilot: String
+          mcp_workiq_onedrive: String
+          mcp_workiq_sharepoint: String
+
+    # ── Step 4: Validate required fields ──
+
+    - kind: ConditionGroup
+      id: condGroup_validateName
+      conditions:
+        - id: cond_missingName
+          condition: =IsBlank(Topic.agentName)
+          actions:
+            - kind: SendActivity
+              id: sendActivity_missingName
+              activity: "⚠️ Agent name is required. Please try again."
+            - kind: EndDialog
+              id: endDialog_missingName
+
+    - kind: ConditionGroup
+      id: condGroup_validatePurpose
+      conditions:
+        - id: cond_missingPurpose
+          condition: =IsBlank(Topic.agentPurpose)
+          actions:
+            - kind: SendActivity
+              id: sendActivity_missingPurpose
+              activity: "⚠️ Agent purpose is required. Please try again."
+            - kind: EndDialog
+              id: endDialog_missingPurpose
+
+    - kind: SetVariable
+      id: setVar_resolvedSolutionFromSelection
+      variable: Topic.afResolvedSolutionName
+      value: =Trim(Topic.solutionChoice)
+
+    - kind: ConditionGroup
+      id: condGroup_collectNewSolutionName
+      conditions:
+        - id: cond_selectedCreateNewSolution
+          condition: =Topic.solutionChoice = "__new__"
+          actions:
+            - kind: SetVariable
+              id: setVar_newSolutionEntryHint
+              variable: Topic.solutionPreflightWarning
+              value: =If(IsBlank(Topic.solutionPreflightWarning), "Enter a Dataverse solution unique name. We'll create the solution in the next step.", Topic.solutionPreflightWarning)
+
+            - kind: AdaptiveCardPrompt
+              id: adaptiveCard_solutionNameEntry
+              card: |-
+                ={
+                  type: "AdaptiveCard",
+                  '$schema': "https://adaptivecards.io/schemas/adaptive-card.json",
+                  version: "1.5",
+                  body: [
+                    {
+                      type: "TextBlock",
+                      text: "Create New Solution",
+                      weight: "Bolder",
+                      size: "Medium",
+                      wrap: true
+                    },
+                    {
+                      type: "TextBlock",
+                      text: If(IsBlank(Topic.solutionPreflightWarning), "Enter a Dataverse solution unique name.", Topic.solutionPreflightWarning),
+                      wrap: true,
+                      color: "Attention"
+                    },
+                    {
+                      type: "TextBlock",
+                      text: "Use a Dataverse solution unique name that follows these rules:",
+                      wrap: true,
+                      size: "Small",
+                      isSubtle: true
+                    },
+                    {
+                      type: "TextBlock",
+                      text: "• Start with a letter",
+                      wrap: true,
+                      size: "Small",
+                      isSubtle: true
+                    },
+                    {
+                      type: "TextBlock",
+                      text: "• Use only letters, numbers, and underscores",
+                      wrap: true,
+                      size: "Small",
+                      isSubtle: true
+                    },
+                    {
+                      type: "TextBlock",
+                      text: "• Keep it concise and descriptive",
+                      wrap: true,
+                      size: "Small",
+                      isSubtle: true
+                    },
+                    {
+                      type: "Input.Text",
+                      id: "newSolutionName",
+                      label: "Solution unique name",
+                      placeholder: "ContosoAgentApps",
+                      value: Topic.afNewSolutionName,
+                      regex: "^[A-Za-z][A-Za-z0-9_]*$",
+                      errorMessage: "Start with a letter and use only letters, numbers, or underscores."
+                    }
+                  ],
+                  actions: [
+                    {
+                      type: "Action.Submit",
+                      title: "Continue"
+                    }
+                  ]
+                }
+              output:
+                binding:
+                  newSolutionName: Topic.newSolutionName
+
+              outputType:
+                properties:
+                  newSolutionName: String
+
+            - kind: SetVariable
+              id: setVar_newSolutionFromEntry
+              variable: Topic.newSolutionName
+              value: =Trim(Topic.newSolutionName)
+
+            - kind: SetVariable
+              id: setVar_afNewSolutionNameFromEntry
+              variable: Topic.afNewSolutionName
+              value: =Topic.newSolutionName
+
+            - kind: SetVariable
+              id: setVar_resolvedSolutionFromEntry
+              variable: Topic.afResolvedSolutionName
+              value: =Topic.newSolutionName
+
+    - kind: SetVariable
+      id: setVar_solutionChoiceEcho
+      variable: Topic.afSolutionChoice
+      value: =Topic.solutionChoice
+
+    - kind: SetVariable
+      id: setVar_clearSolutionWarningBeforePreflight
+      variable: Topic.solutionPreflightWarning
+      value: =If(Topic.solutionChoice = "__new__", Topic.solutionPreflightWarning, "")
+
+    - kind: ConditionGroup
+      id: condGroup_validateNewSolutionName
+      conditions:
+        - id: cond_missingNewSolutionName
+          condition: =Topic.solutionChoice = "__new__" And Trim(Topic.newSolutionName) = ""
+          actions:
+            - kind: SetVariable
+              id: setVar_warnMissingNewSolutionName
+              variable: Topic.solutionPreflightWarning
+              value: ="⚠️ Please enter a solution unique name."
+
+            - kind: SetVariable
+              id: setVar_incPreflightRetriesMissing
+              variable: Topic.preflightRetryCount
+              value: =Topic.preflightRetryCount + 1
+
+            - kind: ConditionGroup
+              id: condGroup_preflightRetryCapMissing
+              conditions:
+                - id: cond_preflightRetriesExceededMissing
+                  condition: =Topic.preflightRetryCount >= 3
+                  actions:
+                    - kind: SendActivity
+                      id: sendActivity_preflightRetryCapMissing
+                      activity: "⚠️ I couldn't validate the solution name after multiple attempts. Let's start over."
+                    - kind: BeginDialog
+                      id: beginDialog_resetAfterPreflightRetryCapMissing
+                      dialog: copilots_header_91a5e.topic.ResetConversation
+                    - kind: EndDialog
+                      id: endDialog_preflightRetryCapMissing
+              elseActions:
+                - kind: GotoAction
+                  id: goto_solutionNameEntryFromMissing
+                  actionId: adaptiveCard_solutionNameEntry
+
+    - kind: BeginDialog
+      id: beginDialog_preflightSolution
+      input:
+        binding:
+          environmentId: =Topic.environmentId
+          solutionName: =Topic.afResolvedSolutionName
+      dialog: copilots_header_91a5e.action.GCFRESTConnector-PreflightSolutionName
+      output:
+        binding:
+          normalizedName: Topic.solutionNormalizedName
+          isValid: Topic.solutionIsValid
+          exists: Topic.solutionExists
+          message: Topic.solutionPreflightMessage
+
+    - kind: ConditionGroup
+      id: condGroup_solutionPreflightValidation
+      conditions:
+        - id: cond_solutionNameInvalid
+          condition: =Text(Topic.solutionIsValid) <> "true"
+          actions:
+            - kind: SetVariable
+              id: setVar_warnInvalidSolutionName
+              variable: Topic.solutionPreflightWarning
+              value: =Concatenate("⚠️ ", Topic.solutionPreflightMessage)
+
+            - kind: SetVariable
+              id: setVar_incPreflightRetriesInvalid
+              variable: Topic.preflightRetryCount
+              value: =Topic.preflightRetryCount + 1
+
+            - kind: ConditionGroup
+              id: condGroup_preflightRetryCapInvalid
+              conditions:
+                - id: cond_preflightRetriesExceededInvalid
+                  condition: =Topic.preflightRetryCount >= 3
+                  actions:
+                    - kind: SendActivity
+                      id: sendActivity_preflightRetryCapInvalid
+                      activity: "⚠️ I couldn't validate the solution name after multiple attempts. Let's start over."
+                    - kind: BeginDialog
+                      id: beginDialog_resetAfterPreflightRetryCapInvalid
+                      dialog: copilots_header_91a5e.topic.ResetConversation
+                    - kind: EndDialog
+                      id: endDialog_preflightRetryCapInvalid
+              elseActions:
+                - kind: SetVariable
+                  id: setVar_warnInvalidNameForEntry
+                  variable: Topic.solutionPreflightWarning
+                  value: =Concatenate("Name failed validation: ", Topic.solutionPreflightMessage, " Please enter a unique name that meets the requirements.")
+                - kind: GotoAction
+                  id: goto_solutionNameEntryFromInvalid
+                  actionId: adaptiveCard_solutionNameEntry
+      elseActions:
+        - kind: SetVariable
+          id: setVar_resetPreflightRetryCountAfterSuccess
+          variable: Topic.preflightRetryCount
+          value: =0
+        - kind: SetVariable
+          id: setVar_clearSolutionPreflightWarningAfterSuccess
+          variable: Topic.solutionPreflightWarning
+          value: =""
+
+    - kind: ConditionGroup
+      id: condGroup_ensureNewSolution
+      conditions:
+        - id: cond_selectedNewSolution
+          condition: =Topic.solutionChoice = "__new__"
+          actions:
+            - kind: SendActivity
+              id: sendActivity_ensuringSolution
+              activity: "⏳ Creating or validating solution **{Topic.solutionNormalizedName}**..."
+            - kind: BeginDialog
+              id: beginDialog_ensureSolution
+              input:
+                binding:
+                  environmentId: =Topic.environmentId
+                  solutionName: =Topic.solutionNormalizedName
+              dialog: copilots_header_91a5e.action.GCFRESTConnector-EnsureSolution
+              output:
+                binding:
+                  solutionName: Topic.afResolvedSolutionName
+                  created: Topic.solutionCreated
+        - id: cond_existingSolutionMissing
+          condition: =Topic.solutionChoice <> "__new__" And Text(Topic.solutionExists) <> "true"
+          actions:
+            - kind: SetVariable
+              id: setVar_warnExistingSolutionMissing
+              variable: Topic.solutionPreflightWarning
+              value: =Concatenate("⚠️ The selected solution was not found: ", Topic.solutionNormalizedName, ". Please provide a new solution name.")
+            - kind: SetVariable
+              id: setVar_solutionChoiceToNewWhenMissing
+              variable: Topic.solutionChoice
+              value: ="__new__"
+            - kind: SetVariable
+              id: setVar_afSolutionChoiceToNewWhenMissing
+              variable: Topic.afSolutionChoice
+              value: ="__new__"
+            - kind: SetVariable
+              id: setVar_incPreflightRetriesExistingMissing
+              variable: Topic.preflightRetryCount
+              value: =Topic.preflightRetryCount + 1
+            - kind: ConditionGroup
+              id: condGroup_preflightRetryCapExistingMissing
+              conditions:
+                - id: cond_preflightRetriesExceededExistingMissing
+                  condition: =Topic.preflightRetryCount >= 3
+                  actions:
+                    - kind: SendActivity
+                      id: sendActivity_preflightRetryCapExistingMissing
+                      activity: "⚠️ I couldn't validate the solution name after multiple attempts. Let's start over."
+                    - kind: BeginDialog
+                      id: beginDialog_resetAfterPreflightRetryCapExistingMissing
+                      dialog: copilots_header_91a5e.topic.ResetConversation
+                    - kind: EndDialog
+                      id: endDialog_preflightRetryCapExistingMissing
+              elseActions:
+                - kind: SetVariable
+                  id: setVar_warnExistingSolutionMissingForEntry
+                  variable: Topic.solutionPreflightWarning
+                  value: =Concatenate("Selected solution not found: ", Topic.solutionNormalizedName, ". Enter a new solution name to create it.")
+                - kind: GotoAction
+                  id: goto_solutionNameEntryFromExistingMissing
+                  actionId: adaptiveCard_solutionNameEntry
+      elseActions:
+        - kind: SetVariable
+          id: setVar_useNormalizedSolutionName
+          variable: Topic.afResolvedSolutionName
+          value: =Topic.solutionNormalizedName
+
+    # ── Step 5: Build MCP server IDs string ──
+
+    - kind: SetVariable
+      id: setVar_mcpIds
+      variable: Topic.mcpServerIds
+      value: |-
+        =Concatenate(
+          If(Topic.mcpMslearn = "ms-learn-docs", "ms-learn-docs,", ""),
+          If(Topic.mcpSentinel = "sentinel", "sentinel,", ""),
+          If(Topic.mcpM365Admin = "m365-admin", "m365-admin,", ""),
+          If(Topic.mcpFabricIq = "fabric-iq", "fabric-iq,", ""),
+          If(Topic.mcpWorkiqMail = "workiq-mail", "workiq-mail,", ""),
+          If(Topic.mcpWorkiqCalendar = "workiq-calendar", "workiq-calendar,", ""),
+          If(Topic.mcpWorkiqTeams = "workiq-teams", "workiq-teams,", ""),
+          If(Topic.mcpWorkiqWord = "workiq-word", "workiq-word,", ""),
+          If(Topic.mcpWorkiqUser = "workiq-user", "workiq-user,", ""),
+          If(Topic.mcpWorkiqCopilot = "workiq-copilot", "workiq-copilot,", ""),
+          If(Topic.mcpWorkiqOnedrive = "workiq-onedrive", "workiq-onedrive,", ""),
+          If(Topic.mcpWorkiqSharepoint = "workiq-sharepoint", "workiq-sharepoint,", "")
+        )
+
+    # ── Step 6: Build knowledge sources JSON ──
+
+    - kind: SetVariable
+      id: setVar_knowledgeSources
+      variable: Topic.knowledgeSourcesJson
+      value: |-
+        =With(
+          {
+            sp1: If(!IsBlank(Topic.sharepointUrl1), Concatenate("{""type"":""sharepoint"",""url"":""", Topic.sharepointUrl1, """,""displayName"":""", If(!IsBlank(Topic.sharepointName1), Topic.sharepointName1, "SharePoint Source 1"), """,""description"":""SharePoint knowledge source""}"), ""),
+            sp2: If(!IsBlank(Topic.sharepointUrl2), Concatenate("{""type"":""sharepoint"",""url"":""", Topic.sharepointUrl2, """,""displayName"":""", If(!IsBlank(Topic.sharepointName2), Topic.sharepointName2, "SharePoint Source 2"), """,""description"":""SharePoint knowledge source""}"), ""),
+            sp3: If(!IsBlank(Topic.sharepointUrl3), Concatenate("{""type"":""sharepoint"",""url"":""", Topic.sharepointUrl3, """,""displayName"":""", If(!IsBlank(Topic.sharepointName3), Topic.sharepointName3, "SharePoint Source 3"), """,""description"":""SharePoint knowledge source""}"), "")
+          },
+          Concatenate(
+            "[",
+            Concat(
+              Filter(
+                Table(
+                  {v: sp1},
+                  {v: sp2},
+                  {v: sp3}
+                ),
+                !IsBlank(v)
+              ),
+              v,
+              ","
+            ),
+            "]"
+          )
+        )
+
+    # ── Step 7: Confirmation card ──
+
+    - kind: AdaptiveCardPrompt
+      id: adaptiveCard_solutionConfirmation
+      card: |-
+        ={
+          type: "AdaptiveCard",
+          '$schema': "https://adaptivecards.io/schemas/adaptive-card.json",
+          version: "1.5",
+          body: [
+            {
+              type: "TextBlock",
+              text: "Confirm Agent Setup",
+              weight: "Bolder",
+              size: "Large",
+              wrap: true
+            },
+            {
+              type: "TextBlock",
+              text: "Review the full configuration before creating the agent.",
+              wrap: true,
+              isSubtle: true
+            },
+            {
+              type: "FactSet",
+              spacing: "Medium",
+              facts: [
+                { title: "Agent Name", value: Topic.agentName },
+                { title: "Agent Purpose", value: Topic.agentPurpose },
+                { title: "Connectors", value: Concatenate(Topic.afConnectorCount, " deployed connector(s)") },
+                { title: "Knowledge Sources", value: If(Or(IsBlank(Topic.knowledgeSourcesJson), Topic.knowledgeSourcesJson = "[]"), "None", Concatenate(Text(CountRows(Filter(Table({u: Topic.sharepointUrl1}, {u: Topic.sharepointUrl2}, {u: Topic.sharepointUrl3}), !IsBlank(u)))), " SharePoint site(s)")) },
+                { title: "MCP Servers", value: If(IsBlank(Topic.mcpServerIds), "None", Topic.mcpServerIds) }
+              ]
+            },
+            {
+              type: "FactSet",
+              spacing: "Medium",
+              facts: [
+                { title: "Target Solution", value: Topic.afResolvedSolutionName },
+                { title: "Solution Action", value: If(Text(Topic.solutionCreated) = "true", "Created on submit", "Using existing solution") }
+              ]
+            }
+          ],
+          actions: [
+            {
+              type: "Action.Submit",
+              title: "Create",
+              data: { cfmAction: "create" }
+            },
+            {
+              type: "Action.Submit",
+              title: "Start over",
+              data: { cfmAction: "startOver" }
+            }
+          ]
+        }
+      output:
+        binding:
+          cfmAction: Topic.cfmAction
+
+      outputType:
+        properties:
+          cfmAction: String
+
+    - kind: ConditionGroup
+      id: condGroup_solutionConfirmationActions
+      conditions:
+        - id: cond_startOverFromConfirmation
+          condition: =Topic.cfmAction = "startOver"
+          actions:
+            - kind: BeginDialog
+              id: beginDialog_resetFromConfirmation
+              dialog: copilots_header_91a5e.topic.ResetConversation
+            - kind: EndDialog
+              id: endDialog_resetFromConfirmation
+
+    - kind: SetVariable
+      id: setVar_finalSolutionName
+      variable: Topic.finalSolutionName
+      value: =Topic.afResolvedSolutionName
+
+    - kind: ConditionGroup
+      id: condGroup_validateFinalSolutionName
+      conditions:
+        - id: cond_missingFinalSolutionName
+          condition: =IsBlank(Topic.finalSolutionName)
+          actions:
+            - kind: SendActivity
+              id: sendActivity_missingFinalSolutionName
+              activity: "⚠️ A target solution is required. Please choose an existing solution or enter a new solution name."
+            - kind: EndDialog
+              id: endDialog_missingFinalSolutionName
+
+    - kind: SendActivity
+      id: sendActivity_generating
+      activity:
+        attachments:
+          - kind: AdaptiveCardTemplate
+            cardContent: |-
+              ={
+                type: "AdaptiveCard",
+                version: "1.5",
+                body: [
+                  {
+                    type: "TextBlock",
+                    text: "🏭 Generating Agent",
+                    weight: "Bolder",
+                    size: "Large",
+                    wrap: true
+                  },
+                  {
+                    type: "FactSet",
+                    facts: [
+                      { title: "Name", value: Topic.agentName },
+                      { title: "Purpose", value: Topic.agentPurpose },
+                      { title: "Solution", value: Topic.finalSolutionName },
+                      { title: "Connectors", value: Concatenate(Topic.afConnectorCount, " deployed connector(s)") },
+                      { title: "Knowledge Sources", value: If(Or(IsBlank(Topic.knowledgeSourcesJson), Topic.knowledgeSourcesJson = "[]"), "None", Concatenate(Text(CountRows(Filter(Table({u: Topic.sharepointUrl1}, {u: Topic.sharepointUrl2}, {u: Topic.sharepointUrl3}), !IsBlank(u)))), " SharePoint site(s)")) },
+                      { title: "MCP Servers", value: If(IsBlank(Topic.mcpServerIds), "None", Topic.mcpServerIds) }
+                    ]
+                  },
+                  {
+                    type: "TextBlock",
+                    text: "⏳ This may take 30-60 seconds...",
+                    wrap: true,
+                    spacing: "Medium"
+                  }
+                ]
+              }
+
+    # ── Step 8: Call generate endpoint ──
+
+    - kind: BeginDialog
+      id: beginDialog_generateAgent
+      input:
+        binding:
+          agentName: =Topic.agentName
+          agentPurpose: =Topic.agentPurpose
+          environmentId: =Topic.environmentId
+          solutionName: =Topic.finalSolutionName
+          mcpServerIds: =If(IsBlank(Topic.mcpServerIds), "none", Topic.mcpServerIds)
+          knowledgeSourcesJson: =If(Or(IsBlank(Topic.knowledgeSourcesJson), Topic.knowledgeSourcesJson = "[]"), "[]", Topic.knowledgeSourcesJson)
+          instructionsOverride: ="auto"
+          runId: =Topic.runId
+      dialog: copilots_header_91a5e.action.GCFRESTConnector-GenerateAgent
+      output:
+        binding:
+          jobId: Topic.agentJobId
+          status: Topic.agentJobStatus
+
+    # ── Step 9: Poll for completion ──
+
+    - kind: SendActivity
+      id: sendActivity_polling
+      activity: ⏳ Agent generation in progress, polling for status...
+
+    - kind: BeginDialog
+      id: beginDialog_pollStatus
+      input:
+        binding:
+          jobId: =Topic.agentJobId
+      dialog: copilots_header_91a5e.action.GCFRESTConnector-AgentGenerateStatus
+      output:
+        binding:
+          status: Topic.pollStatus
+          result: Topic.pollResult
+          error: Topic.pollError
+          runId: Topic.runId
+
+    # ── Step 10: Show result ──
+
+    - kind: ConditionGroup
+      id: condGroup_checkResult
+      conditions:
+        - id: cond_success
+          condition: =Topic.pollStatus = "success"
+          actions:
+            - kind: SendActivity
+              id: sendActivity_success
+              activity: |
+                ✅ **Agent created successfully!**
+
+                {Topic.pollResult}
+
+                **Next steps:**
+                1. Open the agent in Copilot Studio
+                2. Configure any connections that need authentication
+                3. Publish the agent
+                4. Test with sample prompts
+        - id: cond_partial
+          condition: =Topic.pollStatus = "partial"
+          actions:
+            - kind: SendActivity
+              id: sendActivity_partial
+              activity: |
+                ⚠️ **Agent generation completed with partial verification.**
+
+                {Topic.pollResult}
+
+                Validate the agent and solution contents in Copilot Studio before proceeding.
+
+        - id: cond_failed
+          condition: =Topic.pollStatus = "failed"
+          actions:
+            - kind: SendActivity
+              id: sendActivity_failed
+              activity: |
+                ❌ **Agent generation failed.**
+
+                Error: {Topic.pollError}
+
+                Please check the server logs and try again.
+
+      elseActions:
+        - kind: SendActivity
+          id: sendActivity_stillRunning
+          activity: "⏳ Agent is still generating. Please check back shortly."

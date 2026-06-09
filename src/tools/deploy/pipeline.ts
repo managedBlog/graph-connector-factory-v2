@@ -570,8 +570,21 @@ export async function executeDeployPipeline(
     summaryParts.push(
       `App registration "${appRegResult.displayName}" configured (App ID: ${appRegResult.appId}).`,
     );
-    // Surface admin consent warning if permissions failed despite app reg succeeding
+    // Surface unresolved scope warnings
     const steps = appRegResult.steps as Record<string, unknown> | undefined;
+    if (steps?.["permissionWarnings"]) {
+      const warnings = steps["permissionWarnings"] as Record<string, unknown>;
+      const unresolved = Array.isArray(warnings["unresolved"])
+        ? (warnings["unresolved"] as string[]).join(", ")
+        : "";
+      if (unresolved) {
+        summaryParts.push(
+          `⚠️ These scope names could not be resolved to Graph API permissions: ${unresolved}. ` +
+          `They may not be valid Microsoft Graph permission names. Add correct permissions manually if needed.`,
+        );
+      }
+    }
+    // Surface admin consent warning if permissions failed despite app reg succeeding
     if (steps?.["permissionError"]) {
       const permErr = steps["permissionError"] as Record<string, unknown>;
       const failedScopes = Array.isArray(permErr["scopes"])

@@ -1,6 +1,16 @@
 kind: TaskDialog
 modelDisplayName: Check connector and app registration names
 modelDescription: Pre-flight name conflict check. Verifies that proposed connector base names do not conflict with existing connectors or app registrations.
+inputs:
+  - kind: AutomaticTaskInput
+    propertyName: environmentId
+    name: Environment ID
+    description: Target Power Platform environment ID (GUID)
+  - kind: AutomaticTaskInput
+    propertyName: names
+    name: Names
+    description: Comma-separated list of proposed connector base names to check
+
 outputs:
   - propertyName: conflictCount
 
@@ -10,10 +20,23 @@ outputs:
 
 action:
   kind: InvokeConnectorTaskAction
-  connectionReference: copilots_header_91a5e.shared_new-5fgcf-20rest-20connector-5f251f982b189de9d2.52f1402e515247c1ae6cdbfa6793c46d
+  connectionReference: copilots_header_91a5e.shared_new-5fgcf-20rest-20connector-5f251f982b189de9d2.3b64b1b7818145a59f83da81404dde8e
   connectionProperties:
     mode: Invoker
 
   operationId: graph_namecheck
+
+  inputType:
+    properties:
+      environmentId:
+        displayName: Environment ID
+        description: Target Power Platform environment ID (GUID)
+        isRequired: true
+        type: String
+      names:
+        displayName: Names
+        description: Comma-separated list of proposed connector base names to check
+        isRequired: true
+        type: String
 
 outputMode: All
