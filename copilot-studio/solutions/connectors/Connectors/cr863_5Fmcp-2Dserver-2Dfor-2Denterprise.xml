@@ -10,5 +10,4 @@
   <connectionparameters>/Connector/cr863_5Fmcp-2Dserver-2Dfor-2Denterprise_connectionparameters.json</connectionparameters>
   <connectionparametersets>/Connector/cr863_5Fmcp-2Dserver-2Dfor-2Denterprise_connectionparametersets.json</connectionparametersets>
   <policytemplateinstances>/Connector/cr863_5Fmcp-2Dserver-2Dfor-2Denterprise_policytemplateinstances.json</policytemplateinstances>
-  <iconblob>/Connector/cr863_5Fmcp-2Dserver-2Dfor-2Denterprise_iconblob.Png</iconblob>
 </Connector>

@@ -9,5 +9,4 @@
   <openapidefinition>/Connector/new_gcf-20mcp-20agent_openapidefinition.json</openapidefinition>
   <connectionparameters>/Connector/new_gcf-20mcp-20agent_connectionparameters.json</connectionparameters>
   <policytemplateinstances>/Connector/new_gcf-20mcp-20agent_policytemplateinstances.json</policytemplateinstances>
-  <iconblob>/Connector/new_gcf-20mcp-20agent_iconblob.Png</iconblob>
 </Connector>

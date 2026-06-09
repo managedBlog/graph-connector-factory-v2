@@ -270,7 +270,29 @@ else {
     Write-Host "    Files left as-is — connector may not work" -ForegroundColor DarkYellow
 }
 
-# ─── Step 4: Validate no unresolved tokens remain ────────────────────────
+# ─── Step 4: Normalize connector icon metadata ────────────────────────────
+
+$defaultIconConnectors = @(
+    "new_gcf-20mcp-20agent.xml",
+    "cr863_5Fmcp-2Dserver-2Dfor-2Denterprise.xml"
+)
+
+Write-Host "  Normalizing connector icon metadata…" -ForegroundColor Yellow
+foreach ($fileName in $defaultIconConnectors) {
+    $filePath = Join-Path $connectorDir $fileName
+    if (-not (Test-Path $filePath)) {
+        continue
+    }
+
+    $content = Get-Content -LiteralPath $filePath -Raw
+    $updated = [regex]::Replace($content, "(?m)^\s*<iconblob>.*</iconblob>\r?\n?", "")
+    if ($updated -ne $content) {
+        Set-Content -LiteralPath $filePath -Value $updated -Encoding UTF8 -NoNewline
+        Write-Host "    ✓ Removed iconblob from $fileName (platform default icon)" -ForegroundColor Green
+    }
+}
+
+# ─── Step 5: Validate no unresolved tokens remain ────────────────────────
 
 Write-Host "  Validating no unresolved tokens…" -ForegroundColor Yellow
 $unresolvedFound = $false
@@ -308,7 +330,7 @@ if ($unresolvedFound) {
 }
 Write-Host "    ✓ All tokens resolved" -ForegroundColor Green
 
-# ─── Step 5: Pack connector solution .zip ────────────────────────────────
+# ─── Step 6: Pack connector solution .zip ────────────────────────────────
 
 $connectorZip = Join-Path $OutputDir "GCFApps_connectors.zip"
 if (Test-Path $connectorZip) {
@@ -326,7 +348,7 @@ Write-Host "  ✓ Connector solution: $connectorZip" -ForegroundColor Green
 # Clean up staging
 Remove-Item $stagingDir -Recurse -Force
 
-# ─── Step 6: Pack agent solution .zip ────────────────────────────────────
+# ─── Step 7: Pack agent solution .zip ────────────────────────────────────
 
 $agentZip = Join-Path $OutputDir "GCFApps_agent.zip"
 if (Test-Path $agentZip) {
