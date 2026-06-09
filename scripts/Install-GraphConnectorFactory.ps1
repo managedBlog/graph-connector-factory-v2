@@ -11,7 +11,7 @@
       4. Config     — Generate config/config.json from template + values.
       5. Artifacts  — Token-replace connector solution files, pack .zip files.
       6. Connectors — Import connector solution via pac solution import.
-      7. FIC        — Discover auto-generated FIC Subjects, add FICs + redirect URIs.
+      7. FIC        — Ensure Dataverse app-user membership, discover FIC Subjects, add FICs + redirect URIs.
       8. Agent      — Resolve tenant connector IDs, patch agent solution, import via pac.
       All          — Run stages 1–8 sequentially.
 
@@ -174,6 +174,32 @@ function Normalize-ServerHost {
     # Strip any trailing path segments (e.g. /api)
     $HostValue = ($HostValue -split '/')[0]
     return $HostValue
+}
+
+function Ensure-DataverseApiAppUser {
+    param(
+        [Parameter(Mandatory)] [string] $TargetEnvironmentId,
+        [Parameter(Mandatory)] [string] $ApiApplicationId,
+        [string] $RoleName = 'System Administrator'
+    )
+
+    Write-Step "Ensuring Dataverse application user role ('$RoleName') for API app…"
+    $assignOutput = & pac admin assign-user `
+        --environment $TargetEnvironmentId `
+        --user $ApiApplicationId `
+        --role $RoleName `
+        --application-user 2>&1
+    $assignText = ($assignOutput | ForEach-Object { "$_" }) -join "`n"
+
+    if ($LASTEXITCODE -ne 0) {
+        if ($assignText -match '(?i)(already|exists|associated|is assigned|has role)') {
+            Write-Success "Dataverse application user already assigned role '$RoleName'"
+            return
+        }
+        throw "Failed to assign Dataverse application user role '$RoleName' for API app $ApiApplicationId in environment $TargetEnvironmentId.`nCommand: pac admin assign-user --environment $TargetEnvironmentId --user $ApiApplicationId --role `"$RoleName`" --application-user`nOutput: $assignText"
+    }
+
+    Write-Success "Dataverse application user assigned role '$RoleName'"
 }
 
 function Resolve-OrgUrlFromPac {
@@ -1399,6 +1425,7 @@ function Invoke-StageConnectors {
 # Stage 7 — FIC (Federated Identity Credentials)
 #
 # CRITICAL: Must run AFTER Connectors (Stage 6) and BEFORE Agent (Stage 8).
+# This stage also ensures the API app is a Dataverse application user.
 # Power Platform auto-generates FIC Subject values after connector import.
 # There is a propagation delay — we use exponential backoff to wait.
 # ─────────────────────────────────────────────────────────────────
@@ -1409,6 +1436,13 @@ function Invoke-StageFIC {
     Assert-Parameter 'ClientAppObjectId' $ClientAppObjectId 'FIC'
     Assert-Parameter 'TenantId'          $TenantId          'FIC'
     Assert-Parameter 'EnvironmentId'     $EnvironmentId     'FIC'
+    Assert-Parameter 'ApiAppId'          $ApiAppId          'FIC'
+
+    if ($ApiAppId -notmatch '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$') {
+        throw "Parameter -ApiAppId must be a valid app/client GUID for the FIC stage."
+    }
+
+    Ensure-DataverseApiAppUser -TargetEnvironmentId $EnvironmentId -ApiApplicationId $ApiAppId
 
     $issuer = "https://login.microsoftonline.com/$TenantId/v2.0"
 
