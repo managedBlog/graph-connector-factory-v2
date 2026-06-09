@@ -346,11 +346,12 @@ export async function ensureSolutionExists(
   const orgUrl = await resolveOrgUrl(environmentId);
   const token = await getDataverseToken(orgUrl);
 
-  const defaultPublisherUri =
-    `${orgUrl}/api/data/v9.2/publishers?` +
-    `$select=publisherid,customizationprefix,uniquename&` +
-    `$filter=isdefaultpublisher eq true&$top=1`;
-  const publisherResp = await fetch(defaultPublisherUri, {
+  const defaultSolutionUri =
+    `${orgUrl}/api/data/v9.2/solutions?` +
+    `$filter=uniquename eq 'Default'&` +
+    `$select=solutionid,_publisherid_value&` +
+    `$expand=publisherid($select=publisherid,customizationprefix,uniquename)&$top=1`;
+  const defaultSolutionResp = await fetch(defaultSolutionUri, {
     headers: {
       Authorization: `Bearer ${token}`,
       "OData-MaxVersion": "4.0",
@@ -358,23 +359,38 @@ export async function ensureSolutionExists(
       Accept: "application/json",
     },
   });
-  if (!publisherResp.ok) {
-    const errText = await publisherResp.text();
-    throw new Error(`Failed to query default publisher: ${publisherResp.status} ${errText}`);
+  if (!defaultSolutionResp.ok) {
+    const errText = await defaultSolutionResp.text();
+    throw new Error(`Failed to query Default solution publisher: ${defaultSolutionResp.status} ${errText}`);
   }
-  const publisherJson = (await publisherResp.json()) as {
+  const defaultSolutionJson = (await defaultSolutionResp.json()) as {
     value?: Array<{
-      publisherid?: string;
-      customizationprefix?: string;
+      _publisherid_value?: string;
+      publisherid?: {
+        publisherid?: string;
+        customizationprefix?: string;
+        uniquename?: string;
+      };
     }>;
   };
-  const publisherId = publisherJson.value?.[0]?.publisherid;
-  const publisherPrefix = publisherJson.value?.[0]?.customizationprefix;
+  const defaultSolution = defaultSolutionJson.value?.[0];
+  if (!defaultSolution) {
+    throw new Error(`Could not find built-in Default solution to create solution "${solutionName}".`);
+  }
+  const publisherId = defaultSolution.publisherid?.publisherid || defaultSolution._publisherid_value;
+  const publisherPrefix = defaultSolution.publisherid?.customizationprefix?.trim();
+  const publisherUniqueName = defaultSolution.publisherid?.uniquename?.trim();
 
   if (!publisherId) {
     throw new Error(`Could not resolve the default publisher to create solution "${solutionName}".`);
   }
-  log(`[PAC] Resolved default publisher for "${normalizedName}" (prefix "${publisherPrefix || "mme"}")`);
+  if (!publisherPrefix) {
+    throw new Error(`Default publisher is missing customization prefix for solution "${solutionName}".`);
+  }
+  log(
+    `[PAC] Resolved default publisher for "${normalizedName}" ` +
+    `(id: ${publisherId}, uniqueName: ${publisherUniqueName || "unknown"}, prefix: ${publisherPrefix})`,
+  );
 
   const createResp = await fetch(`${orgUrl}/api/data/v9.2/solutions`, {
     method: "POST",
@@ -400,7 +416,7 @@ export async function ensureSolutionExists(
   log(`[PAC] Created missing solution "${normalizedName}"`);
   return {
     created: true,
-    publisherPrefix: publisherPrefix || "mme",
+    publisherPrefix,
   };
 }
 
